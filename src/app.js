@@ -20,6 +20,7 @@ import voucherRoutes from "./modules/voucher/voucher.routes.js";
 import bannerRoutes from "./modules/banner/banner.routes.js";
 import notificationRoutes from "./modules/notification/notification.routes.js";
 import reportRoutes from "./modules/report/report.routes.js";
+import uploadRoutes from "./modules/upload/upload.routes.js";
 
 // Import error handler
 import errorHandler from "./middlewares/error.middleware.js";
@@ -32,9 +33,9 @@ const app = express();
 // Enable CORS
 app.use(cors());
 
-// Body parser
-app.use(express.json({ limit: "10kb" }));
-app.use(express.urlencoded({ extended: true, limit: "10kb" }));
+// Body parser - increased limit for image uploads
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // Logging in development
 if (process.env.NODE_ENV === "development") {
@@ -70,6 +71,7 @@ app.use("/api/vouchers", voucherRoutes);
 app.use("/api/banners", bannerRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/reports", reportRoutes);
+app.use("/api/upload", uploadRoutes);
 
 // ============ Error Handling ============
 

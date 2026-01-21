@@ -4,7 +4,8 @@ import {
   ShiftSummary,
   PickupLog,
 } from "./report.model.js";
-import { Order } from "../order/order.model.js";
+import Order from "../order/order.model.js";
+import mongoose from "mongoose";
 import AppError from "../../utils/AppError.js";
 
 // ============ Report Snapshot Services ============

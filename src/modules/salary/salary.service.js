@@ -1,5 +1,4 @@
 import Salary from "./salary.model.js";
-import ShiftAssignment from "../shift/shiftAssignment.model.js";
 import AppError from "../../utils/AppError.js";
 import mongoose from "mongoose";
 
