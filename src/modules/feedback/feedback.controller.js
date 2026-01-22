@@ -1,5 +1,11 @@
 import catchAsync from "../../utils/catchAsync.js";
 import * as feedbackService from "./feedback.service.js";
+import {
+  paginatedQuery,
+  filterPresets,
+  formatPaginatedResponse,
+} from "../../utils/queryHelper.js";
+import { Feedback, FeedbackReply } from "./feedback.model.js";
 
 // ============ Feedback Controllers ============
 
@@ -9,14 +15,17 @@ export const createFeedback = catchAsync(async (req, res) => {
 });
 
 export const getAllFeedbacks = catchAsync(async (req, res) => {
-  const feedbacks = await feedbackService.getAllFeedbacks(req.query);
+  const result = await paginatedQuery(Feedback, req.query, {
+    ...filterPresets.feedback,
+    populate: [
+      { path: "userId", select: "fullName email" },
+      { path: "productId", select: "name image" },
+      { path: "orderId", select: "orderNumber" },
+    ],
+  });
   res
     .status(200)
-    .json({
-      status: "success",
-      results: feedbacks.length,
-      data: { feedbacks },
-    });
+    .json(formatPaginatedResponse(result, "Lấy danh sách feedback thành công"));
 });
 
 export const getFeedbackById = catchAsync(async (req, res) => {
@@ -25,16 +34,14 @@ export const getFeedbackById = catchAsync(async (req, res) => {
 });
 
 export const getFeedbacksByProduct = catchAsync(async (req, res) => {
-  const feedbacks = await feedbackService.getFeedbacksByProduct(
-    req.params.productId,
-  );
+  const result = await paginatedQuery(Feedback, req.query, {
+    ...filterPresets.feedback,
+    baseFilter: { productId: req.params.productId },
+    populate: [{ path: "userId", select: "fullName" }],
+  });
   res
     .status(200)
-    .json({
-      status: "success",
-      results: feedbacks.length,
-      data: { feedbacks },
-    });
+    .json(formatPaginatedResponse(result, "Lấy feedback sản phẩm thành công"));
 });
 
 export const getProductRatingStats = catchAsync(async (req, res) => {
@@ -71,12 +78,15 @@ export const createReply = catchAsync(async (req, res) => {
 });
 
 export const getRepliesByFeedback = catchAsync(async (req, res) => {
-  const replies = await feedbackService.getRepliesByFeedback(
-    req.params.feedbackId,
-  );
+  const result = await paginatedQuery(FeedbackReply, req.query, {
+    baseFilter: { feedbackId: req.params.feedbackId },
+    populate: [{ path: "userId", select: "fullName role" }],
+    allowedSortFields: ["createdAt"],
+    defaultSort: "createdAt",
+  });
   res
     .status(200)
-    .json({ status: "success", results: replies.length, data: { replies } });
+    .json(formatPaginatedResponse(result, "Lấy danh sách phản hồi thành công"));
 });
 
 export const updateReply = catchAsync(async (req, res) => {

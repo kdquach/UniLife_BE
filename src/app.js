@@ -1,6 +1,11 @@
 import express from "express";
 import cors from "cors";
-import morgan from "morgan";
+import getMorganMiddleware from "./config/morgan.js";
+import {
+  requestId,
+  requestLogger,
+  errorLogger,
+} from "./middlewares/logging.middleware.js";
 
 // Import routes
 import authRoutes from "./modules/auth/auth.routes.js";
@@ -37,9 +42,15 @@ app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// Logging in development
-if (process.env.NODE_ENV === "development") {
-  app.use(morgan("dev"));
+// Request ID tracking
+app.use(requestId);
+
+// HTTP request logging with Morgan (colorful console output)
+app.use(getMorganMiddleware(process.env.NODE_ENV));
+
+// Detailed request/response logging (for file logging)
+if (process.env.ENABLE_REQUEST_LOGGING === "true") {
+  app.use(requestLogger);
 }
 
 // ============ Routes ============
@@ -74,6 +85,9 @@ app.use("/api/reports", reportRoutes);
 app.use("/api/upload", uploadRoutes);
 
 // ============ Error Handling ============
+
+// Error logging middleware
+app.use(errorLogger);
 
 // Handle 404 - Route not found
 app.all("*", (req, res, next) => {

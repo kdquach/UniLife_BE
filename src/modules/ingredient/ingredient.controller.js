@@ -1,5 +1,11 @@
 import catchAsync from "../../utils/catchAsync.js";
 import * as ingredientService from "./ingredient.service.js";
+import {
+  paginatedQuery,
+  filterPresets,
+  formatPaginatedResponse,
+} from "../../utils/queryHelper.js";
+import { Ingredient } from "./ingredient.model.js";
 
 // ============ Ingredient Controllers ============
 
@@ -9,14 +15,18 @@ export const createIngredient = catchAsync(async (req, res) => {
 });
 
 export const getAllIngredients = catchAsync(async (req, res) => {
-  const ingredients = await ingredientService.getAllIngredients(req.query);
+  const result = await paginatedQuery(Ingredient, req.query, {
+    ...filterPresets.ingredient,
+    populate: [
+      { path: "categoryId", select: "name" },
+      { path: "canteenId", select: "name" },
+    ],
+  });
   res
     .status(200)
-    .json({
-      status: "success",
-      results: ingredients.length,
-      data: { ingredients },
-    });
+    .json(
+      formatPaginatedResponse(result, "Lấy danh sách nguyên liệu thành công"),
+    );
 });
 
 export const getIngredientById = catchAsync(async (req, res) => {
@@ -48,18 +58,26 @@ export const updateStock = catchAsync(async (req, res) => {
 });
 
 export const getLowStockIngredients = catchAsync(async (req, res) => {
-  const { canteenId, threshold } = req.query;
-  const ingredients = await ingredientService.getLowStockIngredients(
-    canteenId,
-    threshold,
-  );
+  const { canteenId, threshold = 10 } = req.query;
+  const stockFilter = { stock: { $lte: Number(threshold) } };
+  if (canteenId) stockFilter.canteenId = canteenId;
+
+  const result = await paginatedQuery(Ingredient, req.query, {
+    ...filterPresets.ingredient,
+    baseFilter: stockFilter,
+    populate: [
+      { path: "categoryId", select: "name" },
+      { path: "canteenId", select: "name" },
+    ],
+  });
   res
     .status(200)
-    .json({
-      status: "success",
-      results: ingredients.length,
-      data: { ingredients },
-    });
+    .json(
+      formatPaginatedResponse(
+        result,
+        "Lấy danh sách nguyên liệu sắp hết thành công",
+      ),
+    );
 });
 
 // ============ Recipe Controllers ============

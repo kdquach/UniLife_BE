@@ -1,5 +1,11 @@
 import catchAsync from "../../utils/catchAsync.js";
 import * as shiftService from "./shift.service.js";
+import {
+  paginatedQuery,
+  filterPresets,
+  formatPaginatedResponse,
+} from "../../utils/queryHelper.js";
+import { Shift, StaffShift } from "./shift.model.js";
 
 // ============ Shift Controllers ============
 
@@ -20,20 +26,21 @@ export const createShift = catchAsync(async (req, res) => {
 });
 
 /**
- * Get all shifts
- * @route GET /api/shifts
+ * Get all shifts with pagination
+ * @route GET /api/shifts?page=1&limit=10&canteenId=xxx&status=active
  * @access Private (Staff, Admin)
  */
 export const getAllShifts = catchAsync(async (req, res) => {
-  const shifts = await shiftService.getAllShifts(req.query);
-
-  res.status(200).json({
-    status: "success",
-    results: shifts.length,
-    data: {
-      shifts,
-    },
+  const result = await paginatedQuery(Shift, req.query, {
+    ...filterPresets.shift,
+    populate: [{ path: "canteenId", select: "name location" }],
   });
+
+  res
+    .status(200)
+    .json(
+      formatPaginatedResponse(result, "Lấy danh sách ca làm việc thành công"),
+    );
 });
 
 /**
@@ -101,40 +108,55 @@ export const assignUserToShift = catchAsync(async (req, res) => {
 });
 
 /**
- * Get shift assignments
- * @route GET /api/shifts/assignments
+ * Get shift assignments with pagination
+ * @route GET /api/shifts/assignments?page=1&limit=10&status=scheduled
  * @access Private (Staff, Admin)
  */
 export const getShiftAssignments = catchAsync(async (req, res) => {
-  const assignments = await shiftService.getShiftAssignments(req.query);
-
-  res.status(200).json({
-    status: "success",
-    results: assignments.length,
-    data: {
-      assignments,
-    },
+  const result = await paginatedQuery(StaffShift, req.query, {
+    allowedFilters: ["shiftId", "staffId", "canteenId", "status", "date"],
+    allowedSortFields: ["date", "createdAt"],
+    defaultSort: "-date",
+    populate: [
+      { path: "shiftId", select: "name startTime endTime" },
+      { path: "staffId", select: "fullName email" },
+      { path: "canteenId", select: "name" },
+      { path: "assignedBy", select: "fullName" },
+    ],
   });
+
+  res
+    .status(200)
+    .json(
+      formatPaginatedResponse(
+        result,
+        "Lấy danh sách phân công ca làm việc thành công",
+      ),
+    );
 });
 
 /**
- * Get my shift assignments
- * @route GET /api/shifts/my-assignments
+ * Get my shift assignments with pagination
+ * @route GET /api/shifts/my-assignments?page=1&limit=10
  * @access Private (Staff)
  */
 export const getMyAssignments = catchAsync(async (req, res) => {
-  const assignments = await shiftService.getAssignmentsByUser(
-    req.user._id,
-    req.query,
-  );
-
-  res.status(200).json({
-    status: "success",
-    results: assignments.length,
-    data: {
-      assignments,
-    },
+  const result = await paginatedQuery(StaffShift, req.query, {
+    baseFilter: { staffId: req.user._id },
+    allowedFilters: ["status", "date"],
+    allowedSortFields: ["date", "createdAt"],
+    defaultSort: "-date",
+    populate: [
+      { path: "shiftId", select: "name startTime endTime" },
+      { path: "canteenId", select: "name location" },
+    ],
   });
+
+  res
+    .status(200)
+    .json(
+      formatPaginatedResponse(result, "Lấy ca làm việc của bạn thành công"),
+    );
 });
 
 /**

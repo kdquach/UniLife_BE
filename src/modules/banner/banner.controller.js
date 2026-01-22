@@ -1,5 +1,11 @@
 import catchAsync from "../../utils/catchAsync.js";
 import * as bannerService from "./banner.service.js";
+import {
+  paginatedQuery,
+  filterPresets,
+  formatPaginatedResponse,
+} from "../../utils/queryHelper.js";
+import { Banner } from "./banner.model.js";
 
 export const createBanner = catchAsync(async (req, res) => {
   const banner = await bannerService.createBanner(req.body, req.user._id);
@@ -7,10 +13,16 @@ export const createBanner = catchAsync(async (req, res) => {
 });
 
 export const getAllBanners = catchAsync(async (req, res) => {
-  const banners = await bannerService.getAllBanners(req.query);
+  const result = await paginatedQuery(Banner, req.query, {
+    ...filterPresets.banner,
+    populate: [
+      { path: "canteenId", select: "name" },
+      { path: "createdBy", select: "fullName" },
+    ],
+  });
   res
     .status(200)
-    .json({ status: "success", results: banners.length, data: { banners } });
+    .json(formatPaginatedResponse(result, "Lấy danh sách banner thành công"));
 });
 
 export const getActiveBanners = catchAsync(async (req, res) => {

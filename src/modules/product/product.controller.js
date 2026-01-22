@@ -1,5 +1,11 @@
 import catchAsync from "../../utils/catchAsync.js";
 import * as productService from "./product.service.js";
+import {
+  paginatedQuery,
+  filterPresets,
+  formatPaginatedResponse,
+} from "../../utils/queryHelper.js";
+import Product from "./product.model.js";
 
 /**
  * Create a new product
@@ -18,20 +24,35 @@ export const createProduct = catchAsync(async (req, res) => {
 });
 
 /**
- * Get all products
- * @route GET /api/products
+ * Get all products with pagination
+ * @route GET /api/products?page=1&limit=10&search=keyword&status=available&sort=-price
  * @access Public
+ * @queryParams
+ *   - page: Page number (default: 1)
+ *   - limit: Items per page (default: 10)
+ *   - search: Search in name, description, slug
+ *   - status: Filter by status (available, out_of_stock, discontinued)
+ *   - categoryId: Filter by category
+ *   - canteenId: Filter by canteen
+ *   - isPopular: Filter popular products (true/false)
+ *   - isNew: Filter new products (true/false)
+ *   - price[gte]: Minimum price
+ *   - price[lte]: Maximum price
+ *   - sort: Sort by fields (e.g., -price, name, createdAt)
+ *   - fields: Select specific fields (e.g., name,price,image)
  */
 export const getAllProducts = catchAsync(async (req, res) => {
-  const products = await productService.getAllProducts(req.query);
-
-  res.status(200).json({
-    status: "success",
-    results: products.length,
-    data: {
-      products,
-    },
+  const result = await paginatedQuery(Product, req.query, {
+    ...filterPresets.product,
+    populate: [
+      { path: "categoryId", select: "name" },
+      { path: "canteenId", select: "name location" },
+    ],
   });
+
+  res
+    .status(200)
+    .json(formatPaginatedResponse(result, "Lấy danh sách sản phẩm thành công"));
 });
 
 /**
@@ -51,22 +72,30 @@ export const getProductById = catchAsync(async (req, res) => {
 });
 
 /**
- * Get products by canteen
- * @route GET /api/products/canteen/:canteenId
+ * Get products by canteen with pagination
+ * @route GET /api/canteens/:canteenId/products?page=1&limit=10&status=available
  * @access Public
  */
 export const getProductsByCanteen = catchAsync(async (req, res) => {
-  const products = await productService.getProductsByCanteen(
-    req.params.canteenId,
-  );
+  const { canteenId } = req.params;
 
-  res.status(200).json({
-    status: "success",
-    results: products.length,
-    data: {
-      products,
+  const result = await paginatedQuery(Product, req.query, {
+    ...filterPresets.product,
+    baseFilter: {
+      canteenId,
+      status: "available",
     },
+    populate: [{ path: "categoryId", select: "name" }],
   });
+
+  res
+    .status(200)
+    .json(
+      formatPaginatedResponse(
+        result,
+        "Lấy danh sách sản phẩm theo căng tin thành công",
+      ),
+    );
 });
 
 /**

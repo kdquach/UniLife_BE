@@ -1,20 +1,23 @@
 import catchAsync from "../../utils/catchAsync.js";
 import * as notificationService from "./notification.service.js";
+import {
+  paginatedQuery,
+  filterPresets,
+  formatPaginatedResponse,
+} from "../../utils/queryHelper.js";
+import { Notification, SystemNotification } from "./notification.model.js";
 
 // ============ User Notification Controllers ============
 
 export const getMyNotifications = catchAsync(async (req, res) => {
-  const notifications = await notificationService.getNotificationsByUser(
-    req.user._id,
-    req.query,
-  );
+  const result = await paginatedQuery(Notification, req.query, {
+    ...filterPresets.notification,
+    baseFilter: { userId: req.user._id },
+    populate: [{ path: "canteenId", select: "name" }],
+  });
   res
     .status(200)
-    .json({
-      status: "success",
-      results: notifications.length,
-      data: { notifications },
-    });
+    .json(formatPaginatedResponse(result, "Lấy thông báo thành công"));
 });
 
 export const getUnreadCount = catchAsync(async (req, res) => {
@@ -62,26 +65,26 @@ export const getActiveSystemNotifications = catchAsync(async (req, res) => {
     req.user.role,
     req.query.canteenId,
   );
-  res
-    .status(200)
-    .json({
-      status: "success",
-      results: notifications.length,
-      data: { notifications },
-    });
+  res.status(200).json({
+    status: "success",
+    results: notifications.length,
+    data: { notifications },
+  });
 });
 
 export const getAllSystemNotifications = catchAsync(async (req, res) => {
-  const notifications = await notificationService.getAllSystemNotifications(
-    req.query,
-  );
+  const result = await paginatedQuery(SystemNotification, req.query, {
+    allowedFilters: ["targetRole", "isActive", "canteenId"],
+    searchFields: ["title", "content"],
+    allowedSortFields: ["createdAt", "activeFrom", "activeTo"],
+    populate: [
+      { path: "canteenId", select: "name" },
+      { path: "createdBy", select: "fullName" },
+    ],
+  });
   res
     .status(200)
-    .json({
-      status: "success",
-      results: notifications.length,
-      data: { notifications },
-    });
+    .json(formatPaginatedResponse(result, "Lấy thông báo hệ thống thành công"));
 });
 
 export const getSystemNotificationById = catchAsync(async (req, res) => {
@@ -110,11 +113,9 @@ export const sendNotificationToUsers = catchAsync(async (req, res) => {
     userIds,
     notificationData,
   );
-  res
-    .status(201)
-    .json({
-      status: "success",
-      results: notifications.length,
-      data: { notifications },
-    });
+  res.status(201).json({
+    status: "success",
+    results: notifications.length,
+    data: { notifications },
+  });
 });

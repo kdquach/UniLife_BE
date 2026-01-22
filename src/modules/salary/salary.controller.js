@@ -1,5 +1,11 @@
 import catchAsync from "../../utils/catchAsync.js";
 import * as salaryService from "./salary.service.js";
+import {
+  paginatedQuery,
+  buildDateRangeFilter,
+  formatPaginatedResponse,
+} from "../../utils/queryHelper.js";
+import Salary from "./salary.model.js";
 
 /**
  * Create a new salary record
@@ -18,20 +24,28 @@ export const createSalary = catchAsync(async (req, res) => {
 });
 
 /**
- * Get all salaries
- * @route GET /api/salaries
+ * Get all salaries with pagination
+ * @route GET /api/salaries?page=1&limit=10&status=paid&startDate=2026-01-01&endDate=2026-01-31
  * @access Private (Admin)
  */
 export const getAllSalaries = catchAsync(async (req, res) => {
-  const salaries = await salaryService.getAllSalaries(req.query);
+  const { startDate, endDate, ...otherQuery } = req.query;
+  const dateFilter = buildDateRangeFilter(startDate, endDate, "periodStart");
 
-  res.status(200).json({
-    status: "success",
-    results: salaries.length,
-    data: {
-      salaries,
-    },
+  const result = await paginatedQuery(Salary, otherQuery, {
+    baseFilter: dateFilter,
+    allowedFilters: ["userId", "canteenId", "status"],
+    allowedSortFields: ["createdAt", "periodStart", "totalSalary"],
+    defaultSort: "-periodStart",
+    populate: [
+      { path: "userId", select: "fullName email" },
+      { path: "canteenId", select: "name" },
+    ],
   });
+
+  res
+    .status(200)
+    .json(formatPaginatedResponse(result, "Lấy danh sách lương thành công"));
 });
 
 /**
@@ -51,23 +65,24 @@ export const getSalaryById = catchAsync(async (req, res) => {
 });
 
 /**
- * Get my salaries
- * @route GET /api/salaries/my-salaries
+ * Get my salaries with pagination
+ * @route GET /api/salaries/my-salaries?page=1&limit=10
  * @access Private (Staff)
  */
 export const getMySalaries = catchAsync(async (req, res) => {
-  const salaries = await salaryService.getSalariesByUser(
-    req.user._id,
-    req.query,
-  );
-
-  res.status(200).json({
-    status: "success",
-    results: salaries.length,
-    data: {
-      salaries,
-    },
+  const result = await paginatedQuery(Salary, req.query, {
+    baseFilter: { userId: req.user._id },
+    allowedFilters: ["status"],
+    allowedSortFields: ["periodStart", "createdAt"],
+    defaultSort: "-periodStart",
+    populate: [{ path: "canteenId", select: "name" }],
   });
+
+  res
+    .status(200)
+    .json(
+      formatPaginatedResponse(result, "Lấy lịch sử lương của bạn thành công"),
+    );
 });
 
 /**

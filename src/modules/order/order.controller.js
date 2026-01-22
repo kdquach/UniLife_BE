@@ -1,5 +1,11 @@
 import catchAsync from "../../utils/catchAsync.js";
 import * as orderService from "./order.service.js";
+import {
+  paginatedQuery,
+  filterPresets,
+  formatPaginatedResponse,
+} from "../../utils/queryHelper.js";
+import Order from "./order.model.js";
 
 /**
  * Create a new order
@@ -18,20 +24,22 @@ export const createOrder = catchAsync(async (req, res) => {
 });
 
 /**
- * Get all orders
- * @route GET /api/orders
+ * Get all orders with pagination
+ * @route GET /api/orders?page=1&limit=10&status=completed&sort=-createdAt
  * @access Private (Staff, Admin)
  */
 export const getAllOrders = catchAsync(async (req, res) => {
-  const orders = await orderService.getAllOrders(req.query);
-
-  res.status(200).json({
-    status: "success",
-    results: orders.length,
-    data: {
-      orders,
-    },
+  const result = await paginatedQuery(Order, req.query, {
+    ...filterPresets.order,
+    populate: [
+      { path: "userId", select: "fullName email phone" },
+      { path: "canteenId", select: "name location" },
+    ],
   });
+
+  res
+    .status(200)
+    .json(formatPaginatedResponse(result, "Lấy danh sách đơn hàng thành công"));
 });
 
 /**
@@ -51,20 +59,25 @@ export const getOrderById = catchAsync(async (req, res) => {
 });
 
 /**
- * Get my orders (current user)
- * @route GET /api/orders/my-orders
+ * Get my orders (current user) with pagination
+ * @route GET /api/orders/my-orders?page=1&limit=10&status=completed
  * @access Private
  */
 export const getMyOrders = catchAsync(async (req, res) => {
-  const orders = await orderService.getOrdersByUser(req.user._id);
-
-  res.status(200).json({
-    status: "success",
-    results: orders.length,
-    data: {
-      orders,
-    },
+  const result = await paginatedQuery(Order, req.query, {
+    ...filterPresets.order,
+    baseFilter: { userId: req.user._id },
+    populate: [{ path: "canteenId", select: "name location" }],
   });
+
+  res
+    .status(200)
+    .json(
+      formatPaginatedResponse(
+        result,
+        "Lấy danh sách đơn hàng của bạn thành công",
+      ),
+    );
 });
 
 /**

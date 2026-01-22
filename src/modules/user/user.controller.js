@@ -1,21 +1,28 @@
 import catchAsync from "../../utils/catchAsync.js";
 import * as userService from "./user.service.js";
+import {
+  paginatedQuery,
+  filterPresets,
+  formatPaginatedResponse,
+} from "../../utils/queryHelper.js";
+import User from "./user.model.js";
 
 /**
- * Get all users
- * @route GET /api/users
+ * Get all users with pagination
+ * @route GET /api/users?page=1&limit=10&search=nguyen&role=customer&status=active
  * @access Private (Admin)
  */
 export const getAllUsers = catchAsync(async (req, res) => {
-  const users = await userService.getAllUsers();
-
-  res.status(200).json({
-    status: "success",
-    results: users.length,
-    data: {
-      users,
-    },
+  const result = await paginatedQuery(User, req.query, {
+    ...filterPresets.user,
+    populate: [{ path: "canteenId", select: "name" }],
   });
+
+  res
+    .status(200)
+    .json(
+      formatPaginatedResponse(result, "Lấy danh sách người dùng thành công"),
+    );
 });
 
 /**

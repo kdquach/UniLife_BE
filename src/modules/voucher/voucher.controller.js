@@ -1,5 +1,11 @@
 import catchAsync from "../../utils/catchAsync.js";
 import * as voucherService from "./voucher.service.js";
+import {
+  paginatedQuery,
+  filterPresets,
+  formatPaginatedResponse,
+} from "../../utils/queryHelper.js";
+import { Voucher, VoucherUsage } from "./voucher.model.js";
 
 export const createVoucher = catchAsync(async (req, res) => {
   const voucher = await voucherService.createVoucher(req.body);
@@ -7,10 +13,12 @@ export const createVoucher = catchAsync(async (req, res) => {
 });
 
 export const getAllVouchers = catchAsync(async (req, res) => {
-  const vouchers = await voucherService.getAllVouchers(req.query);
+  const result = await paginatedQuery(Voucher, req.query, {
+    ...filterPresets.voucher,
+  });
   res
     .status(200)
-    .json({ status: "success", results: vouchers.length, data: { vouchers } });
+    .json(formatPaginatedResponse(result, "Lấy danh sách voucher thành công"));
 });
 
 export const getActiveVouchers = catchAsync(async (req, res) => {
@@ -56,8 +64,18 @@ export const getVoucherUsageStats = catchAsync(async (req, res) => {
 });
 
 export const getMyVoucherUsage = catchAsync(async (req, res) => {
-  const usages = await voucherService.getUserVoucherUsage(req.user._id);
+  const result = await paginatedQuery(VoucherUsage, req.query, {
+    baseFilter: { userId: req.user._id },
+    populate: [
+      { path: "voucherId", select: "code description discountType value" },
+      { path: "orderId", select: "orderNumber totalAmount" },
+    ],
+    allowedSortFields: ["createdAt"],
+    defaultSort: "-createdAt",
+  });
   res
     .status(200)
-    .json({ status: "success", results: usages.length, data: { usages } });
+    .json(
+      formatPaginatedResponse(result, "Lấy lịch sử sử dụng voucher thành công"),
+    );
 });
