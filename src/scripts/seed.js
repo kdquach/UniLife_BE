@@ -14,10 +14,8 @@ import {
   UserRole,
 } from "../modules/role/role.model.js";
 import Canteen from "../modules/canteen/canteen.model.js";
-import {
-  ProductCategory,
-  IngredientCategory,
-} from "../modules/category/category.model.js";
+import ProductCategory from "../modules/productCategory/productCategory.model.js";
+import IngredientCategory from "../modules/ingredientCategory/ingredientCategory.model.js";
 import { Ingredient } from "../modules/ingredient/ingredient.model.js";
 import Product from "../modules/product/product.model.js";
 import Menu from "../modules/menu/menu.model.js";
