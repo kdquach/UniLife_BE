@@ -8,7 +8,15 @@ import AppError from "../../utils/AppError.js";
  * @returns {Promise<Object>} User and token
  */
 export const register = async (userData) => {
-  const { fullName, email, password, role } = userData;
+  const { fullName, email, password, phone, role } = userData;
+
+  // Validate required fields
+  if (!fullName || !email || !password || !phone) {
+    throw new AppError(
+      "Please provide full name, email, password, and phone number",
+      400,
+    );
+  }
 
   // Check if user already exists
   const existingUser = await User.findOne({ email });
@@ -16,11 +24,18 @@ export const register = async (userData) => {
     throw new AppError("Email already in use", 400);
   }
 
+  // Check if phone number already exists
+  const existingPhone = await User.findOne({ phone });
+  if (existingPhone) {
+    throw new AppError("Phone number already in use", 400);
+  }
+
   // Create user
   const user = await User.create({
     fullName,
     email,
     password,
+    phone,
     role: role || "customer",
   });
 

@@ -42,9 +42,21 @@ Create a new user account.
   "fullName": "John Doe",
   "email": "john@example.com",
   "password": "SecurePass123!",
+  "phone": "0901234567",
   "role": "customer" // Optional: customer, staff, admin
 }
 ```
+
+**Required fields:**
+
+- `fullName`: User's full name
+- `email`: Valid email address (must be unique)
+- `password`: Minimum 6 characters
+- `phone`: 10-11 digit phone number (must be unique)
+
+**Optional fields:**
+
+- `role`: User role (default: "customer")
 
 #### Success Response (201 Created)
 
@@ -57,7 +69,9 @@ Create a new user account.
       "_id": "60d5ec49f1b2c72b8c8e4f1a",
       "fullName": "John Doe",
       "email": "john@example.com",
+      "phone": "0901234567",
       "role": "customer",
+      "balance": 0,
       "createdAt": "2024-01-23T10:30:00.000Z"
     }
   }
@@ -73,6 +87,15 @@ Create a new user account.
 }
 ```
 
+**Possible error messages:**
+
+- "Please provide full name, email, password, and phone number"
+- "Email already in use"
+- "Phone number already in use"
+- "Please provide a valid phone number" (if format is invalid)
+
+````
+
 #### Example Usage
 
 ```bash
@@ -83,9 +106,10 @@ curl -X POST http://localhost:5000/api/auth/register \
     "fullName": "John Doe",
     "email": "john@example.com",
     "password": "SecurePass123!",
+    "phone": "0901234567",
     "role": "customer"
   }'
-```
+````
 
 ```javascript
 // JavaScript (Axios)
@@ -93,6 +117,7 @@ const response = await axios.post("/api/auth/register", {
   fullName: "John Doe",
   email: "john@example.com",
   password: "SecurePass123!",
+  phone: "0901234567",
   role: "customer",
 });
 
