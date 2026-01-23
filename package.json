@@ -5,7 +5,7 @@
   "main": "src/server.js",
   "type": "module",
   "scripts": {
-    "start": "node src/server.js",
+    "start": "nodemon src/server.js",
     "dev": "nodemon src/server.js",
     "seed": "node src/scripts/seed.js",
     "seed:dev": "NODE_ENV=development node src/scripts/seed.js"

@@ -2,6 +2,7 @@ import { verifyToken } from "../utils/jwt.js";
 import AppError from "../utils/AppError.js";
 import User from "../modules/user/user.model.js";
 import catchAsync from "../utils/catchAsync.js";
+import { isTokenBlacklisted } from "../modules/auth/auth.service.js";
 
 /**
  * Protect middleware - Verify JWT token and attach user to request
@@ -20,6 +21,16 @@ export const protect = catchAsync(async (req, res, next) => {
   if (!token) {
     return next(
       new AppError("You are not logged in. Please log in to access.", 401),
+    );
+  }
+
+  // Check if token is blacklisted (logged out)
+  if (isTokenBlacklisted(token)) {
+    return next(
+      new AppError(
+        "This token has been invalidated. Please log in again.",
+        401,
+      ),
     );
   }
 

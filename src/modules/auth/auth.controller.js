@@ -34,3 +34,19 @@ export const login = catchAsync(async (req, res) => {
     },
   });
 });
+
+/**
+ * Logout user
+ * @route POST /api/auth/logout
+ * @access Private
+ */
+export const logout = catchAsync(async (req, res) => {
+  const token = req.headers.authorization.split(" ")[1];
+
+  await authService.logout(token, req.user._id);
+
+  res.status(200).json({
+    status: "success",
+    message: "Logged out successfully",
+  });
+});

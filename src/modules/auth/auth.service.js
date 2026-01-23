@@ -8,7 +8,7 @@ import AppError from "../../utils/AppError.js";
  * @returns {Promise<Object>} User and token
  */
 export const register = async (userData) => {
-  const { name, email, password, role } = userData;
+  const { fullName, email, password, role } = userData;
 
   // Check if user already exists
   const existingUser = await User.findOne({ email });
@@ -18,7 +18,7 @@ export const register = async (userData) => {
 
   // Create user
   const user = await User.create({
-    name,
+    fullName,
     email,
     password,
     role: role || "customer",
@@ -60,4 +60,39 @@ export const login = async (credentials) => {
   user.password = undefined;
 
   return { user, token };
+};
+
+/**
+ * Logout user - Add token to blacklist
+ * @param {String} token - JWT token to invalidate
+ * @param {String} userId - User ID
+ * @returns {Promise<void>}
+ */
+export const logout = async (token, userId) => {
+  // Add token to blacklist
+  await addToBlacklist(token, userId);
+};
+
+// In-memory token blacklist (for production, use Redis)
+const tokenBlacklist = new Set();
+
+/**
+ * Add token to blacklist
+ * @param {String} token - JWT token
+ * @param {String} userId - User ID
+ */
+const addToBlacklist = async (token, userId) => {
+  tokenBlacklist.add(token);
+
+  // Optional: Clean up expired tokens periodically
+  // In production, use Redis with TTL
+};
+
+/**
+ * Check if token is blacklisted
+ * @param {String} token - JWT token
+ * @returns {Boolean}
+ */
+export const isTokenBlacklisted = (token) => {
+  return tokenBlacklist.has(token);
 };
