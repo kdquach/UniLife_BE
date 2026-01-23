@@ -47,6 +47,6 @@ export const logout = catchAsync(async (req, res) => {
 
   res.status(200).json({
     status: "success",
-    message: "Logged out successfully",
+    message: "Đăng xuất thành công",
   });
 });

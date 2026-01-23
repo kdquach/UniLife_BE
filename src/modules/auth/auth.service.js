@@ -65,7 +65,7 @@ export const login = async (credentials) => {
   const user = await User.findOne({ email }).select("+password");
 
   if (!user || !(await user.comparePassword(password))) {
-    throw new AppError("Incorrect email or password", 401);
+    throw new AppError("Email hoặc mật khẩu sai", 401);
   }
 
   // Generate token
