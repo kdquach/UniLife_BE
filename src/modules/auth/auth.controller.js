@@ -2,7 +2,42 @@ import catchAsync from "../../utils/catchAsync.js";
 import * as authService from "./auth.service.js";
 
 /**
- * Register a new user
+ * Send OTP for registration
+ * @route POST /api/auth/register/send-otp
+ * @access Public
+ */
+export const sendRegisterOTP = catchAsync(async (req, res) => {
+  const result = await authService.sendRegisterOTP(req.body);
+
+  res.status(200).json({
+    status: "success",
+    message: result.message,
+    data: {
+      email: result.email,
+    },
+  });
+});
+
+/**
+ * Verify OTP and complete registration
+ * @route POST /api/auth/register/verify-otp
+ * @access Public
+ */
+export const verifyRegisterOTP = catchAsync(async (req, res) => {
+  const { user, token } = await authService.verifyRegisterOTP(req.body);
+
+  res.status(201).json({
+    status: "success",
+    message: "Đăng ký thành công",
+    token,
+    data: {
+      user,
+    },
+  });
+});
+
+/**
+ * Register a new user (legacy endpoint)
  * @route POST /api/auth/register
  * @access Public
  */
@@ -32,6 +67,74 @@ export const login = catchAsync(async (req, res) => {
     data: {
       user,
     },
+  });
+});
+
+/**
+ * Login or register with Google
+ * @route POST /api/auth/google
+ * @access Public
+ */
+export const googleAuth = catchAsync(async (req, res) => {
+  const { idToken } = req.body;
+  const { user, token } = await authService.googleAuth(idToken);
+
+  res.status(200).json({
+    status: "success",
+    token,
+    data: {
+      user,
+    },
+  });
+});
+
+/**
+ * Send OTP for forgot password
+ * @route POST /api/auth/forgot-password
+ * @access Public
+ */
+export const forgotPassword = catchAsync(async (req, res) => {
+  const { email } = req.body;
+  const result = await authService.sendForgotPasswordOTP(email);
+
+  res.status(200).json({
+    status: "success",
+    message: result.message,
+    data: {
+      email: result.email,
+    },
+  });
+});
+
+/**
+ * Verify OTP for forgot password
+ * @route POST /api/auth/forgot-password/verify-otp
+ * @access Public
+ */
+export const verifyForgotPasswordOTP = catchAsync(async (req, res) => {
+  const result = await authService.verifyForgotPasswordOTP(req.body);
+
+  res.status(200).json({
+    status: "success",
+    message: result.message,
+    data: {
+      resetToken: result.resetToken,
+      email: result.email,
+    },
+  });
+});
+
+/**
+ * Reset password
+ * @route POST /api/auth/reset-password
+ * @access Public
+ */
+export const resetPassword = catchAsync(async (req, res) => {
+  const result = await authService.resetPassword(req.body);
+
+  res.status(200).json({
+    status: "success",
+    message: result.message,
   });
 });
 
