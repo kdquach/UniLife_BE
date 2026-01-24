@@ -21,6 +21,7 @@ import productCategoryRoutes from "./modules/productCategory/productCategory.rou
 import ingredientCategoryRoutes from "./modules/ingredientCategory/ingredientCategory.routes.js";
 import ingredientRoutes from "./modules/ingredient/ingredient.routes.js";
 import cartRoutes from "./modules/cart/cart.routes.js";
+import wishlistRoutes from "./modules/wishlist/wishlist.routes.js";
 import feedbackRoutes from "./modules/feedback/feedback.routes.js";
 import voucherRoutes from "./modules/voucher/voucher.routes.js";
 import bannerRoutes from "./modules/banner/banner.routes.js";
@@ -79,6 +80,7 @@ app.use("/api/product-categories", productCategoryRoutes);
 app.use("/api/ingredient-categories", ingredientCategoryRoutes);
 app.use("/api/ingredients", ingredientRoutes);
 app.use("/api/cart", cartRoutes);
+app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/feedbacks", feedbackRoutes);
 app.use("/api/vouchers", voucherRoutes);
 app.use("/api/banners", bannerRoutes);
