@@ -1,47 +1,47 @@
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
 // Embedded recipe ingredient schema
 const recipeIngredientSchema = new mongoose.Schema(
   {
     ingredientId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Ingredient",
-      required: [true, "Ingredient ID is required"],
+      ref: 'Ingredient',
+      required: [true, 'Ingredient ID is required'],
     },
     ingredientName: {
       type: String,
     },
     quantity: {
       type: Number,
-      required: [true, "Quantity is required"],
-      min: [0, "Quantity cannot be negative"],
+      required: [true, 'Quantity is required'],
+      min: [0, 'Quantity cannot be negative'],
     },
     unit: {
       type: String,
-      required: [true, "Unit is required"],
+      required: [true, 'Unit is required'],
       trim: true,
     },
   },
-  { _id: false },
+  { _id: false }
 );
 
 const productSchema = new mongoose.Schema(
   {
     canteenId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Canteen",
-      required: [true, "Canteen ID is required"],
+      ref: 'Canteen',
+      required: [true, 'Canteen ID is required'],
     },
     categoryId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "ProductCategory",
-      required: [true, "Category ID is required"],
+      ref: 'ProductCategory',
+      required: [true, 'Category ID is required'],
     },
     name: {
       type: String,
-      required: [true, "Product name is required"],
+      required: [true, 'Product name is required'],
       trim: true,
-      maxlength: [200, "Product name cannot exceed 200 characters"],
+      maxlength: [200, 'Product name cannot exceed 200 characters'],
     },
     slug: {
       type: String,
@@ -50,22 +50,23 @@ const productSchema = new mongoose.Schema(
     },
     price: {
       type: Number,
-      required: [true, "Product price is required"],
-      min: [0, "Price cannot be negative"],
+      required: [true, 'Product price is required'],
+      min: [0, 'Price cannot be negative'],
     },
     originalPrice: {
       type: Number,
-      min: [0, "Original price cannot be negative"],
+      min: [0, 'Original price cannot be negative'],
+      default: null,
     },
     status: {
       type: String,
-      enum: ["available", "unavailable", "out_of_stock", "hidden"],
-      default: "available",
+      enum: ['available', 'unavailable', 'out_of_stock', 'hidden'],
+      default: 'available',
     },
     description: {
       type: String,
       trim: true,
-      maxlength: [1000, "Description cannot exceed 1000 characters"],
+      maxlength: [1000, 'Description cannot exceed 1000 characters'],
     },
     image: {
       type: String,
@@ -80,11 +81,11 @@ const productSchema = new mongoose.Schema(
     // Nutritional info
     calories: {
       type: Number,
-      min: [0, "Calories cannot be negative"],
+      min: [0, 'Calories cannot be negative'],
     },
     preparationTime: {
       type: Number, // in minutes
-      min: [0, "Preparation time cannot be negative"],
+      min: [0, 'Preparation time cannot be negative'],
     },
     // Flags
     isPopular: {
@@ -99,7 +100,7 @@ const productSchema = new mongoose.Schema(
     stockQuantity: {
       type: Number,
       default: 0,
-      min: [0, "Stock quantity cannot be negative"],
+      min: [0, 'Stock quantity cannot be negative'],
     },
     lowStockThreshold: {
       type: Number,
@@ -124,34 +125,45 @@ const productSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  },
+  }
 );
 
 // Indexes for faster queries
 productSchema.index({ canteenId: 1 });
 productSchema.index({ categoryId: 1 });
 productSchema.index({ status: 1 });
-productSchema.index({ name: "text", description: "text" });
+productSchema.index({ name: 'text', description: 'text' });
 productSchema.index({ slug: 1 });
 productSchema.index({ isPopular: 1, totalSold: -1 });
 
 // Generate slug from name
-productSchema.pre("save", function (next) {
-  if (this.isModified("name") && !this.slug) {
+productSchema.pre('save', function (next) {
+  if (this.isModified('name')) {
     this.slug = this.name
       .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, "")
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-");
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-');
   }
   next();
 });
+
+// productSchema.pre("save", function (next) {
+//   if (this.isModified("name") && !this.slug) {
+//     this.slug = this.name
+//       .toLowerCase()
+//       .replace(/[^a-z0-9\s-]/g, "")
+//       .replace(/\s+/g, "-")
+//       .replace(/-+/g, "-");
+//   }
+//   next();
+// });
 
 // Check low stock
 productSchema.methods.isLowStock = function () {
   return this.stockQuantity <= this.lowStockThreshold;
 };
 
-const Product = mongoose.model("Product", productSchema);
+const Product = mongoose.model('Product', productSchema);
 
 export default Product;

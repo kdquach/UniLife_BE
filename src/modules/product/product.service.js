@@ -1,5 +1,6 @@
-import Product from "./product.model.js";
-import AppError from "../../utils/AppError.js";
+import Product from './product.model.js';
+import AppError from '../../utils/AppError.js';
+import { paginatedQuery, filterPresets } from '../../utils/queryHelper.js';
 
 /**
  * Create a new product
@@ -16,30 +17,39 @@ export const createProduct = async (productData) => {
  * @param {Object} query - Query parameters for filtering
  * @returns {Promise<Array>} Array of products
  */
-export const getAllProducts = async (query = {}) => {
-  const filter = {};
-
-  if (query.canteenId) {
-    filter.canteenId = query.canteenId;
-  }
-  if (query.categoryId) {
-    filter.categoryId = query.categoryId;
-  }
-  if (query.status) {
-    filter.status = query.status;
-  }
-
-  // Text search
-  if (query.search) {
-    filter.$text = { $search: query.search };
-  }
-
-  const products = await Product.find(filter)
-    .populate("canteenId", "name location")
-    .sort({ createdAt: -1 });
-
-  return products;
+export const getAllProducts = async (queryParams) => {
+  return paginatedQuery(Product, queryParams, {
+    ...filterPresets.product,
+    populate: [
+      { path: 'categoryId', select: 'name' },
+      { path: 'canteenId', select: 'name location' },
+    ],
+  });
 };
+// export const getAllProducts = async (query = {}) => {
+//   const filter = {};
+
+//   if (query.canteenId) {
+//     filter.canteenId = query.canteenId;
+//   }
+//   if (query.categoryId) {
+//     filter.categoryId = query.categoryId;
+//   }
+//   if (query.status) {
+//     filter.status = query.status;
+//   }
+
+//   // Text search
+//   if (query.search) {
+//     filter.$text = { $search: query.search };
+//   }
+
+//   const products = await Product.find(filter)
+//     .populate('canteenId', 'name location')
+//     .sort({ createdAt: -1 });
+
+//   return products;
+// };
 
 /**
  * Get product by ID
@@ -48,12 +58,12 @@ export const getAllProducts = async (query = {}) => {
  */
 export const getProductById = async (id) => {
   const product = await Product.findById(id).populate(
-    "canteenId",
-    "name location",
+    'canteenId',
+    'name location'
   );
 
   if (!product) {
-    throw new AppError("Product not found", 404);
+    throw new AppError('Product not found', 404);
   }
   return product;
 };
@@ -63,12 +73,22 @@ export const getProductById = async (id) => {
  * @param {string} canteenId - Canteen ID
  * @returns {Promise<Array>} Array of products
  */
-export const getProductsByCanteen = async (canteenId) => {
-  const products = await Product.find({ canteenId, status: "available" }).sort({
-    name: 1,
+export const getProductsByCanteen = async (canteenId, queryParams) => {
+  return paginatedQuery(Product, queryParams, {
+    ...filterPresets.product,
+    baseFilter: {
+      canteenId,
+      status: 'available',
+    },
+    populate: [{ path: 'categoryId', select: 'name' }],
   });
-  return products;
 };
+// export const getProductsByCanteen = async (canteenId) => {
+//   const products = await Product.find({ canteenId, status: 'available' }).sort({
+//     name: 1,
+//   });
+//   return products;
+// };
 
 /**
  * Update product
@@ -83,7 +103,7 @@ export const updateProduct = async (id, updateData) => {
   });
 
   if (!product) {
-    throw new AppError("Product not found", 404);
+    throw new AppError('Product not found', 404);
   }
 
   return product;
@@ -96,7 +116,7 @@ export const updateProduct = async (id, updateData) => {
 export const deleteProduct = async (id) => {
   const product = await Product.findByIdAndDelete(id);
   if (!product) {
-    throw new AppError("Product not found", 404);
+    throw new AppError('Product not found', 404);
   }
 };
 
@@ -106,19 +126,40 @@ export const deleteProduct = async (id) => {
  * @param {Object} ingredient - Ingredient data
  * @returns {Promise<Object>} Updated product
  */
+
 export const addRecipeIngredient = async (productId, ingredient) => {
-  const product = await Product.findByIdAndUpdate(
-    productId,
-    { $push: { recipe: ingredient } },
-    { new: true, runValidators: true },
+  const product = await Product.findById(productId);
+  if (!product) {
+    throw new AppError('Product not found', 404);
+  }
+
+  const exists = product.recipe.some(
+    (item) => item.ingredientId.toString() === ingredient.ingredientId
   );
 
-  if (!product) {
-    throw new AppError("Product not found", 404);
+  if (exists) {
+    throw new AppError('Ingredient already exists in recipe', 400);
   }
+
+  product.recipe.push(ingredient);
+  await product.save();
 
   return product;
 };
+
+// export const addRecipeIngredient = async (productId, ingredient) => {
+//   const product = await Product.findByIdAndUpdate(
+//     productId,
+//     { $push: { recipe: ingredient } },
+//     { new: true, runValidators: true }
+//   );
+
+//   if (!product) {
+//     throw new AppError('Product not found', 404);
+//   }
+
+//   return product;
+// };
 
 /**
  * Remove ingredient from product recipe
@@ -127,15 +168,35 @@ export const addRecipeIngredient = async (productId, ingredient) => {
  * @returns {Promise<Object>} Updated product
  */
 export const removeRecipeIngredient = async (productId, ingredientId) => {
-  const product = await Product.findByIdAndUpdate(
-    productId,
-    { $pull: { recipe: { ingredientId } } },
-    { new: true },
-  );
-
+  const product = await Product.findById(productId);
   if (!product) {
-    throw new AppError("Product not found", 404);
+    throw new AppError('Product not found', 404);
   }
 
+  const before = product.recipe.length;
+
+  product.recipe = product.recipe.filter(
+    (item) => item.ingredientId.toString() !== ingredientId
+  );
+
+  if (product.recipe.length === before) {
+    throw new AppError('Ingredient not found in recipe', 404);
+  }
+
+  await product.save();
   return product;
 };
+
+// export const removeRecipeIngredient = async (productId, ingredientId) => {
+//   const product = await Product.findByIdAndUpdate(
+//     productId,
+//     { $pull: { recipe: { ingredientId } } },
+//     { new: true }
+//   );
+
+//   if (!product) {
+//     throw new AppError('Product not found', 404);
+//   }
+
+//   return product;
+// };

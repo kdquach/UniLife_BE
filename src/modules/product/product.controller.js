@@ -1,11 +1,7 @@
-import catchAsync from "../../utils/catchAsync.js";
-import * as productService from "./product.service.js";
-import {
-  paginatedQuery,
-  filterPresets,
-  formatPaginatedResponse,
-} from "../../utils/queryHelper.js";
-import Product from "./product.model.js";
+import catchAsync from '../../utils/catchAsync.js';
+import * as productService from './product.service.js';
+import { formatPaginatedResponse } from '../../utils/queryHelper.js';
+import Product from './product.model.js';
 
 /**
  * Create a new product
@@ -16,7 +12,7 @@ export const createProduct = catchAsync(async (req, res) => {
   const product = await productService.createProduct(req.body);
 
   res.status(201).json({
-    status: "success",
+    status: 'success',
     data: {
       product,
     },
@@ -41,19 +37,28 @@ export const createProduct = catchAsync(async (req, res) => {
  *   - sort: Sort by fields (e.g., -price, name, createdAt)
  *   - fields: Select specific fields (e.g., name,price,image)
  */
+
 export const getAllProducts = catchAsync(async (req, res) => {
-  const result = await paginatedQuery(Product, req.query, {
-    ...filterPresets.product,
-    populate: [
-      { path: "categoryId", select: "name" },
-      { path: "canteenId", select: "name location" },
-    ],
-  });
+  const result = await productService.getAllProducts(req.query);
 
   res
     .status(200)
-    .json(formatPaginatedResponse(result, "Lấy danh sách sản phẩm thành công"));
+    .json(formatPaginatedResponse(result, 'Lấy danh sách sản phẩm thành công'));
 });
+
+// export const getAllProducts = catchAsync(async (req, res) => {
+//   const result = await paginatedQuery(Product, req.query, {
+//     ...filterPresets.product,
+//     populate: [
+//       { path: "categoryId", select: "name" },
+//       { path: "canteenId", select: "name location" },
+//     ],
+//   });
+
+//   res
+//     .status(200)
+//     .json(formatPaginatedResponse(result, "Lấy danh sách sản phẩm thành công"));
+// });
 
 /**
  * Get product by ID
@@ -64,7 +69,7 @@ export const getProductById = catchAsync(async (req, res) => {
   const product = await productService.getProductById(req.params.id);
 
   res.status(200).json({
-    status: "success",
+    status: 'success',
     data: {
       product,
     },
@@ -76,27 +81,44 @@ export const getProductById = catchAsync(async (req, res) => {
  * @route GET /api/canteens/:canteenId/products?page=1&limit=10&status=available
  * @access Public
  */
-export const getProductsByCanteen = catchAsync(async (req, res) => {
-  const { canteenId } = req.params;
 
-  const result = await paginatedQuery(Product, req.query, {
-    ...filterPresets.product,
-    baseFilter: {
-      canteenId,
-      status: "available",
-    },
-    populate: [{ path: "categoryId", select: "name" }],
-  });
+export const getProductsByCanteen = catchAsync(async (req, res) => {
+  const result = await productService.getProductsByCanteen(
+    req.params.canteenId,
+    req.query
+  );
 
   res
     .status(200)
     .json(
       formatPaginatedResponse(
         result,
-        "Lấy danh sách sản phẩm theo căng tin thành công",
-      ),
+        'Lấy danh sách sản phẩm theo căng tin thành công'
+      )
     );
 });
+
+// export const getProductsByCanteen = catchAsync(async (req, res) => {
+//   const { canteenId } = req.params;
+
+//   const result = await paginatedQuery(Product, req.query, {
+//     ...filterPresets.product,
+//     baseFilter: {
+//       canteenId,
+//       status: 'available',
+//     },
+//     populate: [{ path: 'categoryId', select: 'name' }],
+//   });
+
+//   res
+//     .status(200)
+//     .json(
+//       formatPaginatedResponse(
+//         result,
+//         'Lấy danh sách sản phẩm theo căng tin thành công'
+//       )
+//     );
+// });
 
 /**
  * Update product
@@ -107,7 +129,7 @@ export const updateProduct = catchAsync(async (req, res) => {
   const product = await productService.updateProduct(req.params.id, req.body);
 
   res.status(200).json({
-    status: "success",
+    status: 'success',
     data: {
       product,
     },
@@ -122,10 +144,7 @@ export const updateProduct = catchAsync(async (req, res) => {
 export const deleteProduct = catchAsync(async (req, res) => {
   await productService.deleteProduct(req.params.id);
 
-  res.status(204).json({
-    status: "success",
-    data: null,
-  });
+  res.status(204).send();
 });
 
 /**
@@ -136,11 +155,11 @@ export const deleteProduct = catchAsync(async (req, res) => {
 export const addRecipeIngredient = catchAsync(async (req, res) => {
   const product = await productService.addRecipeIngredient(
     req.params.id,
-    req.body,
+    req.body
   );
 
   res.status(200).json({
-    status: "success",
+    status: 'success',
     data: {
       product,
     },
@@ -155,11 +174,11 @@ export const addRecipeIngredient = catchAsync(async (req, res) => {
 export const removeRecipeIngredient = catchAsync(async (req, res) => {
   const product = await productService.removeRecipeIngredient(
     req.params.id,
-    req.params.ingredientId,
+    req.params.ingredientId
   );
 
   res.status(200).json({
-    status: "success",
+    status: 'success',
     data: {
       product,
     },
