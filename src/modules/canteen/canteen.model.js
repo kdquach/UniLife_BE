@@ -18,6 +18,12 @@ const canteenSchema = new mongoose.Schema(
       enum: ["active", "inactive", "maintenance"],
       default: "active",
     },
+    campusId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Campus",
+      required: [true, "Canteen must belong to a Campus"],
+      index: true, // Rất quan trọng để filter canteen theo vùng
+    },
   },
   {
     timestamps: true,
@@ -27,6 +33,7 @@ const canteenSchema = new mongoose.Schema(
 // Index for faster queries
 canteenSchema.index({ name: 1 });
 canteenSchema.index({ status: 1 });
+canteenSchema.index({ campusId: 1, status: 1 });
 
 const Canteen = mongoose.model("Canteen", canteenSchema);
 
