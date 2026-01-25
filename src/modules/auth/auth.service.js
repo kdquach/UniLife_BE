@@ -445,3 +445,65 @@ export const googleAuth = async (idToken) => {
 
   return { user, token };
 };
+
+/**
+ * Change password for authenticated user
+ * @param {string} userId - User ID from authenticated user
+ * @param {Object} data - { currentPassword, newPassword, confirmPassword }
+ * @returns {Promise<Object>} Success message
+ */
+export const changePassword = async (userId, data) => {
+  const { currentPassword, newPassword, confirmPassword } = data;
+
+  // Validate required fields
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    throw new AppError(
+      "Vui lòng cung cấp đầy đủ mật khẩu hiện tại, mật khẩu mới và xác nhận mật khẩu",
+      400,
+    );
+  }
+
+  // Check if new password and confirm password match
+  if (newPassword !== confirmPassword) {
+    throw new AppError("Mật khẩu mới và xác nhận mật khẩu không khớp", 400);
+  }
+
+  // Check if new password is different from current password
+  if (currentPassword === newPassword) {
+    throw new AppError("Mật khẩu mới phải khác với mật khẩu hiện tại", 400);
+  }
+
+  // Validate password length
+  if (newPassword.length < 6) {
+    throw new AppError("Mật khẩu mới phải có ít nhất 6 ký tự", 400);
+  }
+
+  // Get user with password field
+  const user = await User.findById(userId).select("+password");
+
+  if (!user) {
+    throw new AppError("Người dùng không tồn tại", 404);
+  }
+
+  // Check if user registered with social login
+  if (user.provider !== "local" || !user.password) {
+    throw new AppError(
+      `Tài khoản này đăng ký bằng ${user.provider}. Không thể đổi mật khẩu`,
+      400,
+    );
+  }
+
+  // Verify current password
+  const isPasswordCorrect = await user.comparePassword(currentPassword);
+  if (!isPasswordCorrect) {
+    throw new AppError("Mật khẩu hiện tại không đúng", 401);
+  }
+
+  // Update password
+  user.password = newPassword;
+  await user.save(); // This will trigger the pre-save hook to hash the password
+
+  return {
+    message: "Đổi mật khẩu thành công",
+  };
+};

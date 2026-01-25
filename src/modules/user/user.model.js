@@ -80,6 +80,11 @@ const userSchema = new mongoose.Schema(
     lastLoginAt: {
       type: Date,
     },
+    campusId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Campus",
+      default: null,
+    },
     // For staff - assigned canteen
     canteenId: {
       type: mongoose.Schema.Types.ObjectId,

@@ -9,7 +9,7 @@ const wishlistItemSchema = new mongoose.Schema(
       required: [true, "Product ID is required"],
     },
   },
-  { _id: true, timestamps: true },
+  { timestamps: true },
 );
 
 // Wishlist Schema

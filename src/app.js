@@ -10,6 +10,7 @@ import {
 // Import routes
 import authRoutes from './modules/auth/auth.routes.js';
 import userRoutes from './modules/user/user.routes.js';
+import profileRoutes from './modules/profile/profile.route.js';
 import canteenRoutes from './modules/canteen/canteen.routes.js';
 import productRoutes from './modules/product/product.routes.js';
 import menuRoutes from './modules/menu/menu.routes.js';
@@ -41,17 +42,17 @@ const app = express();
 // Enable CORS
 app.use(cors());
 
-// Body parser - increased limit for image uploads
+// Body parser
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Request ID tracking
+// Request ID
 app.use(requestId);
 
-// HTTP request logging with Morgan (colorful console output)
+// HTTP logging
 app.use(getMorganMiddleware(process.env.NODE_ENV));
 
-// Detailed request/response logging (for file logging)
+// File logging
 if (process.env.ENABLE_REQUEST_LOGGING === 'true') {
   app.use(requestLogger);
 }
@@ -70,6 +71,7 @@ app.get('/api/health', (req, res) => {
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/profile', profileRoutes);
 app.use('/api/canteens', canteenRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/menus', menuRoutes);
@@ -92,10 +94,10 @@ app.use('/api/upload', uploadRoutes);
 
 // ============ Error Handling ============
 
-// Error logging middleware
+// Error logging
 app.use(errorLogger);
 
-// Handle 404 - Route not found
+// 404 handler
 app.all('*', (req, res, next) => {
   next(new AppError(`Cannot find ${req.originalUrl} on this server`, 404));
 });
