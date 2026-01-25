@@ -153,3 +153,17 @@ export const logout = catchAsync(async (req, res) => {
     message: "Đăng xuất thành công",
   });
 });
+
+/**
+ * Change password
+ * @route POST /api/auth/change-password
+ * @access Private
+ */
+export const changePassword = catchAsync(async (req, res) => {
+  const result = await authService.changePassword(req.user._id, req.body);
+
+  res.status(200).json({
+    status: "success",
+    message: result.message,
+  });
+});
