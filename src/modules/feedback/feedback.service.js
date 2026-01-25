@@ -1,71 +1,119 @@
-import { Feedback, FeedbackReply } from "./feedback.model.js";
-import AppError from "../../utils/AppError.js";
+import { Feedback } from './feedback.model.js';
+import AppError from '../../utils/AppError.js';
+import { paginatedQuery, filterPresets } from '../../utils/queryHelper.js';
+import mongoose from 'mongoose';
 
-// ============ Feedback Services ============
+import Order from '../order/order.model.js';
 
 export const createFeedback = async (userId, feedbackData) => {
-  const feedback = await Feedback.create({ userId, ...feedbackData });
-  return feedback;
+  const { orderId, productId } = feedbackData;
+
+  if (!orderId) {
+    throw new AppError('Order ID is required', 400);
+  }
+
+  if (!productId) {
+    throw new AppError('Product ID is required', 400);
+  }
+
+  const order = await Order.findOne({ _id: orderId, userId });
+  if (!order) {
+    throw new AppError('Order không hợp lệ', 403);
+  }
+
+  if (order.status !== 'completed') {
+    throw new AppError('Chỉ có thể đánh giá sau khi nhận hàng', 400);
+  }
+
+  const hasProduct = order.items.some(
+    (item) => item.productId.toString() === productId.toString()
+  );
+
+  if (!hasProduct) {
+    throw new AppError('Sản phẩm không thuộc đơn hàng này', 400);
+  }
+
+  try {
+    const feedback = await Feedback.create({ userId, ...feedbackData });
+    // Populate userId to get avatar and role for UI
+    return await feedback.populate('userId', 'fullName avatar role _id');
+  } catch (err) {
+    if (err.code === 11000) {
+      throw new AppError('Bạn đã đánh giá đơn hàng này rồi', 400);
+    }
+    throw err;
+  }
 };
 
-export const getAllFeedbacks = async (query = {}) => {
-  const filter = {};
-  if (query.productId) filter.productId = query.productId;
-  if (query.orderId) filter.orderId = query.orderId;
-  if (query.userId) filter.userId = query.userId;
-  if (query.rating) filter.rating = query.rating;
-
-  const feedbacks = await Feedback.find(filter)
-    .populate("userId", "fullName avatar")
-    .populate("productId", "name image")
-    .sort({ createdAt: -1 });
-  return feedbacks;
+export const getAllFeedbacks = async (query) => {
+  return await paginatedQuery(Feedback, query, {
+    ...filterPresets.feedback,
+    populate: [
+      { path: 'userId', select: 'fullName email' },
+      { path: 'productId', select: 'name image' },
+      { path: 'orderId', select: 'orderNumber' },
+    ],
+  });
 };
 
 export const getFeedbackById = async (id) => {
   const feedback = await Feedback.findById(id)
-    .populate("userId", "fullName avatar")
-    .populate("productId", "name image")
-    .populate("orderId");
+    .populate('userId', 'fullName avatar')
+    .populate('productId', 'name image')
+    .populate('orderId', 'orderNumber createdAt');
   if (!feedback) {
-    throw new AppError("Feedback not found", 404);
+    throw new AppError('Feedback not found', 404);
   }
   return feedback;
 };
 
-export const getFeedbacksByProduct = async (productId) => {
-  const feedbacks = await Feedback.find({ productId })
-    .populate("userId", "fullName avatar")
-    .sort({ createdAt: -1 });
-  return feedbacks;
+export const getFeedbacksByProduct = async (productId, query) => {
+  return await paginatedQuery(Feedback, query, {
+    ...filterPresets.feedback,
+    baseFilter: { productId },
+    populate: [{ path: 'userId', select: 'fullName avatar role _id' }],
+    sort: '-createdAt',
+  });
 };
 
 export const getProductRatingStats = async (productId) => {
+  // Validate productId
+  if (!mongoose.Types.ObjectId.isValid(productId)) {
+    throw new AppError('Invalid productId', 400);
+  }
+
+  // Aggregate: gom theo rating và đếm số lượng
   const stats = await Feedback.aggregate([
-    { $match: { productId: mongoose.Types.ObjectId(productId) } },
+    {
+      $match: {
+        productId: new mongoose.Types.ObjectId(productId),
+      },
+    },
     {
       $group: {
-        _id: null,
-        avgRating: { $avg: "$rating" },
-        totalReviews: { $sum: 1 },
-        ratings: {
-          $push: "$rating",
-        },
+        _id: '$rating',
+        count: { $sum: 1 },
       },
     },
   ]);
 
-  if (stats.length === 0) {
-    return { avgRating: 0, totalReviews: 0, distribution: {} };
-  }
-
-  // Calculate distribution
+  // Xử lý kết quả
   const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-  stats[0].ratings.forEach((r) => distribution[r]++);
+  let totalReviews = 0;
+  let totalScore = 0;
 
+  stats.forEach(({ _id, count }) => {
+    distribution[_id] = count;
+    totalReviews += count;
+    totalScore += _id * count;
+  });
+
+  // Trả kết quả chuẩn
   return {
-    avgRating: Math.round(stats[0].avgRating * 10) / 10,
-    totalReviews: stats[0].totalReviews,
+    avgRating: totalReviews
+      ? Math.round((totalScore / totalReviews) * 10) / 10
+      : 0,
+    totalReviews,
     distribution,
   };
 };
@@ -73,77 +121,43 @@ export const getProductRatingStats = async (productId) => {
 export const updateFeedback = async (id, userId, updateData) => {
   const feedback = await Feedback.findById(id);
   if (!feedback) {
-    throw new AppError("Feedback not found", 404);
+    throw new AppError('Feedback not found', 404);
   }
   if (feedback.userId.toString() !== userId.toString()) {
-    throw new AppError("You can only update your own feedback", 403);
+    throw new AppError('You can only update your own feedback', 403);
+  }
+  const diffDays = (Date.now() - feedback.createdAt) / (1000 * 60 * 60 * 24);
+
+  if (diffDays > 7) {
+    throw new AppError('Không thể sửa feedback sau 7 ngày', 400);
   }
 
-  Object.assign(feedback, updateData);
+  const allowedFields = ['comment', 'rating'];
+
+  allowedFields.forEach((field) => {
+    if (updateData[field] !== undefined) {
+      feedback[field] = updateData[field];
+    }
+  });
+
   await feedback.save();
-  return feedback;
+
+  // Populate userId to get avatar and role for UI
+  return await feedback.populate('userId', 'fullName avatar role _id');
 };
 
 export const deleteFeedback = async (id, userId, isAdmin = false) => {
   const feedback = await Feedback.findById(id);
   if (!feedback) {
-    throw new AppError("Feedback not found", 404);
+    throw new AppError('Feedback not found', 404);
   }
   if (!isAdmin && feedback.userId.toString() !== userId.toString()) {
-    throw new AppError("You can only delete your own feedback", 403);
+    throw new AppError('You can only delete your own feedback', 403);
   }
 
-  await Feedback.findByIdAndDelete(id);
+  await feedback.deleteOne();
+
+  const { FeedbackReply } =
+    await import('../feedbackReply/feedbackReply.model.js');
   await FeedbackReply.deleteMany({ feedbackId: id });
 };
-
-// ============ Feedback Reply Services ============
-
-export const createReply = async (feedbackId, userId, reply) => {
-  const feedback = await Feedback.findById(feedbackId);
-  if (!feedback) {
-    throw new AppError("Feedback not found", 404);
-  }
-
-  const feedbackReply = await FeedbackReply.create({
-    feedbackId,
-    userId,
-    reply,
-  });
-  return feedbackReply;
-};
-
-export const getRepliesByFeedback = async (feedbackId) => {
-  const replies = await FeedbackReply.find({ feedbackId })
-    .populate("userId", "fullName avatar role")
-    .sort({ createdAt: 1 });
-  return replies;
-};
-
-export const updateReply = async (id, userId, reply) => {
-  const feedbackReply = await FeedbackReply.findById(id);
-  if (!feedbackReply) {
-    throw new AppError("Reply not found", 404);
-  }
-  if (feedbackReply.userId.toString() !== userId.toString()) {
-    throw new AppError("You can only update your own reply", 403);
-  }
-
-  feedbackReply.reply = reply;
-  await feedbackReply.save();
-  return feedbackReply;
-};
-
-export const deleteReply = async (id, userId, isAdmin = false) => {
-  const feedbackReply = await FeedbackReply.findById(id);
-  if (!feedbackReply) {
-    throw new AppError("Reply not found", 404);
-  }
-  if (!isAdmin && feedbackReply.userId.toString() !== userId.toString()) {
-    throw new AppError("You can only delete your own reply", 403);
-  }
-
-  await FeedbackReply.findByIdAndDelete(id);
-};
-
-import mongoose from "mongoose";
