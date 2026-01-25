@@ -18,11 +18,12 @@ export const createCanteen = async (canteenData) => {
  */
 export const getAllCanteens = async (query = {}) => {
   const filter = {};
-
   if (query.status) {
     filter.status = query.status;
   }
-
+  if (query.location) {
+    filter.location = query.location;
+  }
   const canteens = await Canteen.find(filter).sort({ createdAt: -1 });
   return canteens;
 };
