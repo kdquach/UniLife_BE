@@ -14,7 +14,7 @@ export const getCartByUser = async (userId) => {
   return cart;
 };
 
-export const addToCart = async (userId, productId, quantity = 1) => {
+export const addItem = async (userId, productId, quantity = 1) => {
   const product = await Product.findById(productId);
   if (!product) {
     throw new AppError("Product not found", 404);
@@ -67,7 +67,7 @@ export const addToCart = async (userId, productId, quantity = 1) => {
     .populate("items.productId", "name price image status");
 };
 
-export const updateCartItem = async (userId, productId, quantity) => {
+export const updateCartById = async (userId, productId, quantity) => {
   const cart = await Cart.findOne({ userId });
 
   if (!cart) {
@@ -101,7 +101,7 @@ export const updateCartItem = async (userId, productId, quantity) => {
     .populate("items.productId", "name price image status");
 };
 
-export const removeFromCart = async (userId, productId) => {
+export const removeItem = async (userId, productId) => {
   const cart = await Cart.findOne({ userId });
 
   if (!cart) {

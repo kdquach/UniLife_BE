@@ -7,11 +7,11 @@ const router = express.Router();
 // All routes require authentication
 router.use(protect);
 
-router.get("/", cartController.getMyCart);
+router.get("/", cartController.getItems);
 router.get("/total", cartController.getCartTotal);
-router.post("/add", cartController.addToCart);
-router.patch("/items/:productId", cartController.updateCartItem);
-router.delete("/items/:productId", cartController.removeFromCart);
+router.post("/add", cartController.addItem);
+router.patch("/items/:productId", cartController.updateCartById);
+router.delete("/items/:productId", cartController.removeItem);
 router.delete("/clear", cartController.clearCart);
 
 export default router;
