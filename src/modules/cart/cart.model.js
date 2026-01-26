@@ -24,7 +24,6 @@ const cartSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: [true, "User ID is required"],
-      unique: true, // One cart per user
     },
     canteenId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -42,7 +41,8 @@ const cartSchema = new mongoose.Schema(
   },
 );
 
-cartSchema.index({ userId: 1 });
+// Unique cart per (userId, canteenId)
+cartSchema.index({ userId: 1, canteenId: 1 }, { unique: true });
 
 // Calculate total price
 cartSchema.methods.calculateTotal = async function () {
