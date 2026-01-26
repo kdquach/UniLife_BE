@@ -12,27 +12,36 @@ export const getMyOrders = async (userId, queryParams) => {
     populate: [{ path: "canteenId", select: "name location image" }],
   };
 
-  // 1. Lấy dữ liệu thô từ DB (bao gồm cả data rác null canteen)
   const result = await paginatedQuery(Order, queryParams, options);
 
-  // 2. [DEFENSIVE CODING] Lọc bỏ những order bị mất thông tin Canteen
-  // Nếu canteenId là null (do populate thất bại) -> Loại bỏ khỏi danh sách
   if (result.data && result.data.length > 0) {
-    const validOrders = result.data.filter((order) => {
-      // Giữ lại order nếu canteenId tồn tại và không phải null
-      return order.canteenId && order.canteenId._id;
+    // Bước 1: Lọc bỏ đơn lỗi Canteen
+    let validOrders = result.data.filter(
+      (order) => order.canteenId && order.canteenId._id,
+    );
+
+    // Các trạng thái ĐƯỢC PHÉP xem mã QR
+    const ALLOWED_QR_STATUSES = ["pending", "confirmed", "preparing", "ready"];
+
+    validOrders = validOrders.map((order) => {
+      // Convert Mongoose Document sang Plain Object để có thể sửa đổi field
+
+      const orderObj = order.toObject ? order.toObject() : order;
+
+      // Nếu trạng thái KHÔNG nằm trong danh sách cho phép -> Xóa field pickupQRCode
+      if (!ALLOWED_QR_STATUSES.includes(orderObj.status)) {
+        delete orderObj.pickupQRCode;
+      }
+
+      return orderObj;
     });
 
-    // Cập nhật lại data và total (số lượng có thể giảm đi do lọc)
+    // Cập nhật lại data
     result.data = validOrders;
-
-    // Lưu ý: Pagination total có thể bị lệch nhẹ so với thực tế hiển thị
-    // nhưng an toàn hơn là hiển thị data lỗi.
   }
 
   return result;
 };
-
 /**
  * Create a new order
  * @param {Object} orderData - Order data
