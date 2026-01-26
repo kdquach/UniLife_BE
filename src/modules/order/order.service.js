@@ -2,6 +2,37 @@ import Order from "./order.model.js";
 import Product from "../product/product.model.js";
 import AppError from "../../utils/AppError.js";
 
+// Get order history by user
+export const getMyOrders = async (userId, queryParams) => {
+  const baseFilter = { userId };
+
+  const options = {
+    ...filterPresets.order,
+    baseFilter,
+    populate: [{ path: "canteenId", select: "name location image" }],
+  };
+
+  // 1. Lấy dữ liệu thô từ DB (bao gồm cả data rác null canteen)
+  const result = await paginatedQuery(Order, queryParams, options);
+
+  // 2. [DEFENSIVE CODING] Lọc bỏ những order bị mất thông tin Canteen
+  // Nếu canteenId là null (do populate thất bại) -> Loại bỏ khỏi danh sách
+  if (result.data && result.data.length > 0) {
+    const validOrders = result.data.filter((order) => {
+      // Giữ lại order nếu canteenId tồn tại và không phải null
+      return order.canteenId && order.canteenId._id;
+    });
+
+    // Cập nhật lại data và total (số lượng có thể giảm đi do lọc)
+    result.data = validOrders;
+
+    // Lưu ý: Pagination total có thể bị lệch nhẹ so với thực tế hiển thị
+    // nhưng an toàn hơn là hiển thị data lỗi.
+  }
+
+  return result;
+};
+
 /**
  * Create a new order
  * @param {Object} orderData - Order data
@@ -10,12 +41,12 @@ import AppError from "../../utils/AppError.js";
  */
 export const createOrder = async (orderData, userId) => {
   const { canteenId, items, payment, note, summary } = orderData;
-  console.log("🚀 ~ createOrder ~ orderData:", orderData)
+  console.log("🚀 ~ createOrder ~ orderData:", orderData);
 
   // Validate and get product prices
   const orderItems = [];
-  let totalAmount = 0
-  const canteenObjectId = new mongoose.Types.ObjectId(canteenId)
+  let totalAmount = 0;
+  const canteenObjectId = new mongoose.Types.ObjectId(canteenId);
   for (const item of items) {
     const product = await Product.findById(item.productId);
     if (!product) {
@@ -31,11 +62,11 @@ export const createOrder = async (orderData, userId) => {
       quantity: item.quantity,
       price: item.price,
     });
-    console.log("🚀 ~ createOrder ~ orderItems:", orderItems)
+    console.log("🚀 ~ createOrder ~ orderItems:", orderItems);
 
     //Giá đã bao gồm thuế
-    totalAmount = summary.total
-    console.log("🚀 ~ createOrder ~ summary:", summary)
+    totalAmount = summary.total;
+    console.log("🚀 ~ createOrder ~ summary:", summary);
   }
 
   const order = await Order.create({
@@ -287,5 +318,6 @@ export const getOrderStats = async (canteenId, startDate, endDate) => {
 };
 
 // Import mongoose for ObjectId in getOrderStats
-import mongoose from "mongoose"; import { Cart } from "../cart/cart.model.js";
-
+import mongoose from "mongoose";
+import { Cart } from "../cart/cart.model.js";
+import { filterPresets, paginatedQuery } from "../../utils/queryHelper.js";
