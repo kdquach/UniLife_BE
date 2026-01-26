@@ -9,12 +9,13 @@ import AppError from "../../utils/AppError.js";
  * @returns {Promise<Object>} Created order
  */
 export const createOrder = async (orderData, userId) => {
-  const { canteenId, items, payment, note } = orderData;
+  const { canteenId, items, payment, note, summary } = orderData;
+  console.log("🚀 ~ createOrder ~ orderData:", orderData)
 
   // Validate and get product prices
   const orderItems = [];
-  let totalAmount = 0;
-
+  let totalAmount = 0
+  const canteenObjectId = new mongoose.Types.ObjectId(canteenId)
   for (const item of items) {
     const product = await Product.findById(item.productId);
     if (!product) {
@@ -26,17 +27,22 @@ export const createOrder = async (orderData, userId) => {
 
     orderItems.push({
       productId: item.productId,
+      productName: item.productName,
       quantity: item.quantity,
-      price: product.price,
+      price: item.price,
     });
+    console.log("🚀 ~ createOrder ~ orderItems:", orderItems)
 
-    totalAmount += product.price * item.quantity;
+    //Giá đã bao gồm thuế
+    totalAmount = summary.total
+    console.log("🚀 ~ createOrder ~ summary:", summary)
   }
 
   const order = await Order.create({
     userId,
-    canteenId,
+    canteenId: canteenObjectId,
     items: orderItems,
+    subTotal: summary.subtotal,
     totalAmount,
     payment: payment || { method: "cash", status: "pending" },
     note,
@@ -281,4 +287,5 @@ export const getOrderStats = async (canteenId, startDate, endDate) => {
 };
 
 // Import mongoose for ObjectId in getOrderStats
-import mongoose from "mongoose";
+import mongoose from "mongoose"; import { Cart } from "../cart/cart.model.js";
+

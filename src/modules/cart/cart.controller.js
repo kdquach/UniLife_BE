@@ -35,3 +35,8 @@ export const getCartTotal = catchAsync(async (req, res) => {
   const total = await cartService.getCartTotal(req.user._id);
   res.status(200).json({ status: "success", data: total });
 });
+
+export const clearCart = catchAsync(async (req, res) => {
+  const cart = await cartService.clearCart(req.user._id);
+  res.status(200).json({ status: "success", data: cart });
+})

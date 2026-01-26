@@ -14,7 +14,7 @@ const cartItemSchema = new mongoose.Schema(
       min: [1, "Quantity must be at least 1"],
     },
   },
-  { _id: true, timestamps: true },
+  { timestamps: true },
 );
 
 // Cart Schema
