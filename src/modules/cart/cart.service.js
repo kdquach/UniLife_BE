@@ -32,17 +32,6 @@ export const addItem = async (userId, productId, quantity = 1) => {
       items: [{ productId, quantity }],
     });
   } else {
-    // Check if product is from same canteen
-    if (
-      cart.canteenId &&
-      cart.canteenId.toString() !== product.canteenId.toString()
-    ) {
-      throw new AppError(
-        "Cannot add products from different canteens. Please clear your cart first.",
-        400,
-      );
-    }
-
     // Check if item already exists in cart
     const existingItemIndex = cart.items.findIndex(
       (item) => item.productId.toString() === productId,

@@ -10,7 +10,6 @@ import AppError from "../../utils/AppError.js";
  */
 export const createOrder = async (orderData, userId) => {
   const { canteenId, items, payment, note, summary } = orderData;
-  console.log("🚀 ~ createOrder ~ orderData:", orderData)
 
   // Validate and get product prices
   const orderItems = [];
@@ -31,11 +30,9 @@ export const createOrder = async (orderData, userId) => {
       quantity: item.quantity,
       price: item.price,
     });
-    console.log("🚀 ~ createOrder ~ orderItems:", orderItems)
 
     //Giá đã bao gồm thuế
     totalAmount = summary.total
-    console.log("🚀 ~ createOrder ~ summary:", summary)
   }
 
   const order = await Order.create({
@@ -50,6 +47,18 @@ export const createOrder = async (orderData, userId) => {
 
   return order;
 };
+// order.controller.js
+export const confirmOrderFromRedirect = async (orderId) => {
+
+  const order = await Order.findOneAndUpdate(
+    { _id: orderId },
+    { status: 'completed' },
+    { new: true }
+  );
+
+  return order
+};
+
 
 /**
  * Get all orders
@@ -287,5 +296,5 @@ export const getOrderStats = async (canteenId, startDate, endDate) => {
 };
 
 // Import mongoose for ObjectId in getOrderStats
-import mongoose from "mongoose"; import { Cart } from "../cart/cart.model.js";
+import mongoose from "mongoose";
 
