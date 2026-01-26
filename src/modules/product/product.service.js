@@ -89,6 +89,48 @@ export const getProductsByCanteen = async (canteenId, queryParams) => {
 //   });
 //   return products;
 // };
+/**
+ * Search products by canteen
+ * @param {string} canteenId
+ * @param {Object} queryParams
+ */
+export const searchProductsByCanteen = async (canteenId, queryParams) => {
+  if (!canteenId) {
+    throw new AppError('CanteenId is required to search products', 400);
+  }
+
+  const {
+    sort,
+    ...restQuery
+  } = queryParams;
+
+  // ✅ Map sort từ FE → Mongo
+  const SORT_MAP = {
+    'name-asc': 'name',
+    'name-desc': '-name',
+    'price-asc': 'price',
+    'price-desc': '-price',
+    default: '-createdAt',
+  };
+
+  const mappedSort = SORT_MAP[sort] || SORT_MAP.default;
+
+  const options = {
+    ...filterPresets.product,
+    searchFields: ['name'],
+    baseFilter: {
+      canteenId,
+      status: 'available',
+    },
+    sort: mappedSort,
+    populate: [{ path: 'categoryId', select: 'name' }],
+  };
+
+  // ❌ không cho override searchFields
+  const { searchFields, ...safeQueryParams } = restQuery;
+
+  return paginatedQuery(Product, safeQueryParams, options);
+};
 
 /**
  * Update product
