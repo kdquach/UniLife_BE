@@ -23,6 +23,8 @@ export const createOrder = catchAsync(async (req, res) => {
   });
 });
 
+// order.controller.js
+
 /**
  * Get all orders with pagination
  * @route GET /api/orders?page=1&limit=10&status=completed&sort=-createdAt
