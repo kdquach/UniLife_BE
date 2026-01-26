@@ -77,6 +77,37 @@ export const getActiveMenuByCanteen = async (canteenId, date = new Date()) => {
 };
 
 /**
+ * Check if a product is available in the menu for a specific date
+ * @param {string} productId - Product ID
+ * @param {string} canteenId - Canteen ID
+ * @param {Date} date - Date to check (default: today)
+ * @returns {Promise<boolean>} True if available, false otherwise
+ */
+export const checkMenuAvailability = async (
+  productId,
+  canteenId,
+  date = new Date(),
+) => {
+  const menu = await getActiveMenuByCanteen(canteenId, date);
+
+  if (!menu || !menu.items) {
+    return false;
+  }
+
+  // Check if product exists in menu items
+  // Note: items is an array of objects with structure { productId: ... }
+  // When populated, productId is an object, otherwise it's an ID string
+  const isAvailable = menu.items.some((item) => {
+    const itemProductId = item.productId._id
+      ? item.productId._id.toString()
+      : item.productId.toString();
+    return itemProductId === productId.toString();
+  });
+
+  return isAvailable;
+};
+
+/**
  * Update menu
  * @param {string} id - Menu ID
  * @param {Object} updateData - Data to update
