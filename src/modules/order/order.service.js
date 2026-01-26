@@ -101,6 +101,142 @@ export const confirmOrderFromRedirect = async (orderId) => {
 
 
 /**
+ * Re-order: Lấy món từ đơn cũ, kiểm tra điều kiện khắt khe, rồi ném vào giỏ hàng.
+ * @param {String} userId - ID người dùng
+ * @param {String} orderId - ID đơn hàng cũ
+ * @param {String} currentCanteenId - Context Canteen hiện tại của User
+ */
+export const reOrderToCart = async (userId, orderId, currentCanteenId) => {
+  // 1. Lấy đơn hàng cũ (Snapshot quá khứ)
+  const oldOrder = await Order.findOne({ _id: orderId, userId });
+  if (!oldOrder) throw new AppError("Không tìm thấy đơn hàng cũ", 404);
+
+  // 2. Kiểm tra Campus
+  // Nếu đơn cũ ở Canteen A, mà User đang đứng ở Canteen B -> Chặn ngay.
+  if (oldOrder.canteenId.toString() !== currentCanteenId.toString()) {
+    throw new AppError(
+      "Không thể đặt lại đơn hàng của Canteen khác khu vực hiện tại.",
+      400,
+    );
+  }
+
+  // 3. Lấy giỏ hàng hiện tại để chuẩn bị Merge
+  let cart = await Cart.findOne({ userId });
+  if (!cart) {
+    cart = await Cart.create({
+      userId,
+      canteenId: currentCanteenId,
+      items: [],
+    });
+  } else {
+    // Nếu giỏ hàng đang có đồ của Canteen khác -> Cần clear hoặc báo lỗi (Ở đây chọn báo lỗi cho an toàn)
+    // Nếu giỏ hàng đang có đồ của Canteen khác -> Cần clear hoặc báo lỗi (Ở đây chọn báo lỗi cho an toàn)
+    // Fix crash: Check if canteenId exists before calling toString()
+    if (
+      cart.canteenId &&
+      cart.canteenId.toString() !== currentCanteenId.toString() &&
+      cart.items.length > 0
+    ) {
+      throw new AppError(
+        "Giỏ hàng đang chứa món của Canteen khác. Vui lòng thanh toán hoặc xóa giỏ hàng trước.",
+        400,
+      );
+    }
+
+    // Nếu cart.canteenId null hoặc empty items -> Update current canteen
+    if (!cart.canteenId || cart.items.length === 0) {
+      cart.canteenId = currentCanteenId;
+    }
+  }
+
+  const report = {
+    successItems: [],
+    failedItems: [], // Chứa danh sách các món bị loại bỏ (Hết hàng, đổi giá, ngừng bán...)
+  };
+
+  // 4. Duyệt qua từng món trong đơn cũ (Vòng lặp Validation)
+  for (const item of oldOrder.items) {
+    // A. Lấy dữ liệu từ Product DB
+    const product = await Product.findById(item.productId);
+
+    // LOGIC KIỂM TRA (VALIDATION CHAIN)
+
+    // Check 1: Product tồn tại và còn Active?
+    if (!product || product.status !== "available") {
+      report.failedItems.push({
+        name: item.productName,
+        reason: "Ngừng kinh doanh hoặc đã bị xóa",
+      });
+      continue;
+    }
+
+    // Check 2: Hôm nay có bán không?
+    const isAvailableToday = await checkMenuAvailability(
+      item.productId,
+      currentCanteenId,
+    );
+    if (!isAvailableToday) {
+      report.failedItems.push({
+        name: product.name,
+        reason: "Hôm nay không phục vụ",
+      });
+      continue;
+    }
+
+    // Check 3: Nếu đặt 3 mà kho còn 1 -> Bỏ luôn (Reject), không tự sửa thành 1.
+    if (product.stock < item.quantity) {
+      report.failedItems.push({
+        name: product.name,
+        reason: "Số lượng trong kho không đủ (Yêu cầu: " + item.quantity + ")",
+      });
+      continue;
+    }
+
+    // Check 4: Cảnh báo trượt giá (Optional: Có thể thêm vào report nếu muốn frontend hiện)
+    const currentPrice = product.price;
+
+    // B. Merge vào Cart
+    const existingItemIndex = cart.items.findIndex(
+      (cartItem) => cartItem.productId.toString() === item.productId.toString(),
+    );
+
+    if (existingItemIndex > -1) {
+      // Nếu món đã có trong giỏ -> Cộng dồn số lượng
+      // Cần check lại stock tổng lần nữa cho chắc
+      const newQuantity =
+        cart.items[existingItemIndex].quantity + item.quantity;
+      if (product.stock >= newQuantity) {
+        cart.items[existingItemIndex].quantity = newQuantity;
+        // Cập nhật giá mới nhất cho item trong giỏ luôn
+        cart.items[existingItemIndex].price = currentPrice;
+        report.successItems.push(product.name);
+      } else {
+        report.failedItems.push({
+          name: product.name,
+          reason: "Tổng số lượng vượt quá tồn kho",
+        });
+      }
+    } else {
+      // Nếu món chưa có -> Push mới
+      cart.items.push({
+        productId: product._id,
+        quantity: item.quantity,
+        price: currentPrice, // QUAN TRỌNG: Dùng giá hiện tại
+        note: item.note || "", // Copy note cũ (nếu có)
+      });
+      report.successItems.push(product.name);
+    }
+  }
+
+  // 5. Lưu giỏ hàng
+  if (report.successItems.length > 0) {
+    await cart.save();
+  }
+
+  return report;
+};
+
+/**
  * Get all orders
  * @param {Object} query - Query parameters
  * @returns {Promise<Array>} Array of orders
@@ -339,3 +475,4 @@ export const getOrderStats = async (canteenId, startDate, endDate) => {
 import mongoose from "mongoose";
 import { Cart } from "../cart/cart.model.js";
 import { filterPresets, paginatedQuery } from "../../utils/queryHelper.js";
+import { checkMenuAvailability } from "../menu/menu.service.js";

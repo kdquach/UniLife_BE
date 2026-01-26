@@ -16,6 +16,7 @@ router.post(
 
 router.get("/my-orders", orderController.getMyOrders);
 router.patch("/:id/cancel", orderController.cancelOrder);
+router.post("/:id/re-order", orderController.reOrder);
 
 // Staff routes
 router.get(

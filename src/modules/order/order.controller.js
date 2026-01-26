@@ -72,15 +72,44 @@ export const getMyOrders = catchAsync(async (req, res) => {
   // Gọi Service
   const serviceResponse = await orderService.getMyOrders(userId, query);
 
-  // 👉 FIX QUAN TRỌNG: Destructuring đúng tên biến 'data' từ Helper
   const { data, pagination } = serviceResponse;
 
   res.status(200).json({
     status: "success",
     data: {
-      results: data, // Map 'data' thành 'results' để trả về Client đúng chuẩn
+      results: data,
       pagination,
     },
+  });
+});
+
+/**
+ * API: POST /api/orders/:id/re-order
+ * Body: { currentCanteenId: "..." } -> Frontend cần gửi Canteen user đang đứng
+ */
+export const reOrder = catchAsync(async (req, res) => {
+  const { id } = req.params; // OrderId cũ
+  const userId = req.user._id;
+  const { currentCanteenId } = req.body; // Bắt buộc phải có để check Context
+
+  if (!currentCanteenId) {
+    return res.status(400).json({
+      status: "fail",
+      message: "Thiếu thông tin Canteen hiện tại (Context Campus).",
+    });
+  }
+
+  const result = await orderService.reOrderToCart(userId, id, currentCanteenId);
+
+  // Trả về kết quả chi tiết để Frontend hiển thị thông báo
+  // Ví dụ: "Đã thêm 3 món vào giỏ. Có 2 món không thành công do hết hàng."
+  return res.status(200).json({
+    status: "success",
+    data: result,
+    message:
+      result.failedItems.length > 0
+        ? `Đã thêm ${result.successItems.length} món. Có ${result.failedItems.length} món không thể thêm (Xem chi tiết).`
+        : "Đã thêm toàn bộ món vào giỏ hàng thành công!",
   });
 });
 
