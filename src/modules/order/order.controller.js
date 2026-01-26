@@ -66,20 +66,22 @@ export const getOrderById = catchAsync(async (req, res) => {
  * @access Private
  */
 export const getMyOrders = catchAsync(async (req, res) => {
-  const result = await paginatedQuery(Order, req.query, {
-    ...filterPresets.order,
-    baseFilter: { userId: req.user._id },
-    populate: [{ path: "canteenId", select: "name location" }],
-  });
+  const userId = req.user._id;
+  const query = req.query;
 
-  res
-    .status(200)
-    .json(
-      formatPaginatedResponse(
-        result,
-        "Lấy danh sách đơn hàng của bạn thành công",
-      ),
-    );
+  // Gọi Service
+  const serviceResponse = await orderService.getMyOrders(userId, query);
+
+  // 👉 FIX QUAN TRỌNG: Destructuring đúng tên biến 'data' từ Helper
+  const { data, pagination } = serviceResponse;
+
+  res.status(200).json({
+    status: "success",
+    data: {
+      results: data, // Map 'data' thành 'results' để trả về Client đúng chuẩn
+      pagination,
+    },
+  });
 });
 
 /**

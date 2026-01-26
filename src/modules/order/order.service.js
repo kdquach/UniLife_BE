@@ -2,6 +2,46 @@ import Order from "./order.model.js";
 import Product from "../product/product.model.js";
 import AppError from "../../utils/AppError.js";
 
+// Get order history by user
+export const getMyOrders = async (userId, queryParams) => {
+  const baseFilter = { userId };
+
+  const options = {
+    ...filterPresets.order,
+    baseFilter,
+    populate: [{ path: "canteenId", select: "name location image" }],
+  };
+
+  const result = await paginatedQuery(Order, queryParams, options);
+
+  if (result.data && result.data.length > 0) {
+    // Bước 1: Lọc bỏ đơn lỗi Canteen
+    let validOrders = result.data.filter(
+      (order) => order.canteenId && order.canteenId._id,
+    );
+
+    // Các trạng thái ĐƯỢC PHÉP xem mã QR
+    const ALLOWED_QR_STATUSES = ["pending", "confirmed", "preparing", "ready"];
+
+    validOrders = validOrders.map((order) => {
+      // Convert Mongoose Document sang Plain Object để có thể sửa đổi field
+
+      const orderObj = order.toObject ? order.toObject() : order;
+
+      // Nếu trạng thái KHÔNG nằm trong danh sách cho phép -> Xóa field pickupQRCode
+      if (!ALLOWED_QR_STATUSES.includes(orderObj.status)) {
+        delete orderObj.pickupQRCode;
+      }
+
+      return orderObj;
+    });
+
+    // Cập nhật lại data
+    result.data = validOrders;
+  }
+
+  return result;
+};
 /**
  * Create a new order
  * @param {Object} orderData - Order data
@@ -13,8 +53,8 @@ export const createOrder = async (orderData, userId) => {
 
   // Validate and get product prices
   const orderItems = [];
-  let totalAmount = 0
-  const canteenObjectId = new mongoose.Types.ObjectId(canteenId)
+  let totalAmount = 0;
+  const canteenObjectId = new mongoose.Types.ObjectId(canteenId);
   for (const item of items) {
     const product = await Product.findById(item.productId);
     if (!product) {
@@ -297,4 +337,5 @@ export const getOrderStats = async (canteenId, startDate, endDate) => {
 
 // Import mongoose for ObjectId in getOrderStats
 import mongoose from "mongoose";
-
+import { Cart } from "../cart/cart.model.js";
+import { filterPresets, paginatedQuery } from "../../utils/queryHelper.js";

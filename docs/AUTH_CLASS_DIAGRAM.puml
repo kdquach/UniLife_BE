@@ -1,0 +1,228 @@
+@startuml Authentication_Class_Diagram
+
+skinparam classAttributeIconSize 0
+skinparam classFontStyle bold
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+title Authentication Module - Class Diagram
+
+' ==================== ROUTES ====================
+package "Routes" #E8F5E9 {
+    class AuthRoutes <<module>> {
+        - router: Router
+        --
+        + POST /register
+        + POST /register/send-otp
+        + POST /register/verify-otp
+        + POST /login
+        + POST /google
+        + POST /forgot-password
+        + POST /forgot-password/verify-otp
+        + POST /reset-password
+        + POST /logout
+        + POST /change-password
+    }
+}
+
+' ==================== CONTROLLER ====================
+package "Controllers" #E3F2FD {
+    class AuthController <<module>> {
+        --
+        + sendRegisterOTP(req, res): Promise<void>
+        + verifyRegisterOTP(req, res): Promise<void>
+        + register(req, res): Promise<void>
+        + login(req, res): Promise<void>
+        + googleAuth(req, res): Promise<void>
+        + forgotPassword(req, res): Promise<void>
+        + verifyForgotPasswordOTP(req, res): Promise<void>
+        + resetPassword(req, res): Promise<void>
+        + logout(req, res): Promise<void>
+        + changePassword(req, res): Promise<void>
+    }
+}
+
+' ==================== SERVICE ====================
+package "Services" #FFF3E0 {
+    class AuthService <<module>> {
+        - googleClient: OAuth2Client
+        - tokenBlacklist: Set<String>
+        --
+        + sendRegisterOTP(userData: Object): Promise<Object>
+        + verifyRegisterOTP(data: Object): Promise<Object>
+        + resendRegisterOTP(email: String): Promise<Object>
+        + register(userData: Object): Promise<Object>
+        + login(credentials: Object): Promise<Object>
+        + googleAuth(idToken: String): Promise<Object>
+        + sendForgotPasswordOTP(email: String): Promise<Object>
+        + verifyForgotPasswordOTP(data: Object): Promise<Object>
+        + resetPassword(data: Object): Promise<Object>
+        + logout(token: String, userId: String): Promise<void>
+        + changePassword(userId: String, data: Object): Promise<Object>
+        + isTokenBlacklisted(token: String): Boolean
+        - verifyGoogleToken(idToken: String): Promise<Object>
+        - addToBlacklist(token: String, userId: String): Promise<void>
+    }
+}
+
+' ==================== MIDDLEWARE ====================
+package "Middlewares" #FCE4EC {
+    class AuthMiddleware <<middleware>> {
+        --
+        + protect(req, res, next): Promise<void>
+        + restrictTo(...roles: String[]): Function
+    }
+}
+
+' ==================== MODELS ====================
+package "Models" #F3E5F5 {
+    class User <<model>> {
+        - _id: ObjectId
+        - email: String
+        - password: String
+        - fullName: String
+        - phone: String
+        - gender: String
+        - avatar: String
+        - dateOfBirth: Date
+        - address: String
+        - balance: Number
+        - role: String
+        - status: String
+        - provider: String
+        - providerId: String
+        - emailVerified: Boolean
+        - emailVerifiedAt: Date
+        - lastLoginAt: Date
+        - campusId: ObjectId
+        - canteenId: ObjectId
+        - createdAt: Date
+        - updatedAt: Date
+        --
+        + comparePassword(candidatePassword: String): Promise<Boolean>
+        + pre('save'): void
+    }
+
+    class Campus <<model>> {
+        - _id: ObjectId
+        - name: String
+        - location: String
+        - status: String
+        - createdAt: Date
+        - updatedAt: Date
+    }
+}
+
+' ==================== UTILITIES ====================
+package "Utilities" #FFFDE7 {
+    class JwtUtils <<utility>> {
+        --
+        + generateToken(payload: Object, expiresIn?: String): String
+        + verifyToken(token: String): Object
+    }
+
+    class OtpUtils <<utility>> {
+        - otpStore: Map<String, Object>
+        - OTP_EXPIRY: Number
+        --
+        + generateOTP(): String
+        + storeOTP(email: String, otp: String, type: String, userData?: Object): void
+        + verifyOTP(email: String, otp: String, type: String): Object
+        + deleteOTP(email: String, type: String): void
+        + canResendOTP(email: String, type: String): Object
+    }
+
+    class AppError <<utility>> {
+        + message: String
+        + statusCode: Number
+        + status: String
+        + isOperational: Boolean
+        --
+        + constructor(message: String, statusCode: Number)
+    }
+
+    class CatchAsync <<utility>> {
+        --
+        + catchAsync(fn: Function): Function
+    }
+}
+
+' ==================== CONFIG ====================
+package "Config" #E0F7FA {
+    class EmailConfig <<config>> {
+        - transporter: Transporter
+        --
+        + getTransporter(): Transporter
+        + sendEmail(options: Object): Promise<void>
+        + sendOTPEmail(email: String, otp: String): Promise<void>
+        + sendPasswordResetOTP(email: String, otp: String): Promise<void>
+    }
+}
+
+' ==================== EXTERNAL ====================
+package "External Libraries" #ECEFF1 {
+    class OAuth2Client <<external>> {
+        --
+        + verifyIdToken(options: Object): Promise<Ticket>
+    }
+
+    class Error <<built-in>> {
+        + message: String
+        + stack: String
+    }
+}
+
+' ==================== RELATIONSHIPS ====================
+
+' Routes -> Controller (Usage/Dependency)
+AuthRoutes ..> AuthController : <<use>>
+
+' Routes -> Middleware (Usage/Dependency)  
+AuthRoutes ..> AuthMiddleware : <<use>>
+
+' Controller -> Service (Usage/Dependency)
+AuthController ..> AuthService : <<use>>
+
+' Controller -> CatchAsync (Usage/Dependency)
+AuthController ..> CatchAsync : <<use>>
+
+' Service -> User (Association)
+AuthService --> User : <<manipulate>>
+
+' Service -> JwtUtils (Usage/Dependency)
+AuthService ..> JwtUtils : <<use>>
+
+' Service -> OtpUtils (Usage/Dependency)
+AuthService ..> OtpUtils : <<use>>
+
+' Service -> AppError (Usage/Dependency)
+AuthService ..> AppError : <<throw>>
+
+' Service -> EmailConfig (Usage/Dependency)
+AuthService ..> EmailConfig : <<use>>
+
+' Service -> OAuth2Client (Usage/Dependency)
+AuthService ..> OAuth2Client : <<use>>
+
+' Middleware -> JwtUtils (Usage/Dependency)
+AuthMiddleware ..> JwtUtils : <<use>>
+
+' Middleware -> User (Association)
+AuthMiddleware --> User : <<query>>
+
+' Middleware -> AppError (Usage/Dependency)
+AuthMiddleware ..> AppError : <<throw>>
+
+' Middleware -> AuthService (Usage/Dependency)
+AuthMiddleware ..> AuthService : <<use>>
+
+' Middleware -> CatchAsync (Usage/Dependency)
+AuthMiddleware ..> CatchAsync : <<use>>
+
+' AppError extends Error (Generalization)
+AppError --|> Error : <<extends>>
+
+' User -> Campus (Association/Reference)
+User --> Campus : <<ref>> campusId
+
+@enduml
