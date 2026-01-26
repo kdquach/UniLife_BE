@@ -124,21 +124,6 @@ export const removeItem = async (userId, productId) => {
     .populate("items.productId", "name price image status");
 };
 
-export const clearCart = async (userId) => {
-  const cart = await Cart.findOne({ userId });
-
-  if (!cart) {
-    throw new AppError("Cart not found", 404);
-  }
-
-  cart.items = [];
-  cart.canteenId = null;
-  cart.totalPrice = 0;
-  await cart.save();
-
-  return cart;
-};
-
 export const getCartTotal = async (userId) => {
   const cart = await Cart.findOne({ userId });
 
@@ -152,4 +137,19 @@ export const getCartTotal = async (userId) => {
   const itemCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
 
   return { itemCount, totalPrice: cart.totalPrice };
+};
+
+export const clearCart = async (userId) => {
+  const cart = await Cart.findOne({ userId });
+
+  if (!cart) {
+    throw new AppError("Cart not found", 404);
+  }
+
+  cart.items = [];
+  cart.canteenId = null;
+  cart.totalPrice = 0;
+  await cart.save();
+
+  return cart;
 };
