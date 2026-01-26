@@ -10,6 +10,7 @@
  * @param {Object} options - Additional options
  * @returns {Object} Parsed query options
  */
+
 export const buildQueryOptions = (queryParams, options = {}) => {
   const {
     page = 1,
@@ -17,7 +18,7 @@ export const buildQueryOptions = (queryParams, options = {}) => {
     sort = "-createdAt",
     fields,
     search,
-    searchFields = [],
+    // searchFields removed from queryParams
     ...filters
   } = queryParams;
 
@@ -26,6 +27,7 @@ export const buildQueryOptions = (queryParams, options = {}) => {
     defaultSort = "-createdAt",
     allowedFilters = [],
     allowedSortFields = [],
+    searchFields = [], // searchFields only from options
   } = options;
 
   // Parse pagination

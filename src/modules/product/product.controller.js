@@ -135,6 +135,52 @@ export const updateProduct = catchAsync(async (req, res) => {
     },
   });
 });
+/**
+ * Search products by canteen
+ * @route GET /api/products/canteen/:canteenId/search
+ * @access Public
+ */
+export const searchProductsByCanteen = catchAsync(async (req, res) => {
+  const { canteenId } = req.params;
+
+  if (!canteenId) {
+    return res.status(400).json({
+      success: false,
+      message: 'CanteenId is required to search products',
+    });
+  }
+
+  // ✅ Normalize query params
+  const {
+    search,
+    category,
+    sort = 'createdAt',
+    status = 'available',
+    page = 1,
+    limit = 20,
+  } = req.query;
+
+  const query = {
+    search: search?.trim(),
+    category,
+    sort,
+    status,
+    page: Number(page),
+    limit: Number(limit),
+  };
+
+  const result = await productService.searchProductsByCanteen(
+    canteenId,
+    query
+  );
+
+  return res.status(200).json(
+    formatPaginatedResponse(
+      result,
+      'Tìm kiếm sản phẩm theo căn tin thành công'
+    )
+  );
+});
 
 /**
  * Delete product
