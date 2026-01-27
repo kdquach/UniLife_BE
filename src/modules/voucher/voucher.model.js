@@ -50,6 +50,31 @@ const voucherSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Campus scope: null = Global (all campuses), ObjectId = specific campus only
+    campusId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Campus",
+      default: null,
+    },
+    // Per-user usage limit (default: 1 time per user)
+    userUsageLimit: {
+      type: Number,
+      default: 1,
+      min: [1, "User usage limit must be at least 1"],
+    },
+    // Apply to: all products or specific products only
+    applyTo: {
+      type: String,
+      enum: ["all", "specific_products"],
+      default: "all",
+    },
+    // Product IDs (only used when applyTo = "specific_products")
+    productIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product",
+      },
+    ],
     description: {
       type: String,
       trim: true,

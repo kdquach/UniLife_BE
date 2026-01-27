@@ -39,13 +39,35 @@ export const getVoucherByCode = catchAsync(async (req, res) => {
 });
 
 export const validateVoucher = catchAsync(async (req, res) => {
-  const { code, orderAmount } = req.body;
-  const result = await voucherService.validateVoucher(
+  const { code, orderTotal, items, campusId } = req.body;
+
+  // Input validation
+  if (!code) {
+    return res.status(400).json({
+      status: "fail",
+      message: "Vui lòng nhập mã voucher",
+    });
+  }
+
+  if (!orderTotal || orderTotal <= 0) {
+    return res.status(400).json({
+      status: "fail",
+      message: "Giá trị đơn hàng không hợp lệ",
+    });
+  }
+
+  const result = await voucherService.validateVoucherForApply(
     code,
-    orderAmount,
+    orderTotal,
+    items || [],
+    campusId,
     req.user._id,
   );
-  res.status(200).json({ status: "success", data: result });
+
+  res.status(200).json({
+    status: "success",
+    data: result,
+  });
 });
 
 export const updateVoucher = catchAsync(async (req, res) => {
