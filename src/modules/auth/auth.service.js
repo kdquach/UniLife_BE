@@ -319,7 +319,21 @@ export const login = async (credentials) => {
   // Find user and include password for comparison
   const user = await User.findOne({ email }).select("+password");
 
-  if (!user || !(await user.comparePassword(password))) {
+  // Kiem tra user co ton tai khong
+  if (!user) {
+    throw new AppError("Email hoặc mật khẩu sai", 401);
+  }
+
+  // Kiem tra neu user dang ky qua OAuth (khong co password)
+  if (!user.password) {
+    throw new AppError(
+      "Tài khoản này được đăng ký qua Google. Vui lòng đăng nhập bằng Google.",
+      400,
+    );
+  }
+
+  // So sanh mat khau
+  if (!(await user.comparePassword(password))) {
     throw new AppError("Email hoặc mật khẩu sai", 401);
   }
 
