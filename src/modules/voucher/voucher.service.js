@@ -1,5 +1,8 @@
+import mongoose from "mongoose";
 import { Voucher, VoucherUsage } from "./voucher.model.js";
 import AppError from "../../utils/AppError.js";
+import { buildValidationChain } from "./voucherValidator.js";
+import { discountCalculator } from "./discountCalculator.js";
 
 export const createVoucher = async (voucherData) => {
   const voucher = await Voucher.create(voucherData);
@@ -42,31 +45,67 @@ export const getVoucherByCode = async (code) => {
   return voucher;
 };
 
-export const validateVoucher = async (code, orderAmount, userId) => {
-  const voucher = await getVoucherByCode(code);
+/**
+ * Validate voucher for applying (Phase 1: Preview)
+ * Uses Chain of Responsibility pattern
+ * @param {string} code - Voucher code
+ * @param {number} orderTotal - Total order amount
+ * @param {Array} items - Cart items [{productId, quantity, price}]
+ * @param {string} campusId - Campus ID (from cart/order context)
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} { voucher, discountAmount } or throws AppError
+ */
+export const validateVoucherForApply = async (
+  code,
+  orderTotal,
+  items,
+  campusId,
+  userId,
+) => {
+  // Find voucher by code
+  const voucher = await Voucher.findOne({ code: code.toUpperCase() });
 
-  if (!voucher.isValid()) {
-    throw new AppError("Voucher is invalid or expired", 400);
-  }
-
-  if (orderAmount < voucher.minOrderAmount) {
-    throw new AppError(
-      `Minimum order amount is ${voucher.minOrderAmount}`,
-      400,
-    );
-  }
-
-  // Check if user already used this voucher (optional: can be per-user limit)
-  const existingUsage = await VoucherUsage.findOne({
-    voucherId: voucher._id,
+  // Build validation context
+  const context = {
+    voucher,
+    orderTotal,
+    items: items || [],
+    campusId,
     userId,
-  });
-  if (existingUsage) {
-    throw new AppError("You have already used this voucher", 400);
+  };
+
+  // Run validation chain
+  const validationChain = buildValidationChain();
+  const result = await validationChain.validate(context);
+
+  if (!result.valid) {
+    throw new AppError(result.error, result.code || 400);
   }
 
-  const discount = voucher.calculateDiscount(orderAmount);
-  return { voucher, discount };
+  // Calculate discount using Strategy Pattern
+  const discountAmount = discountCalculator.calculate(
+    voucher,
+    orderTotal,
+    items,
+  );
+
+  return {
+    voucher: {
+      _id: voucher._id,
+      code: voucher.code,
+      discountType: voucher.discountType,
+      value: voucher.value,
+      maxDiscount: voucher.maxDiscount,
+      description: voucher.description,
+    },
+    discountAmount,
+    message: `Áp dụng voucher thành công! Giảm ${discountAmount.toLocaleString("vi-VN")}đ`,
+  };
+};
+
+// Keep old validateVoucher for backward compatibility
+export const validateVoucher = async (code, orderAmount, userId) => {
+  return validateVoucherForApply(code, orderAmount, [], null, userId);
 };
 
 export const updateVoucher = async (id, updateData) => {
@@ -87,31 +126,60 @@ export const deleteVoucher = async (id) => {
   }
 };
 
-export const applyVoucher = async (
+/**
+ * Commit voucher usage (Phase 2: Checkout)
+ * Uses Optimistic Locking to prevent race conditions
+ * @param {string} voucherId - Voucher ID
+ * @param {string} orderId - Order ID
+ * @param {string} userId - User ID
+ * @param {number} discountAmount - Calculated discount amount
+ * @param {Object} session - MongoDB session (optional, for transaction)
+ * @returns {Promise<Object>} VoucherUsage record
+ */
+export const commitVoucher = async (
   voucherId,
   orderId,
   userId,
   discountAmount,
+  session = null,
 ) => {
-  const voucher = await Voucher.findById(voucherId);
-  if (!voucher) {
-    throw new AppError("Voucher not found", 404);
+  // Optimistic locking: Only increment if usedCount < maxUsage
+  // This atomic operation prevents race conditions
+  const updateResult = await Voucher.findOneAndUpdate(
+    {
+      _id: voucherId,
+      $or: [
+        { maxUsage: null }, // Unlimited usage
+        { $expr: { $lt: ["$usedCount", "$maxUsage"] } }, // Still has remaining usage
+      ],
+    },
+    { $inc: { usedCount: 1 } },
+    { new: true, session },
+  );
+
+  if (!updateResult) {
+    throw new AppError("Voucher đã hết lượt sử dụng", 400);
   }
 
   // Create usage record
-  const usage = await VoucherUsage.create({
+  const usageData = {
     voucherId,
     orderId,
     userId,
     discountAmount,
-  });
+  };
 
-  // Increment used count
-  voucher.usedCount += 1;
-  await voucher.save();
+  const usage = session
+    ? await VoucherUsage.create([usageData], { session }).then(
+        (docs) => docs[0],
+      )
+    : await VoucherUsage.create(usageData);
 
   return usage;
 };
+
+// Keep old applyVoucher for backward compatibility (deprecated)
+export const applyVoucher = commitVoucher;
 
 export const getVoucherUsageStats = async (voucherId) => {
   const usages = await VoucherUsage.find({ voucherId })

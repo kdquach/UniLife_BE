@@ -1,6 +1,11 @@
+import mongoose from "mongoose";
 import Order from "./order.model.js";
 import Product from "../product/product.model.js";
 import AppError from "../../utils/AppError.js";
+import * as voucherService from "../voucher/voucher.service.js";
+import { Cart } from "../cart/cart.model.js";
+import { filterPresets, paginatedQuery } from "../../utils/queryHelper.js";
+import { checkMenuAvailability } from "../menu/menu.service.js";
 
 // Get order history by user
 export const getMyOrders = async (userId, queryParams) => {
@@ -49,12 +54,14 @@ export const getMyOrders = async (userId, queryParams) => {
  * @returns {Promise<Object>} Created order
  */
 export const createOrder = async (orderData, userId) => {
-  const { canteenId, items, payment, note, summary } = orderData;
+  const { canteenId, items, payment, note, summary, voucherCode, campusId } =
+    orderData;
 
   // Validate and get product prices
   const orderItems = [];
-  let totalAmount = 0;
+  let subTotal = 0;
   const canteenObjectId = new mongoose.Types.ObjectId(canteenId);
+
   for (const item of items) {
     const product = await Product.findById(item.productId);
     if (!product) {
@@ -71,15 +78,84 @@ export const createOrder = async (orderData, userId) => {
       price: item.price,
     });
 
-    //Giá đã bao gồm thuế
-    totalAmount = summary.total
+    subTotal += item.price * item.quantity;
   }
 
+  // Use summary values if provided
+  const finalSubTotal = summary?.subtotal || subTotal;
+  let discount = 0;
+  let voucherId = null;
+  let voucherCodeApplied = null;
+
+  // If voucher code is provided, validate and calculate discount
+  if (voucherCode) {
+    const voucherResult = await voucherService.validateVoucherForApply(
+      voucherCode,
+      finalSubTotal,
+      orderItems,
+      campusId,
+      userId,
+    );
+    discount = voucherResult.discountAmount;
+    voucherId = voucherResult.voucher._id;
+    voucherCodeApplied = voucherResult.voucher.code;
+  }
+
+  // Calculate final total
+  const totalAmount = summary?.total || finalSubTotal - discount;
+
+  // If voucher is applied, use transaction (Phase 2)
+  if (voucherId) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // Create order within transaction
+      const [order] = await Order.create(
+        [
+          {
+            userId,
+            canteenId: canteenObjectId,
+            items: orderItems,
+            subTotal: finalSubTotal,
+            discount,
+            totalAmount,
+            voucherId,
+            voucherCode: voucherCodeApplied,
+            payment: payment || { method: "cash", status: "pending" },
+            note,
+          },
+        ],
+        { session },
+      );
+
+      // Commit voucher usage atomically
+      await voucherService.commitVoucher(
+        voucherId,
+        order._id,
+        userId,
+        discount,
+        session,
+      );
+
+      await session.commitTransaction();
+      session.endSession();
+
+      return order;
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
+  }
+
+  // No voucher - Simple create
   const order = await Order.create({
     userId,
     canteenId: canteenObjectId,
     items: orderItems,
-    subTotal: summary.subtotal,
+    subTotal: finalSubTotal,
+    discount: 0,
     totalAmount,
     payment: payment || { method: "cash", status: "pending" },
     note,
@@ -89,16 +165,14 @@ export const createOrder = async (orderData, userId) => {
 };
 // order.controller.js
 export const confirmOrderFromRedirect = async (orderId) => {
-
   const order = await Order.findOneAndUpdate(
     { _id: orderId },
-    { status: 'completed' },
-    { new: true }
+    { status: "completed" },
+    { new: true },
   );
 
-  return order
+  return order;
 };
-
 
 /**
  * Re-order: Lấy món từ đơn cũ, kiểm tra điều kiện khắt khe, rồi ném vào giỏ hàng.
@@ -470,9 +544,3 @@ export const getOrderStats = async (canteenId, startDate, endDate) => {
 
   return stats;
 };
-
-// Import mongoose for ObjectId in getOrderStats
-import mongoose from "mongoose";
-import { Cart } from "../cart/cart.model.js";
-import { filterPresets, paginatedQuery } from "../../utils/queryHelper.js";
-import { checkMenuAvailability } from "../menu/menu.service.js";
