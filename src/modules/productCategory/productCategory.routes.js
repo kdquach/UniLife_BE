@@ -1,25 +1,52 @@
 import express from "express";
 import * as productCategoryController from "./productCategory.controller.js";
-import { protect, restrictTo } from "../../middlewares/auth.middleware.js";
+import {
+  protect,
+  requirePermission,
+} from "../../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-// Public routes
-router.get("/", productCategoryController.getAllProductCategories);
-router.get("/active", productCategoryController.getActiveProductCategories);
-router.get("/:id", productCategoryController.getProductCategoryById);
-
-// Protected routes - Admin, Manager, Staff
+// Tất cả routes yêu cầu xác thực
 router.use(protect);
-router.use(restrictTo("admin", "manager", "staff"));
 
-router.post("/", productCategoryController.createProductCategory);
-router.patch("/:id", productCategoryController.updateProductCategory);
+// Routes đọc dữ liệu - Yêu cầu quyền PRODUCT_READ hoặc PRODUCT_CATEGORY_READ
+router.get(
+  "/",
+  requirePermission("PRODUCT_READ", "PRODUCT_CATEGORY_READ"),
+  productCategoryController.getAllProductCategories,
+);
 
-// Admin only
+router.get(
+  "/active",
+  requirePermission("PRODUCT_READ", "PRODUCT_CATEGORY_READ"),
+  productCategoryController.getActiveProductCategories,
+);
+
+router.get(
+  "/:id",
+  requirePermission("PRODUCT_READ", "PRODUCT_CATEGORY_READ"),
+  productCategoryController.getProductCategoryById,
+);
+
+// Routes tạo mới - Yêu cầu quyền PRODUCT_CREATE hoặc PRODUCT_CATEGORY_CREATE
+router.post(
+  "/",
+  requirePermission("PRODUCT_CREATE", "PRODUCT_CATEGORY_CREATE"),
+  productCategoryController.createProductCategory,
+);
+
+// Routes cập nhật - Yêu cầu quyền PRODUCT_UPDATE hoặc PRODUCT_CATEGORY_UPDATE
+router.patch(
+  "/:id",
+  requirePermission("PRODUCT_UPDATE", "PRODUCT_CATEGORY_UPDATE"),
+  productCategoryController.updateProductCategory,
+);
+
+// Routes xóa - Yêu cầu quyền PRODUCT_DELETE hoặc PRODUCT_CATEGORY_DELETE
 router.delete(
   "/:id",
-  restrictTo("admin"),
+  requirePermission("PRODUCT_DELETE", "PRODUCT_CATEGORY_DELETE"),
   productCategoryController.deleteProductCategory,
 );
 

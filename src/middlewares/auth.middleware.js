@@ -3,6 +3,7 @@ import AppError from "../utils/AppError.js";
 import User from "../modules/user/user.model.js";
 import catchAsync from "../utils/catchAsync.js";
 import { isTokenBlacklisted } from "../modules/auth/auth.service.js";
+import { UserRole, RolePermission } from "../modules/role/role.model.js";
 
 /**
  * Protect middleware - Verify JWT token and attach user to request
@@ -63,4 +64,49 @@ export const restrictTo = (...roles) => {
     }
     next();
   };
+};
+
+/**
+ * Middleware kiểm tra quyền của người dùng dựa trên Permission
+ * @param  {...string} requiredPermissions - Danh sách mã permission cần thiết
+ * @returns {Function} Middleware function
+ */
+export const requirePermission = (...requiredPermissions) => {
+  return catchAsync(async (req, res, next) => {
+    const userId = req.user._id;
+
+    // Lấy tất cả role của user
+    const userRoles = await UserRole.find({ userId }).populate("roleId");
+
+    if (!userRoles || userRoles.length === 0) {
+      return next(new AppError("You do not have any assigned roles.", 403));
+    }
+
+    // Lấy tất cả permission của các role này
+    const roleIds = userRoles.map((ur) => ur.roleId._id);
+    const rolePermissions = await RolePermission.find({
+      roleId: { $in: roleIds },
+    }).populate("permissionId");
+
+    // Lấy danh sách permission code
+    const userPermissionCodes = rolePermissions.map(
+      (rp) => rp.permissionId.code,
+    );
+
+    // Kiểm tra xem user có ít nhất 1 permission trong danh sách yêu cầu không
+    const hasPermission = requiredPermissions.some((permission) =>
+      userPermissionCodes.includes(permission),
+    );
+
+    if (!hasPermission) {
+      return next(
+        new AppError(
+          "You do not have the required permissions to perform this action.",
+          403,
+        ),
+      );
+    }
+
+    next();
+  });
 };

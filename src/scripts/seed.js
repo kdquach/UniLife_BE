@@ -13,6 +13,7 @@ import {
   RolePermission,
   UserRole,
 } from "../modules/role/role.model.js";
+import Campus from "../modules/campus/campus.model.js";
 import Canteen from "../modules/canteen/canteen.model.js";
 import ProductCategory from "../modules/productCategory/productCategory.model.js";
 import IngredientCategory from "../modules/ingredientCategory/ingredientCategory.model.js";
@@ -25,7 +26,8 @@ import { Cart } from "../modules/cart/cart.model.js";
 import { Shift, StaffShift } from "../modules/shift/shift.model.js";
 import { Voucher, VoucherUsage } from "../modules/voucher/voucher.model.js";
 import { Banner } from "../modules/banner/banner.model.js";
-import { Feedback, FeedbackReply } from "../modules/feedback/feedback.model.js";
+import { Feedback } from "../modules/feedback/feedback.model.js";
+import { FeedbackReply } from "../modules/feedbackReply/feedbackReply.model.js";
 import Salary from "../modules/salary/salary.model.js";
 import {
   Notification,
@@ -52,6 +54,7 @@ const seedDatabase = async () => {
     await Permission.deleteMany({});
     await RolePermission.deleteMany({});
     await UserRole.deleteMany({});
+    await Campus.deleteMany({});
     await Canteen.deleteMany({});
     await ProductCategory.deleteMany({});
     await IngredientCategory.deleteMany({});
@@ -146,23 +149,52 @@ const seedDatabase = async () => {
 
     console.log(`✅ Created ${3 + customers.length} users\n`);
 
+    // ============ Seed Campus ============
+    console.log("🏫 Creating campus...");
+    const campuses = await Campus.insertMany([
+      {
+        name: "FPT University HCMC",
+        code: "HCM",
+        address:
+          "Lô E2a-7, Đường D1, Khu Công nghệ cao, P. Long Thạnh Mỹ, TP. Thủ Đức, TP. HCM",
+        status: "active",
+      },
+      {
+        name: "FPT University Hanoi",
+        code: "HN",
+        address:
+          "Khu Giáo dục và Đào tạo, Khu Công nghệ cao Hòa Lạc, Km29 Đại lộ Thăng Long, Hà Nội",
+        status: "active",
+      },
+      {
+        name: "FPT University Da Nang",
+        code: "DN",
+        address:
+          "Khu đô thị công nghệ FPT Đà Nẵng, P. Hòa Hải, Q. Ngũ Hành Sơn, TP. Đà Nẵng",
+        status: "active",
+      },
+    ]);
+    console.log(`✅ Created ${campuses.length} campuses\n`);
+
     // ============ Seed Canteens ============
     console.log("🏢 Creating canteens...");
     const canteens = await Canteen.insertMany([
       {
         name: "Canteen A - Khu A",
         location: "Khu A, Tầng 1",
-        phone: "0281234567",
-        openingHours: "06:00 - 20:00",
-        description: "Căng tin chính phục vụ sinh viên khu A",
+        campusId: campuses[0]._id,
         status: "active",
       },
       {
         name: "Canteen B - Khu B",
         location: "Khu B, Tầng 2",
-        phone: "0281234568",
-        openingHours: "06:30 - 19:30",
-        description: "Căng tin phục vụ sinh viên khu B",
+        campusId: campuses[0]._id,
+        status: "active",
+      },
+      {
+        name: "Canteen C - Khu C",
+        location: "Khu C, Tầng 1",
+        campusId: campuses[1]._id,
         status: "active",
       },
     ]);
@@ -689,21 +721,17 @@ const seedDatabase = async () => {
     const feedbacks = await Feedback.insertMany([
       {
         userId: customers[0]._id,
-        canteenId: canteens[0]._id,
         orderId: orders[0]._id,
         productId: products[0]._id,
         rating: 5,
         comment: "Rất ngon, phục vụ nhanh!",
-        status: "approved",
       },
       {
         userId: customers[1]._id,
-        canteenId: canteens[0]._id,
         orderId: orders[1]._id,
         productId: products[1]._id,
         rating: 4,
         comment: "Cơm gà ngon, nhưng hơi ít",
-        status: "approved",
       },
     ]);
     console.log(`✅ Created ${feedbacks.length} feedbacks\n`);
@@ -725,6 +753,13 @@ const seedDatabase = async () => {
       { code: "PRODUCT_CREATE", description: "Tạo sản phẩm mới" },
       { code: "PRODUCT_UPDATE", description: "Cập nhật sản phẩm" },
       { code: "PRODUCT_DELETE", description: "Xóa sản phẩm" },
+      { code: "PRODUCT_CATEGORY_READ", description: "Xem danh mục sản phẩm" },
+      { code: "PRODUCT_CATEGORY_CREATE", description: "Tạo danh mục sản phẩm" },
+      {
+        code: "PRODUCT_CATEGORY_UPDATE",
+        description: "Cập nhật danh mục sản phẩm",
+      },
+      { code: "PRODUCT_CATEGORY_DELETE", description: "Xóa danh mục sản phẩm" },
       { code: "ORDER_READ", description: "Xem đơn hàng" },
       { code: "ORDER_CREATE", description: "Tạo đơn hàng" },
       { code: "ORDER_UPDATE", description: "Cập nhật đơn hàng" },
@@ -757,6 +792,24 @@ const seedDatabase = async () => {
       },
       {
         roleId: staffRole._id,
+        permissionId: permissions.find(
+          (p) => p.code === "PRODUCT_CATEGORY_READ",
+        )._id,
+      },
+      {
+        roleId: staffRole._id,
+        permissionId: permissions.find(
+          (p) => p.code === "PRODUCT_CATEGORY_CREATE",
+        )._id,
+      },
+      {
+        roleId: staffRole._id,
+        permissionId: permissions.find(
+          (p) => p.code === "PRODUCT_CATEGORY_UPDATE",
+        )._id,
+      },
+      {
+        roleId: staffRole._id,
         permissionId: permissions.find((p) => p.code === "ORDER_READ")._id,
       },
       {
@@ -767,6 +820,12 @@ const seedDatabase = async () => {
       {
         roleId: customerRole._id,
         permissionId: permissions.find((p) => p.code === "PRODUCT_READ")._id,
+      },
+      {
+        roleId: customerRole._id,
+        permissionId: permissions.find(
+          (p) => p.code === "PRODUCT_CATEGORY_READ",
+        )._id,
       },
       {
         roleId: customerRole._id,
@@ -1321,6 +1380,7 @@ const seedDatabase = async () => {
     console.log(`   - Users: ${3 + customers.length}`);
     console.log(`   - Roles: ${roles.length}`);
     console.log(`   - Permissions: ${permissions.length}`);
+    console.log(`   - Campuses: ${campuses.length}`);
     console.log(`   - Canteens: ${canteens.length}`);
     console.log(`   - Product Categories: ${productCategories.length}`);
     console.log(`   - Ingredient Categories: ${ingredientCategories.length}`);
