@@ -2,11 +2,16 @@ import mongoose from "mongoose";
 
 const ingredientCategorySchema = new mongoose.Schema(
   {
+    canteenId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Canteen",
+      required: [true, "Canteen ID is required"],
+      index: true,
+    },
     name: {
       type: String,
       required: [true, "Ingredient category name is required"],
       trim: true,
-      unique: true,
       maxlength: [100, "Category name cannot exceed 100 characters"],
     },
     description: {
@@ -29,7 +34,8 @@ const ingredientCategorySchema = new mongoose.Schema(
 );
 
 // Indexes
-ingredientCategorySchema.index({ name: 1 });
+ingredientCategorySchema.index({ canteenId: 1, name: 1 }, { unique: true });
+ingredientCategorySchema.index({ canteenId: 1, isActive: 1 });
 ingredientCategorySchema.index({ isActive: 1 });
 
 const IngredientCategory = mongoose.model(

@@ -4,97 +4,88 @@
 ' Bao gồm: shift, staff_shift, salary
 ' =====================================================
 
-!define TABLE(name) entity name << (T,#FFAAFF) >>
-!define PRIMARY_KEY(x) <b><color:#b8860b><&key></color> x</b>
-!define FOREIGN_KEY(x) <color:#aaaaaa><&link-intact></color> x
-!define COLUMN(x) <color:#efefef><&media-record></color> x
-!define NOT_NULL(x) <u>x</u>
-
 skinparam linetype ortho
-skinparam entity {
-    BackgroundColor #fff5ff
-    BorderColor #333333
-    ArrowColor #333333
+skinparam roundcorner 5
+skinparam class {
+    BackgroundColor #FEFECE
+    BorderColor #A80036
+    ArrowColor #A80036
 }
 
 title Module 4: Staff Management - Quản lý nhân viên\n(shift, staff_shift, salary)
 
 ' =====================================================
-' REFERENCE TABLES (từ Module khác)
+' REFERENCE TABLES
 ' =====================================================
-entity user << (R,#CCCCCC) Reference >> {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "user" as user <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
     --
-    full_name : VARCHAR(100)
-    role : ENUM('admin', 'manager', 'staff', 'customer')
-    FOREIGN_KEY(canteen_id) : CHAR(36)
-    .. Xem chi tiết tại Module 1 ..
+    * full_name : VARCHAR(100)
+    role : ENUM
+    canteen_id : CHAR(36) <<FK>>
+    ...
 }
 
-entity canteen << (R,#CCCCCC) Reference >> {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "canteen" as canteen <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
     --
-    name : VARCHAR(100)
-    .. Xem chi tiết tại Module 1 ..
+    * name : VARCHAR(100)
+    ...
 }
 
 ' =====================================================
-' BẢNG SHIFT - Ca làm việc
+' BẢNG SHIFT
 ' =====================================================
-TABLE(shift) {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "shift" as shift {
+    * **id** : CHAR(36) <<PK>>
     --
-    FOREIGN_KEY(canteen_id) : CHAR(36) <<FK>>
-    NOT_NULL(name) : VARCHAR(100)
-    NOT_NULL(start_time) : TIME
-    NOT_NULL(end_time) : TIME
+    * canteen_id : CHAR(36) <<FK>>
+    * name : VARCHAR(100)
+    * start_time : TIME
+    * end_time : TIME
     day_of_week : JSON
     max_staff : INT
-    status : ENUM('active', 'inactive')
+    status : ENUM
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
 }
-note right of shift::day_of_week
-  Mảng các ngày trong tuần [0-6]
-  VD: [1,2,3,4,5] = Thứ 2-6
-end note
 
 ' =====================================================
-' BẢNG STAFF_SHIFT - Phân công ca cho nhân viên
+' BẢNG STAFF_SHIFT
 ' =====================================================
-TABLE(staff_shift) {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "staff_shift" as staff_shift {
+    * **id** : CHAR(36) <<PK>>
     --
-    FOREIGN_KEY(shift_id) : CHAR(36) <<FK>>
-    FOREIGN_KEY(staff_id) : CHAR(36) <<FK>>
-    FOREIGN_KEY(canteen_id) : CHAR(36) <<FK>>
-    NOT_NULL(date) : DATE
-    status : ENUM('scheduled', 'checked_in', 'checked_out', 'absent', 'cancelled')
+    * shift_id : CHAR(36) <<FK>>
+    * staff_id : CHAR(36) <<FK>>
+    * canteen_id : CHAR(36) <<FK>>
+    * date : DATE
+    status : ENUM
     check_in_time : TIMESTAMP
     check_out_time : TIMESTAMP
     actual_work_hours : DECIMAL(5,2)
     notes : VARCHAR(500)
-    FOREIGN_KEY(assigned_by) : CHAR(36) <<FK>>
+    assigned_by : CHAR(36) <<FK>>
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
 }
 
 ' =====================================================
-' BẢNG SALARY - Bảng lương
+' BẢNG SALARY
 ' =====================================================
-TABLE(salary) {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "salary" as salary {
+    * **id** : CHAR(36) <<PK>>
     --
-    FOREIGN_KEY(user_id) : CHAR(36) <<FK>>
-    FOREIGN_KEY(canteen_id) : CHAR(36) <<FK>>
-    NOT_NULL(period_start) : DATE
-    NOT_NULL(period_end) : DATE
+    * user_id : CHAR(36) <<FK>>
+    * canteen_id : CHAR(36) <<FK>>
+    * period_start : DATE
+    * period_end : DATE
     total_hours : DECIMAL(10,2)
-    NOT_NULL(base_salary) : DECIMAL(15,2)
+    * base_salary : DECIMAL(15,2)
     bonus : DECIMAL(15,2)
     deduction : DECIMAL(15,2)
     total_salary : DECIMAL(15,2)
-    status : ENUM('pending', 'calculated', 'approved', 'paid')
+    status : ENUM
     calculated_at : TIMESTAMP
     paid_at : TIMESTAMP
     note : TEXT
@@ -106,46 +97,14 @@ TABLE(salary) {
 ' MỐI QUAN HỆ
 ' =====================================================
 
-' Canteen - Shift: 1-N (Một canteen có nhiều ca làm việc)
-canteen ||--o{ shift : "1-N: định nghĩa"
+canteen ||--o{ shift : "1 - N"
+canteen ||--o{ staff_shift : "1 - N"
+canteen ||--o{ salary : "1 - N"
 
-' Canteen - Staff Shift: 1-N
-canteen ||--o{ staff_shift : "1-N: phân công tại"
+shift ||--o{ staff_shift : "1 - N"
 
-' Canteen - Salary: 1-N
-canteen ||--o{ salary : "1-N: trả lương"
-
-' Shift - Staff Shift: 1-N (Một ca có nhiều phân công)
-shift ||--o{ staff_shift : "1-N: được phân công"
-
-' User (Staff) - Staff Shift: 1-N (Một nhân viên có nhiều ca)
-user ||--o{ staff_shift : "1-N: làm việc"
-
-' User (Manager) - Staff Shift: 1-N (Người phân công)
-user ||--o{ staff_shift : "1-N: phân công (assigned_by)"
-
-' User (Staff) - Salary: 1-N (Một nhân viên có nhiều bản ghi lương)
-user ||--o{ salary : "1-N: nhận lương"
-
-' =====================================================
-' GHI CHÚ NGHIỆP VỤ
-' =====================================================
-note bottom of staff_shift
-  **Quy trình phân công ca:**
-  1. Manager tạo Shift cho canteen
-  2. Manager phân công Staff vào Shift (tạo Staff_Shift)
-  3. Staff check-in/check-out khi làm việc
-  4. Hệ thống tính actual_work_hours
-  5. Cuối kỳ tính Salary dựa trên total_hours
-end note
-
-note bottom of salary
-  **Quy trình tính lương:**
-  status: pending → calculated → approved → paid
-  
-  total_salary = base_salary + bonus - deduction
-  
-  Tính dựa trên total_hours từ staff_shift
-end note
+user ||--o{ staff_shift : "1 - N (staff)"
+user ||--o{ staff_shift : "1 - N (assigned_by)"
+user ||--o{ salary : "1 - N"
 
 @enduml

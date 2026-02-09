@@ -1,91 +1,92 @@
 @startuml ERD_MODULE_2_PRODUCT_MANAGEMENT
 ' =====================================================
 ' Module 2: Product Management - Quản lý sản phẩm
-' Bao gồm: product_category, ingredient_category, ingredient, 
+' Bao gồm: product_category, ingredient_category, ingredient,
 '          product, product_image, recipe, menu, menu_item
 ' =====================================================
 
-!define TABLE(name) entity name << (T,#AAFFAA) >>
-!define PRIMARY_KEY(x) <b><color:#b8860b><&key></color> x</b>
-!define FOREIGN_KEY(x) <color:#aaaaaa><&link-intact></color> x
-!define COLUMN(x) <color:#efefef><&media-record></color> x
-!define NOT_NULL(x) <u>x</u>
-
 skinparam linetype ortho
-skinparam entity {
-    BackgroundColor #f5fff5
-    BorderColor #333333
-    ArrowColor #333333
+skinparam roundcorner 5
+skinparam class {
+    BackgroundColor #FEFECE
+    BorderColor #A80036
+    ArrowColor #A80036
 }
 
 title Module 2: Product Management - Quản lý sản phẩm\n(product_category, ingredient_category, ingredient, product, product_image, recipe, menu, menu_item)
 
 ' =====================================================
-' BẢNG PRODUCT_CATEGORY - Danh mục sản phẩm
+' BẢNG CANTEEN (Reference)
 ' =====================================================
-TABLE(product_category) {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "canteen" as canteen <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
     --
-    NOT_NULL(name) : VARCHAR(100) <<UNIQUE>>
+    * name : VARCHAR(100)
+    ...
+}
+
+' =====================================================
+' BẢNG PRODUCT_CATEGORY
+' =====================================================
+entity "product_category" as product_category {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * canteen_id : CHAR(36) <<FK>>
+    * name : VARCHAR(100)
     description : VARCHAR(500)
     icon : VARCHAR(255)
     is_active : BOOLEAN
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
+    ..
+    <<UNIQUE(canteen_id, name)>>
 }
 
 ' =====================================================
-' BẢNG INGREDIENT_CATEGORY - Danh mục nguyên liệu
+' BẢNG INGREDIENT_CATEGORY
 ' =====================================================
-TABLE(ingredient_category) {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "ingredient_category" as ingredient_category {
+    * **id** : CHAR(36) <<PK>>
     --
-    NOT_NULL(name) : VARCHAR(100) <<UNIQUE>>
+    * canteen_id : CHAR(36) <<FK>>
+    * name : VARCHAR(100)
     description : VARCHAR(500)
     icon : VARCHAR(255)
     is_active : BOOLEAN
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
+    ..
+    <<UNIQUE(canteen_id, name)>>
 }
 
 ' =====================================================
-' BẢNG CANTEEN (Reference từ Module 1)
+' BẢNG INGREDIENT
 ' =====================================================
-entity canteen << (R,#CCCCCC) Reference >> {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "ingredient" as ingredient {
+    * **id** : CHAR(36) <<PK>>
     --
-    name : VARCHAR(100)
-    .. Xem chi tiết tại Module 1 ..
-}
-
-' =====================================================
-' BẢNG INGREDIENT - Nguyên liệu
-' =====================================================
-TABLE(ingredient) {
-    PRIMARY_KEY(id) : CHAR(36)
-    --
-    FOREIGN_KEY(canteen_id) : CHAR(36) <<FK>>
-    FOREIGN_KEY(category_id) : CHAR(36) <<FK>>
-    NOT_NULL(name) : VARCHAR(100)
+    * canteen_id : CHAR(36) <<FK>>
+    * category_id : CHAR(36) <<FK>>
+    * name : VARCHAR(100)
     stock : DECIMAL(15,2)
-    NOT_NULL(unit) : VARCHAR(50)
+    * unit : VARCHAR(50)
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
 }
 
 ' =====================================================
-' BẢNG PRODUCT - Sản phẩm
+' BẢNG PRODUCT
 ' =====================================================
-TABLE(product) {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "product" as product {
+    * **id** : CHAR(36) <<PK>>
     --
-    FOREIGN_KEY(canteen_id) : CHAR(36) <<FK>>
-    FOREIGN_KEY(category_id) : CHAR(36) <<FK>>
-    NOT_NULL(name) : VARCHAR(200)
+    * canteen_id : CHAR(36) <<FK>>
+    * category_id : CHAR(36) <<FK>>
+    * name : VARCHAR(200)
     slug : VARCHAR(250)
-    NOT_NULL(price) : DECIMAL(15,2)
+    * price : DECIMAL(15,2)
     original_price : DECIMAL(15,2)
-    status : ENUM('available', 'unavailable', 'out_of_stock', 'hidden')
+    status : ENUM
     description : TEXT
     image : VARCHAR(500)
     calories : INT
@@ -103,55 +104,55 @@ TABLE(product) {
 }
 
 ' =====================================================
-' BẢNG PRODUCT_IMAGE - Ảnh sản phẩm
+' BẢNG PRODUCT_IMAGE
 ' =====================================================
-TABLE(product_image) {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "product_image" as product_image {
+    * **id** : CHAR(36) <<PK>>
     --
-    FOREIGN_KEY(product_id) : CHAR(36) <<FK>>
-    NOT_NULL(image_url) : VARCHAR(500)
+    * product_id : CHAR(36) <<FK>>
+    * image_url : VARCHAR(500)
     display_order : INT
     created_at : TIMESTAMP
 }
 
 ' =====================================================
-' BẢNG RECIPE - Công thức (Product - Ingredient)
+' BẢNG RECIPE (Bảng trung gian N-M)
 ' =====================================================
-TABLE(recipe) {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "recipe" as recipe {
+    * **id** : CHAR(36) <<PK>>
     --
-    FOREIGN_KEY(product_id) : CHAR(36) <<FK>>
-    FOREIGN_KEY(ingredient_id) : CHAR(36) <<FK>>
-    NOT_NULL(quantity) : DECIMAL(10,2)
-    NOT_NULL(unit) : VARCHAR(50)
+    * product_id : CHAR(36) <<FK>>
+    * ingredient_id : CHAR(36) <<FK>>
+    * quantity : DECIMAL(10,2)
+    * unit : VARCHAR(50)
     description : VARCHAR(200)
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
-    --
+    ..
     <<UNIQUE(product_id, ingredient_id)>>
 }
 
 ' =====================================================
-' BẢNG MENU - Thực đơn theo ngày
+' BẢNG MENU
 ' =====================================================
-TABLE(menu) {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "menu" as menu {
+    * **id** : CHAR(36) <<PK>>
     --
-    FOREIGN_KEY(canteen_id) : CHAR(36) <<FK>>
-    NOT_NULL(date) : DATE
-    status : ENUM('draft', 'active', 'inactive')
+    * canteen_id : CHAR(36) <<FK>>
+    * date : DATE
+    status : ENUM
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
 }
 
 ' =====================================================
-' BẢNG MENU_ITEM - Chi tiết thực đơn
+' BẢNG MENU_ITEM (Bảng trung gian N-M)
 ' =====================================================
-TABLE(menu_item) {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "menu_item" as menu_item {
+    * **id** : CHAR(36) <<PK>>
     --
-    FOREIGN_KEY(menu_id) : CHAR(36) <<FK>>
-    FOREIGN_KEY(product_id) : CHAR(36) <<FK>>
+    * menu_id : CHAR(36) <<FK>>
+    * product_id : CHAR(36) <<FK>>
     display_order : INT
     created_at : TIMESTAMP
 }
@@ -160,34 +161,23 @@ TABLE(menu_item) {
 ' MỐI QUAN HỆ
 ' =====================================================
 
-' Canteen - Product: 1-N (Một canteen có nhiều sản phẩm)
-canteen ||--o{ product : "1-N: bán"
+canteen ||--o{ product_category : "1 - N"
+canteen ||--o{ ingredient_category : "1 - N"
+canteen ||--o{ product : "1 - N"
+canteen ||--o{ ingredient : "1 - N"
+canteen ||--o{ menu : "1 - N"
 
-' Canteen - Ingredient: 1-N (Một canteen có nhiều nguyên liệu)
-canteen ||--o{ ingredient : "1-N: quản lý"
+product_category ||--o{ product : "1 - N"
+ingredient_category ||--o{ ingredient : "1 - N"
 
-' Canteen - Menu: 1-N (Một canteen có nhiều menu)
-canteen ||--o{ menu : "1-N: có"
+product ||--o{ product_image : "1 - N"
 
-' Product Category - Product: 1-N (Một danh mục có nhiều sản phẩm)
-product_category ||--o{ product : "1-N: chứa"
+' N-M: Product - Ingredient qua Recipe
+product ||--o{ recipe : "1 - N"
+ingredient ||--o{ recipe : "1 - N"
 
-' Ingredient Category - Ingredient: 1-N (Một danh mục có nhiều nguyên liệu)
-ingredient_category ||--o{ ingredient : "1-N: chứa"
-
-' Product - Product Image: 1-N (Một sản phẩm có nhiều ảnh)
-product ||--o{ product_image : "1-N: có"
-
-' Product - Recipe - Ingredient: N-M (Nhiều-Nhiều qua bảng recipe)
-product ||--o{ recipe : "1-N"
-ingredient ||--o{ recipe : "1-N"
-note "N-M: Product - Ingredient\nqua bảng trung gian Recipe" as N1
-recipe .. N1
-
-' Menu - Menu Item: 1-N (Một menu có nhiều item)
-menu ||--o{ menu_item : "1-N: chứa"
-
-' Product - Menu Item: 1-N (Một sản phẩm có thể nằm trong nhiều menu item)
-product ||--o{ menu_item : "1-N: thuộc"
+' N-M: Menu - Product qua Menu_Item
+menu ||--o{ menu_item : "1 - N"
+product ||--o{ menu_item : "1 - N"
 
 @enduml

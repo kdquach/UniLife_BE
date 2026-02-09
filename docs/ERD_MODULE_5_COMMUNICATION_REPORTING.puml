@@ -1,230 +1,176 @@
 @startuml ERD_MODULE_5_COMMUNICATION_REPORTING
 ' =====================================================
 ' Module 5: Communication & Reporting - Thông báo & Báo cáo
-' Bao gồm: feedback, feedback_reply, notification, 
+' Bao gồm: feedback, feedback_reply, notification,
 '          system_notification, banner, report_snapshot
 ' =====================================================
 
-!define TABLE(name) entity name << (T,#FFFFAA) >>
-!define PRIMARY_KEY(x) <b><color:#b8860b><&key></color> x</b>
-!define FOREIGN_KEY(x) <color:#aaaaaa><&link-intact></color> x
-!define COLUMN(x) <color:#efefef><&media-record></color> x
-!define NOT_NULL(x) <u>x</u>
-
 skinparam linetype ortho
-skinparam entity {
-    BackgroundColor #fffff5
-    BorderColor #333333
-    ArrowColor #333333
+skinparam roundcorner 5
+skinparam class {
+    BackgroundColor #FEFECE
+    BorderColor #A80036
+    ArrowColor #A80036
 }
 
 title Module 5: Communication & Reporting - Thông báo & Báo cáo\n(feedback, feedback_reply, notification, system_notification, banner, report_snapshot)
 
 ' =====================================================
-' REFERENCE TABLES (từ Module khác)
+' REFERENCE TABLES
 ' =====================================================
-entity user << (R,#CCCCCC) Reference >> {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "user" as user <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
     --
-    full_name : VARCHAR(100)
+    * full_name : VARCHAR(100)
     role : ENUM
-    .. Xem chi tiết tại Module 1 ..
+    ...
 }
 
-entity canteen << (R,#CCCCCC) Reference >> {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "canteen" as canteen <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
     --
-    name : VARCHAR(100)
-    .. Xem chi tiết tại Module 1 ..
+    * name : VARCHAR(100)
+    ...
 }
 
-entity product << (R,#CCCCCC) Reference >> {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "product" as product <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
     --
-    name : VARCHAR(200)
-    .. Xem chi tiết tại Module 2 ..
+    * name : VARCHAR(200)
+    ...
 }
 
-entity order << (R,#CCCCCC) Reference >> {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "order" as order <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
     --
-    order_number : VARCHAR(50)
-    .. Xem chi tiết tại Module 3 ..
+    * order_number : VARCHAR(50)
+    ...
 }
 
 ' =====================================================
-' BẢNG FEEDBACK - Đánh giá sản phẩm
+' BẢNG FEEDBACK
 ' =====================================================
-TABLE(feedback) {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "feedback" as feedback {
+    * **id** : CHAR(36) <<PK>>
     --
-    FOREIGN_KEY(user_id) : CHAR(36) <<FK>>
-    FOREIGN_KEY(product_id) : CHAR(36) <<FK>>
-    FOREIGN_KEY(order_id) : CHAR(36) <<FK>>
-    NOT_NULL(rating) : INT <<CHECK 1-5>>
+    * user_id : CHAR(36) <<FK>>
+    * product_id : CHAR(36) <<FK>>
+    * order_id : CHAR(36) <<FK>>
+    * rating : INT <<CHECK 1-5>>
     comment : TEXT
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
-    --
+    ..
     <<UNIQUE(user_id, order_id)>>
 }
 
 ' =====================================================
-' BẢNG FEEDBACK_REPLY - Phản hồi đánh giá
+' BẢNG FEEDBACK_REPLY
 ' =====================================================
-TABLE(feedback_reply) {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "feedback_reply" as feedback_reply {
+    * **id** : CHAR(36) <<PK>>
     --
-    FOREIGN_KEY(feedback_id) : CHAR(36) <<FK>>
-    FOREIGN_KEY(user_id) : CHAR(36) <<FK>>
-    NOT_NULL(reply) : TEXT
+    * feedback_id : CHAR(36) <<FK>>
+    * user_id : CHAR(36) <<FK>>
+    * reply : TEXT
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
 }
 
 ' =====================================================
-' BẢNG NOTIFICATION - Thông báo người dùng
+' BẢNG NOTIFICATION
 ' =====================================================
-TABLE(notification) {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "notification" as notification {
+    * **id** : CHAR(36) <<PK>>
     --
-    FOREIGN_KEY(canteen_id) : CHAR(36) <<FK>>
-    FOREIGN_KEY(user_id) : CHAR(36) <<FK>>
-    NOT_NULL(type) : ENUM('order', 'promotion', 'system', 'feedback', 'shift', 'salary')
-    NOT_NULL(title) : VARCHAR(200)
-    NOT_NULL(content) : TEXT
+    canteen_id : CHAR(36) <<FK>>
+    * user_id : CHAR(36) <<FK>>
+    * type : ENUM
+    * title : VARCHAR(200)
+    * content : TEXT
     is_read : BOOLEAN
     read_at : TIMESTAMP
     metadata : JSON
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
 }
-note right of notification::metadata
-  Dữ liệu bổ sung dạng JSON
-  VD: {"orderId": "xxx", "action": "view"}
-end note
 
 ' =====================================================
-' BẢNG SYSTEM_NOTIFICATION - Thông báo hệ thống
+' BẢNG SYSTEM_NOTIFICATION
 ' =====================================================
-TABLE(system_notification) {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "system_notification" as system_notification {
+    * **id** : CHAR(36) <<PK>>
     --
-    FOREIGN_KEY(canteen_id) : CHAR(36) <<FK>>
-    NOT_NULL(title) : VARCHAR(200)
-    NOT_NULL(content) : TEXT
-    target_role : ENUM('all', 'admin', 'staff', 'customer')
+    canteen_id : CHAR(36) <<FK>>
+    * title : VARCHAR(200)
+    * content : TEXT
+    target_role : ENUM
     active_from : TIMESTAMP
     active_to : TIMESTAMP
     is_active : BOOLEAN
-    FOREIGN_KEY(created_by) : CHAR(36) <<FK>>
+    created_by : CHAR(36) <<FK>>
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
 }
 
 ' =====================================================
-' BẢNG BANNER - Banner quảng cáo
+' BẢNG BANNER
 ' =====================================================
-TABLE(banner) {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "banner" as banner {
+    * **id** : CHAR(36) <<PK>>
     --
-    FOREIGN_KEY(canteen_id) : CHAR(36) <<FK>>
-    NOT_NULL(title) : VARCHAR(200)
-    NOT_NULL(image_url) : VARCHAR(500)
+    canteen_id : CHAR(36) <<FK>>
+    * title : VARCHAR(200)
+    * image_url : VARCHAR(500)
     link_url : VARCHAR(500)
     display_order : INT
     is_active : BOOLEAN
     start_date : TIMESTAMP
     end_date : TIMESTAMP
-    FOREIGN_KEY(created_by) : CHAR(36) <<FK>>
+    created_by : CHAR(36) <<FK>>
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
 }
 
 ' =====================================================
-' BẢNG REPORT_SNAPSHOT - Báo cáo định kỳ
+' BẢNG REPORT_SNAPSHOT
 ' =====================================================
-TABLE(report_snapshot) {
-    PRIMARY_KEY(id) : CHAR(36)
+entity "report_snapshot" as report_snapshot {
+    * **id** : CHAR(36) <<PK>>
     --
-    FOREIGN_KEY(canteen_id) : CHAR(36) <<FK>>
-    NOT_NULL(report_type) : ENUM('daily', 'weekly', 'monthly', 'custom')
-    NOT_NULL(report_name) : VARCHAR(200)
-    NOT_NULL(period_start) : DATE
-    NOT_NULL(period_end) : DATE
+    * canteen_id : CHAR(36) <<FK>>
+    * report_type : ENUM
+    * report_name : VARCHAR(200)
+    * period_start : DATE
+    * period_end : DATE
     data : JSON
-    FOREIGN_KEY(generated_by) : CHAR(36) <<FK>>
+    generated_by : CHAR(36) <<FK>>
     generated_at : TIMESTAMP
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
 }
-note right of report_snapshot::data
-  Dữ liệu báo cáo chi tiết dạng JSON
-  VD: {
-    "totalOrders": 100,
-    "totalRevenue": 5000000,
-    "topProducts": [...]
-  }
-end note
 
 ' =====================================================
 ' MỐI QUAN HỆ
 ' =====================================================
 
-' User - Feedback: 1-N (Một user có nhiều feedback)
-user ||--o{ feedback : "1-N: viết"
+user ||--o{ feedback : "1 - N"
+product ||--o{ feedback : "1 - N"
+order ||--o{ feedback : "1 - N"
 
-' Product - Feedback: 1-N (Một product có nhiều feedback)
-product ||--o{ feedback : "1-N: nhận"
+feedback ||--o{ feedback_reply : "1 - N"
+user ||--o{ feedback_reply : "1 - N"
 
-' Order - Feedback: 1-N (Một order có thể có nhiều feedback theo product)
-order ||--o{ feedback : "1-N: thuộc"
+user ||--o{ notification : "1 - N"
+canteen ||--o{ notification : "1 - N"
 
-' Feedback - Feedback Reply: 1-N (Một feedback có nhiều reply)
-feedback ||--o{ feedback_reply : "1-N: có"
+canteen ||--o{ system_notification : "1 - N"
+user ||--o{ system_notification : "1 - N (created_by)"
 
-' User - Feedback Reply: 1-N (User trả lời feedback)
-user ||--o{ feedback_reply : "1-N: trả lời"
+canteen ||--o{ banner : "1 - N"
+user ||--o{ banner : "1 - N (created_by)"
 
-' User - Notification: 1-N (Một user có nhiều notification)
-user ||--o{ notification : "1-N: nhận"
-
-' Canteen - Notification: 1-N
-canteen ||--o{ notification : "1-N: gửi"
-
-' Canteen - System Notification: 1-N
-canteen ||--o{ system_notification : "1-N: tạo"
-
-' User - System Notification: 1-N (User tạo thông báo)
-user ||--o{ system_notification : "1-N: tạo (created_by)"
-
-' Canteen - Banner: 1-N
-canteen ||--o{ banner : "1-N: hiển thị"
-
-' User - Banner: 1-N (User tạo banner)
-user ||--o{ banner : "1-N: tạo (created_by)"
-
-' Canteen - Report Snapshot: 1-N
-canteen ||--o{ report_snapshot : "1-N: tạo báo cáo"
-
-' User - Report Snapshot: 1-N (User tạo báo cáo)
-user ||--o{ report_snapshot : "1-N: tạo (generated_by)"
-
-' =====================================================
-' GHI CHÚ NGHIỆP VỤ
-' =====================================================
-note bottom of feedback
-  **Ràng buộc:**
-  - Rating từ 1-5 sao
-  - Mỗi user chỉ đánh giá 1 lần/order
-  - Phải có order completed mới được đánh giá
-end note
-
-note bottom of system_notification
-  **Phạm vi thông báo:**
-  - target_role: 'all' = Tất cả users
-  - target_role: 'customer' = Chỉ khách hàng
-  - canteen_id NULL = Thông báo toàn hệ thống
-end note
+canteen ||--o{ report_snapshot : "1 - N"
+user ||--o{ report_snapshot : "1 - N (generated_by)"
 
 @enduml

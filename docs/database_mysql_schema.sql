@@ -117,15 +117,18 @@ CREATE TABLE otp (
 -- =====================================================
 CREATE TABLE product_category (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    name VARCHAR(100) NOT NULL UNIQUE COMMENT 'Tên danh mục',
+    canteen_id CHAR(36) NOT NULL COMMENT 'FK đến canteen',
+    name VARCHAR(100) NOT NULL COMMENT 'Tên danh mục',
     description VARCHAR(500) COMMENT 'Mô tả danh mục',
     icon VARCHAR(255) COMMENT 'URL icon',
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
-    INDEX idx_name (name),
-    INDEX idx_active (is_active)
+    UNIQUE KEY uk_canteen_name (canteen_id, name),
+    INDEX idx_canteen_active (canteen_id, is_active),
+    INDEX idx_active (is_active),
+    FOREIGN KEY (canteen_id) REFERENCES canteen(id) ON DELETE CASCADE
 ) ENGINE=InnoDB COMMENT='Bảng danh mục sản phẩm';
 
 -- =====================================================
@@ -133,15 +136,18 @@ CREATE TABLE product_category (
 -- =====================================================
 CREATE TABLE ingredient_category (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    name VARCHAR(100) NOT NULL UNIQUE COMMENT 'Tên danh mục nguyên liệu',
+    canteen_id CHAR(36) NOT NULL COMMENT 'FK đến canteen',
+    name VARCHAR(100) NOT NULL COMMENT 'Tên danh mục nguyên liệu',
     description VARCHAR(500) COMMENT 'Mô tả',
     icon VARCHAR(255) COMMENT 'URL icon',
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
-    INDEX idx_name (name),
-    INDEX idx_active (is_active)
+    UNIQUE KEY uk_canteen_name (canteen_id, name),
+    INDEX idx_canteen_active (canteen_id, is_active),
+    INDEX idx_active (is_active),
+    FOREIGN KEY (canteen_id) REFERENCES canteen(id) ON DELETE CASCADE
 ) ENGINE=InnoDB COMMENT='Bảng danh mục nguyên liệu';
 
 -- =====================================================
