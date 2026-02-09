@@ -1,7 +1,7 @@
-import catchAsync from '../../utils/catchAsync.js';
-import * as productService from './product.service.js';
-import { formatPaginatedResponse } from '../../utils/queryHelper.js';
-import Product from './product.model.js';
+import catchAsync from "../../utils/catchAsync.js";
+import * as productService from "./product.service.js";
+import { formatPaginatedResponse } from "../../utils/queryHelper.js";
+import Product from "./product.model.js";
 
 /**
  * Create a new product
@@ -12,7 +12,7 @@ export const createProduct = catchAsync(async (req, res) => {
   const product = await productService.createProduct(req.body);
 
   res.status(201).json({
-    status: 'success',
+    status: "success",
     data: {
       product,
     },
@@ -43,7 +43,7 @@ export const getAllProducts = catchAsync(async (req, res) => {
 
   res
     .status(200)
-    .json(formatPaginatedResponse(result, 'Lấy danh sách sản phẩm thành công'));
+    .json(formatPaginatedResponse(result, "Lấy danh sách sản phẩm thành công"));
 });
 
 // export const getAllProducts = catchAsync(async (req, res) => {
@@ -69,7 +69,7 @@ export const getProductById = catchAsync(async (req, res) => {
   const product = await productService.getProductById(req.params.id);
 
   res.status(200).json({
-    status: 'success',
+    status: "success",
     data: {
       product,
     },
@@ -85,7 +85,7 @@ export const getProductById = catchAsync(async (req, res) => {
 export const getProductsByCanteen = catchAsync(async (req, res) => {
   const result = await productService.getProductsByCanteen(
     req.params.canteenId,
-    req.query
+    req.query,
   );
 
   res
@@ -93,8 +93,8 @@ export const getProductsByCanteen = catchAsync(async (req, res) => {
     .json(
       formatPaginatedResponse(
         result,
-        'Lấy danh sách sản phẩm theo căng tin thành công'
-      )
+        "Lấy danh sách sản phẩm theo căng tin thành công",
+      ),
     );
 });
 
@@ -129,7 +129,7 @@ export const updateProduct = catchAsync(async (req, res) => {
   const product = await productService.updateProduct(req.params.id, req.body);
 
   res.status(200).json({
-    status: 'success',
+    status: "success",
     data: {
       product,
     },
@@ -146,7 +146,7 @@ export const searchProductsByCanteen = catchAsync(async (req, res) => {
   if (!canteenId) {
     return res.status(400).json({
       success: false,
-      message: 'CanteenId is required to search products',
+      message: "CanteenId is required to search products",
     });
   }
 
@@ -154,8 +154,8 @@ export const searchProductsByCanteen = catchAsync(async (req, res) => {
   const {
     search,
     category,
-    sort = 'createdAt',
-    status = 'available',
+    sort = "createdAt",
+    status = "available",
     page = 1,
     limit = 20,
   } = req.query;
@@ -169,17 +169,16 @@ export const searchProductsByCanteen = catchAsync(async (req, res) => {
     limit: Number(limit),
   };
 
-  const result = await productService.searchProductsByCanteen(
-    canteenId,
-    query
-  );
+  const result = await productService.searchProductsByCanteen(canteenId, query);
 
-  return res.status(200).json(
-    formatPaginatedResponse(
-      result,
-      'Tìm kiếm sản phẩm theo căn tin thành công'
-    )
-  );
+  return res
+    .status(200)
+    .json(
+      formatPaginatedResponse(
+        result,
+        "Tìm kiếm sản phẩm theo căn tin thành công",
+      ),
+    );
 });
 
 /**
@@ -201,11 +200,11 @@ export const deleteProduct = catchAsync(async (req, res) => {
 export const addRecipeIngredient = catchAsync(async (req, res) => {
   const product = await productService.addRecipeIngredient(
     req.params.id,
-    req.body
+    req.body,
   );
 
   res.status(200).json({
-    status: 'success',
+    status: "success",
     data: {
       product,
     },
@@ -220,11 +219,11 @@ export const addRecipeIngredient = catchAsync(async (req, res) => {
 export const removeRecipeIngredient = catchAsync(async (req, res) => {
   const product = await productService.removeRecipeIngredient(
     req.params.id,
-    req.params.ingredientId
+    req.params.ingredientId,
   );
 
   res.status(200).json({
-    status: 'success',
+    status: "success",
     data: {
       product,
     },

@@ -1,5 +1,6 @@
 import ProductCategory from "./productCategory.model.js";
 import AppError from "../../utils/AppError.js";
+import { paginatedQuery } from "../../utils/queryHelper.js";
 
 /**
  * Create a new product category
@@ -12,9 +13,8 @@ export const createProductCategory = async (data) => {
 /**
  * Get all product categories
  */
-export const getAllProductCategories = async (filter = {}) => {
-  const categories = await ProductCategory.find(filter).sort({ name: 1 });
-  return categories;
+export const getAllProductCategories = async (queryParams) => {
+  return paginatedQuery(ProductCategory, queryParams);
 };
 
 /**

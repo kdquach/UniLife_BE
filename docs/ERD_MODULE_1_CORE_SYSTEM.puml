@@ -1,0 +1,146 @@
+@startuml ERD_MODULE_1_CORE_SYSTEM
+' =====================================================
+' Module 1: Core System - Hệ thống cơ sở
+' Bao gồm: campus, canteen, user, token, otp, audit_log
+' =====================================================
+
+!define TABLE(name) entity name << (T,#FFAAAA) >>
+!define PRIMARY_KEY(x) <b><color:#b8860b><&key></color> x</b>
+!define FOREIGN_KEY(x) <color:#aaaaaa><&link-intact></color> x
+!define COLUMN(x) <color:#efefef><&media-record></color> x
+!define NOT_NULL(x) <u>x</u>
+
+skinparam linetype ortho
+skinparam entity {
+    BackgroundColor #f5f5f5
+    BorderColor #333333
+    ArrowColor #333333
+}
+
+title Module 1: Core System - Hệ thống cơ sở\n(campus, canteen, user, token, otp, audit_log)
+
+' =====================================================
+' BẢNG CAMPUS - Cơ sở/Khuôn viên trường
+' =====================================================
+TABLE(campus) {
+    PRIMARY_KEY(id) : CHAR(36)
+    --
+    NOT_NULL(name) : VARCHAR(255) <<UNIQUE>>
+    NOT_NULL(code) : VARCHAR(10) <<UNIQUE>>
+    NOT_NULL(address) : TEXT
+    status : ENUM('active', 'inactive')
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG CANTEEN - Căn tin
+' =====================================================
+TABLE(canteen) {
+    PRIMARY_KEY(id) : CHAR(36)
+    --
+    FOREIGN_KEY(campus_id) : CHAR(36) <<FK>>
+    NOT_NULL(name) : VARCHAR(100)
+    NOT_NULL(location) : VARCHAR(255)
+    status : ENUM('active', 'inactive', 'maintenance')
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG USER - Người dùng
+' =====================================================
+TABLE(user) {
+    PRIMARY_KEY(id) : CHAR(36)
+    --
+    NOT_NULL(email) : VARCHAR(255) <<UNIQUE>>
+    password : VARCHAR(255)
+    NOT_NULL(full_name) : VARCHAR(100)
+    phone : VARCHAR(15)
+    gender : ENUM('male', 'female', 'other')
+    avatar : VARCHAR(500)
+    date_of_birth : DATE
+    address : VARCHAR(500)
+    balance : DECIMAL(15,2)
+    role : ENUM('admin', 'manager', 'staff', 'customer')
+    status : ENUM('active', 'inactive', 'banned', 'pending')
+    provider : ENUM('local', 'google', 'facebook')
+    provider_id : VARCHAR(255)
+    email_verified : BOOLEAN
+    email_verified_at : TIMESTAMP
+    last_login_at : TIMESTAMP
+    FOREIGN_KEY(campus_id) : CHAR(36) <<FK>>
+    FOREIGN_KEY(canteen_id) : CHAR(36) <<FK>>
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG TOKEN - Lưu token xác thực
+' =====================================================
+TABLE(token) {
+    PRIMARY_KEY(id) : CHAR(36)
+    --
+    FOREIGN_KEY(user_id) : CHAR(36) <<FK>>
+    NOT_NULL(token) : VARCHAR(500) <<UNIQUE>>
+    NOT_NULL(type) : ENUM('refresh', 'reset_password', 'verify_email')
+    NOT_NULL(expires_at) : TIMESTAMP
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG OTP - Mã OTP xác thực
+' =====================================================
+TABLE(otp) {
+    PRIMARY_KEY(id) : CHAR(36)
+    --
+    NOT_NULL(email) : VARCHAR(255)
+    NOT_NULL(otp) : VARCHAR(10)
+    NOT_NULL(type) : ENUM('register', 'reset_password', 'login', 'verify')
+    NOT_NULL(expires_at) : TIMESTAMP
+    verified : BOOLEAN
+    attempts : INT
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG AUDIT_LOG - Nhật ký hệ thống
+' =====================================================
+TABLE(audit_log) {
+    PRIMARY_KEY(id) : CHAR(36)
+    --
+    FOREIGN_KEY(user_id) : CHAR(36) <<FK>>
+    NOT_NULL(action) : VARCHAR(100)
+    NOT_NULL(entity_type) : VARCHAR(50)
+    entity_id : CHAR(36)
+    old_data : JSON
+    new_data : JSON
+    ip_address : VARCHAR(45)
+    user_agent : TEXT
+    created_at : TIMESTAMP
+}
+
+' =====================================================
+' MỐI QUAN HỆ
+' =====================================================
+
+' Campus - Canteen: 1-N (Một campus có nhiều canteen)
+campus ||--o{ canteen : "1-N: có nhiều"
+
+' Campus - User: 1-N (Một campus có nhiều user)
+campus ||--o{ user : "1-N: thuộc về"
+
+' Canteen - User: 1-N (Một canteen có nhiều staff)
+canteen ||--o{ user : "1-N: làm việc tại"
+
+' User - Token: 1-N (Một user có nhiều token)
+user ||--o{ token : "1-N: sở hữu"
+
+' User - Audit Log: 1-N (Một user có nhiều audit log)
+user ||--o{ audit_log : "1-N: thực hiện"
+
+' OTP không có FK trực tiếp, liên kết qua email
+
+@enduml

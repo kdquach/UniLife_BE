@@ -1,5 +1,6 @@
 import catchAsync from "../../utils/catchAsync.js";
 import * as productCategoryService from "./productCategory.service.js";
+import { formatPaginatedResponse } from "../../utils/queryHelper.js";
 
 /**
  * Create product category
@@ -21,15 +22,23 @@ export const createProductCategory = catchAsync(async (req, res) => {
  * @access Public
  */
 export const getAllProductCategories = catchAsync(async (req, res) => {
-  const filter = req.query.active === "true" ? { isActive: true } : {};
-  const categories =
-    await productCategoryService.getAllProductCategories(filter);
+  // const filter = req.query.active === "true" ? { isActive: true } : {};
+  // const categories =
+  //   await productCategoryService.getAllProductCategories(filter);
 
-  res.status(200).json({
-    status: "success",
-    results: categories.length,
-    data: { categories },
-  });
+  // res.status(200).json({
+  //   status: "success",
+  //   results: categories.length,
+  //   data: { categories },
+  // });
+
+  const result = await productCategoryService.getAllProductCategories(
+    req.query,
+  );
+
+  res
+    .status(200)
+    .json(formatPaginatedResponse(result, "Lấy danh sách sản phẩm thành công"));
 });
 
 /**

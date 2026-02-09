@@ -1,0 +1,193 @@
+@startuml ERD_MODULE_2_PRODUCT_MANAGEMENT
+' =====================================================
+' Module 2: Product Management - Quản lý sản phẩm
+' Bao gồm: product_category, ingredient_category, ingredient, 
+'          product, product_image, recipe, menu, menu_item
+' =====================================================
+
+!define TABLE(name) entity name << (T,#AAFFAA) >>
+!define PRIMARY_KEY(x) <b><color:#b8860b><&key></color> x</b>
+!define FOREIGN_KEY(x) <color:#aaaaaa><&link-intact></color> x
+!define COLUMN(x) <color:#efefef><&media-record></color> x
+!define NOT_NULL(x) <u>x</u>
+
+skinparam linetype ortho
+skinparam entity {
+    BackgroundColor #f5fff5
+    BorderColor #333333
+    ArrowColor #333333
+}
+
+title Module 2: Product Management - Quản lý sản phẩm\n(product_category, ingredient_category, ingredient, product, product_image, recipe, menu, menu_item)
+
+' =====================================================
+' BẢNG PRODUCT_CATEGORY - Danh mục sản phẩm
+' =====================================================
+TABLE(product_category) {
+    PRIMARY_KEY(id) : CHAR(36)
+    --
+    NOT_NULL(name) : VARCHAR(100) <<UNIQUE>>
+    description : VARCHAR(500)
+    icon : VARCHAR(255)
+    is_active : BOOLEAN
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG INGREDIENT_CATEGORY - Danh mục nguyên liệu
+' =====================================================
+TABLE(ingredient_category) {
+    PRIMARY_KEY(id) : CHAR(36)
+    --
+    NOT_NULL(name) : VARCHAR(100) <<UNIQUE>>
+    description : VARCHAR(500)
+    icon : VARCHAR(255)
+    is_active : BOOLEAN
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG CANTEEN (Reference từ Module 1)
+' =====================================================
+entity canteen << (R,#CCCCCC) Reference >> {
+    PRIMARY_KEY(id) : CHAR(36)
+    --
+    name : VARCHAR(100)
+    .. Xem chi tiết tại Module 1 ..
+}
+
+' =====================================================
+' BẢNG INGREDIENT - Nguyên liệu
+' =====================================================
+TABLE(ingredient) {
+    PRIMARY_KEY(id) : CHAR(36)
+    --
+    FOREIGN_KEY(canteen_id) : CHAR(36) <<FK>>
+    FOREIGN_KEY(category_id) : CHAR(36) <<FK>>
+    NOT_NULL(name) : VARCHAR(100)
+    stock : DECIMAL(15,2)
+    NOT_NULL(unit) : VARCHAR(50)
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG PRODUCT - Sản phẩm
+' =====================================================
+TABLE(product) {
+    PRIMARY_KEY(id) : CHAR(36)
+    --
+    FOREIGN_KEY(canteen_id) : CHAR(36) <<FK>>
+    FOREIGN_KEY(category_id) : CHAR(36) <<FK>>
+    NOT_NULL(name) : VARCHAR(200)
+    slug : VARCHAR(250)
+    NOT_NULL(price) : DECIMAL(15,2)
+    original_price : DECIMAL(15,2)
+    status : ENUM('available', 'unavailable', 'out_of_stock', 'hidden')
+    description : TEXT
+    image : VARCHAR(500)
+    calories : INT
+    preparation_time : INT
+    is_popular : BOOLEAN
+    is_new : BOOLEAN
+    stock_quantity : INT
+    low_stock_threshold : INT
+    total_sold : INT
+    rating_average : DECIMAL(3,2)
+    rating_count : INT
+    display_order : INT
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG PRODUCT_IMAGE - Ảnh sản phẩm
+' =====================================================
+TABLE(product_image) {
+    PRIMARY_KEY(id) : CHAR(36)
+    --
+    FOREIGN_KEY(product_id) : CHAR(36) <<FK>>
+    NOT_NULL(image_url) : VARCHAR(500)
+    display_order : INT
+    created_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG RECIPE - Công thức (Product - Ingredient)
+' =====================================================
+TABLE(recipe) {
+    PRIMARY_KEY(id) : CHAR(36)
+    --
+    FOREIGN_KEY(product_id) : CHAR(36) <<FK>>
+    FOREIGN_KEY(ingredient_id) : CHAR(36) <<FK>>
+    NOT_NULL(quantity) : DECIMAL(10,2)
+    NOT_NULL(unit) : VARCHAR(50)
+    description : VARCHAR(200)
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+    --
+    <<UNIQUE(product_id, ingredient_id)>>
+}
+
+' =====================================================
+' BẢNG MENU - Thực đơn theo ngày
+' =====================================================
+TABLE(menu) {
+    PRIMARY_KEY(id) : CHAR(36)
+    --
+    FOREIGN_KEY(canteen_id) : CHAR(36) <<FK>>
+    NOT_NULL(date) : DATE
+    status : ENUM('draft', 'active', 'inactive')
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG MENU_ITEM - Chi tiết thực đơn
+' =====================================================
+TABLE(menu_item) {
+    PRIMARY_KEY(id) : CHAR(36)
+    --
+    FOREIGN_KEY(menu_id) : CHAR(36) <<FK>>
+    FOREIGN_KEY(product_id) : CHAR(36) <<FK>>
+    display_order : INT
+    created_at : TIMESTAMP
+}
+
+' =====================================================
+' MỐI QUAN HỆ
+' =====================================================
+
+' Canteen - Product: 1-N (Một canteen có nhiều sản phẩm)
+canteen ||--o{ product : "1-N: bán"
+
+' Canteen - Ingredient: 1-N (Một canteen có nhiều nguyên liệu)
+canteen ||--o{ ingredient : "1-N: quản lý"
+
+' Canteen - Menu: 1-N (Một canteen có nhiều menu)
+canteen ||--o{ menu : "1-N: có"
+
+' Product Category - Product: 1-N (Một danh mục có nhiều sản phẩm)
+product_category ||--o{ product : "1-N: chứa"
+
+' Ingredient Category - Ingredient: 1-N (Một danh mục có nhiều nguyên liệu)
+ingredient_category ||--o{ ingredient : "1-N: chứa"
+
+' Product - Product Image: 1-N (Một sản phẩm có nhiều ảnh)
+product ||--o{ product_image : "1-N: có"
+
+' Product - Recipe - Ingredient: N-M (Nhiều-Nhiều qua bảng recipe)
+product ||--o{ recipe : "1-N"
+ingredient ||--o{ recipe : "1-N"
+note "N-M: Product - Ingredient\nqua bảng trung gian Recipe" as N1
+recipe .. N1
+
+' Menu - Menu Item: 1-N (Một menu có nhiều item)
+menu ||--o{ menu_item : "1-N: chứa"
+
+' Product - Menu Item: 1-N (Một sản phẩm có thể nằm trong nhiều menu item)
+product ||--o{ menu_item : "1-N: thuộc"
+
+@enduml
