@@ -1,0 +1,176 @@
+@startuml ERD_MODULE_5_COMMUNICATION_REPORTING
+' =====================================================
+' Module 5: Communication & Reporting - Thông báo & Báo cáo
+' Bao gồm: feedback, feedback_reply, notification,
+'          system_notification, banner, report_snapshot
+' =====================================================
+
+skinparam linetype ortho
+skinparam roundcorner 5
+skinparam class {
+    BackgroundColor #FEFECE
+    BorderColor #A80036
+    ArrowColor #A80036
+}
+
+title Module 5: Communication & Reporting - Thông báo & Báo cáo\n(feedback, feedback_reply, notification, system_notification, banner, report_snapshot)
+
+' =====================================================
+' REFERENCE TABLES
+' =====================================================
+entity "user" as user <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * full_name : VARCHAR(100)
+    role : ENUM
+    ...
+}
+
+entity "canteen" as canteen <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * name : VARCHAR(100)
+    ...
+}
+
+entity "product" as product <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * name : VARCHAR(200)
+    ...
+}
+
+entity "order" as order <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * order_number : VARCHAR(50)
+    ...
+}
+
+' =====================================================
+' BẢNG FEEDBACK
+' =====================================================
+entity "feedback" as feedback {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * user_id : CHAR(36) <<FK>>
+    * product_id : CHAR(36) <<FK>>
+    * order_id : CHAR(36) <<FK>>
+    * rating : INT <<CHECK 1-5>>
+    comment : TEXT
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+    ..
+    <<UNIQUE(user_id, order_id)>>
+}
+
+' =====================================================
+' BẢNG FEEDBACK_REPLY
+' =====================================================
+entity "feedback_reply" as feedback_reply {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * feedback_id : CHAR(36) <<FK>>
+    * user_id : CHAR(36) <<FK>>
+    * reply : TEXT
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG NOTIFICATION
+' =====================================================
+entity "notification" as notification {
+    * **id** : CHAR(36) <<PK>>
+    --
+    canteen_id : CHAR(36) <<FK>>
+    * user_id : CHAR(36) <<FK>>
+    * type : ENUM
+    * title : VARCHAR(200)
+    * content : TEXT
+    is_read : BOOLEAN
+    read_at : TIMESTAMP
+    metadata : JSON
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG SYSTEM_NOTIFICATION
+' =====================================================
+entity "system_notification" as system_notification {
+    * **id** : CHAR(36) <<PK>>
+    --
+    canteen_id : CHAR(36) <<FK>>
+    * title : VARCHAR(200)
+    * content : TEXT
+    target_role : ENUM
+    active_from : TIMESTAMP
+    active_to : TIMESTAMP
+    is_active : BOOLEAN
+    created_by : CHAR(36) <<FK>>
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG BANNER
+' =====================================================
+entity "banner" as banner {
+    * **id** : CHAR(36) <<PK>>
+    --
+    canteen_id : CHAR(36) <<FK>>
+    * title : VARCHAR(200)
+    * image_url : VARCHAR(500)
+    link_url : VARCHAR(500)
+    display_order : INT
+    is_active : BOOLEAN
+    start_date : TIMESTAMP
+    end_date : TIMESTAMP
+    created_by : CHAR(36) <<FK>>
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG REPORT_SNAPSHOT
+' =====================================================
+entity "report_snapshot" as report_snapshot {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * canteen_id : CHAR(36) <<FK>>
+    * report_type : ENUM
+    * report_name : VARCHAR(200)
+    * period_start : DATE
+    * period_end : DATE
+    data : JSON
+    generated_by : CHAR(36) <<FK>>
+    generated_at : TIMESTAMP
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' MỐI QUAN HỆ
+' =====================================================
+
+user ||--o{ feedback : "1 - N"
+product ||--o{ feedback : "1 - N"
+order ||--o{ feedback : "1 - N"
+
+feedback ||--o{ feedback_reply : "1 - N"
+user ||--o{ feedback_reply : "1 - N"
+
+user ||--o{ notification : "1 - N"
+canteen ||--o{ notification : "1 - N"
+
+canteen ||--o{ system_notification : "1 - N"
+user ||--o{ system_notification : "1 - N (created_by)"
+
+canteen ||--o{ banner : "1 - N"
+user ||--o{ banner : "1 - N (created_by)"
+
+canteen ||--o{ report_snapshot : "1 - N"
+user ||--o{ report_snapshot : "1 - N (generated_by)"
+
+@enduml

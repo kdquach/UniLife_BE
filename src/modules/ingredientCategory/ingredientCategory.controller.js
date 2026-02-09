@@ -1,5 +1,6 @@
 import catchAsync from "../../utils/catchAsync.js";
 import * as ingredientCategoryService from "./ingredientCategory.service.js";
+import { formatPaginatedResponse } from "../../utils/queryHelper.js";
 
 /**
  * Create ingredient category
@@ -18,20 +19,23 @@ export const createIngredientCategory = catchAsync(async (req, res) => {
 });
 
 /**
- * Get all ingredient categories
+ * Get all ingredient categories với phân trang
  * @route GET /api/ingredient-categories
  * @access Public
  */
 export const getAllIngredientCategories = catchAsync(async (req, res) => {
-  const filter = req.query.active === "true" ? { isActive: true } : {};
-  const categories =
-    await ingredientCategoryService.getAllIngredientCategories(filter);
+  const result = await ingredientCategoryService.getAllIngredientCategories(
+    req.query,
+  );
 
-  res.status(200).json({
-    status: "success",
-    results: categories.length,
-    data: { categories },
-  });
+  res
+    .status(200)
+    .json(
+      formatPaginatedResponse(
+        result,
+        "Lấy danh sách danh mục nguyên liệu thành công",
+      ),
+    );
 });
 
 /**

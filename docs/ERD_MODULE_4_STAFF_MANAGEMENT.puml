@@ -1,0 +1,110 @@
+@startuml ERD_MODULE_4_STAFF_MANAGEMENT
+' =====================================================
+' Module 4: Staff Management - Quản lý nhân viên
+' Bao gồm: shift, staff_shift, salary
+' =====================================================
+
+skinparam linetype ortho
+skinparam roundcorner 5
+skinparam class {
+    BackgroundColor #FEFECE
+    BorderColor #A80036
+    ArrowColor #A80036
+}
+
+title Module 4: Staff Management - Quản lý nhân viên\n(shift, staff_shift, salary)
+
+' =====================================================
+' REFERENCE TABLES
+' =====================================================
+entity "user" as user <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * full_name : VARCHAR(100)
+    role : ENUM
+    canteen_id : CHAR(36) <<FK>>
+    ...
+}
+
+entity "canteen" as canteen <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * name : VARCHAR(100)
+    ...
+}
+
+' =====================================================
+' BẢNG SHIFT
+' =====================================================
+entity "shift" as shift {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * canteen_id : CHAR(36) <<FK>>
+    * name : VARCHAR(100)
+    * start_time : TIME
+    * end_time : TIME
+    day_of_week : JSON
+    max_staff : INT
+    status : ENUM
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG STAFF_SHIFT
+' =====================================================
+entity "staff_shift" as staff_shift {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * shift_id : CHAR(36) <<FK>>
+    * staff_id : CHAR(36) <<FK>>
+    * canteen_id : CHAR(36) <<FK>>
+    * date : DATE
+    status : ENUM
+    check_in_time : TIMESTAMP
+    check_out_time : TIMESTAMP
+    actual_work_hours : DECIMAL(5,2)
+    notes : VARCHAR(500)
+    assigned_by : CHAR(36) <<FK>>
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG SALARY
+' =====================================================
+entity "salary" as salary {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * user_id : CHAR(36) <<FK>>
+    * canteen_id : CHAR(36) <<FK>>
+    * period_start : DATE
+    * period_end : DATE
+    total_hours : DECIMAL(10,2)
+    * base_salary : DECIMAL(15,2)
+    bonus : DECIMAL(15,2)
+    deduction : DECIMAL(15,2)
+    total_salary : DECIMAL(15,2)
+    status : ENUM
+    calculated_at : TIMESTAMP
+    paid_at : TIMESTAMP
+    note : TEXT
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' MỐI QUAN HỆ
+' =====================================================
+
+canteen ||--o{ shift : "1 - N"
+canteen ||--o{ staff_shift : "1 - N"
+canteen ||--o{ salary : "1 - N"
+
+shift ||--o{ staff_shift : "1 - N"
+
+user ||--o{ staff_shift : "1 - N (staff)"
+user ||--o{ staff_shift : "1 - N (assigned_by)"
+user ||--o{ salary : "1 - N"
+
+@enduml

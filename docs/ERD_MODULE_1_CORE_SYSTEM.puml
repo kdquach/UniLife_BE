@@ -1,0 +1,130 @@
+@startuml ERD_MODULE_1_CORE_SYSTEM
+' =====================================================
+' Module 1: Core System - Hệ thống cơ sở
+' Bao gồm: campus, canteen, user, token, otp, audit_log
+' =====================================================
+
+skinparam linetype ortho
+skinparam roundcorner 5
+skinparam class {
+    BackgroundColor #FEFECE
+    BorderColor #A80036
+    ArrowColor #A80036
+}
+
+title Module 1: Core System - Hệ thống cơ sở\n(campus, canteen, user, token, otp, audit_log)
+
+' =====================================================
+' BẢNG CAMPUS
+' =====================================================
+entity "campus" as campus {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * name : VARCHAR(255) <<UNIQUE>>
+    * code : VARCHAR(10) <<UNIQUE>>
+    * address : TEXT
+    status : ENUM
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG CANTEEN
+' =====================================================
+entity "canteen" as canteen {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * campus_id : CHAR(36) <<FK>>
+    * name : VARCHAR(100)
+    * location : VARCHAR(255)
+    status : ENUM
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG USER
+' =====================================================
+entity "user" as user {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * email : VARCHAR(255) <<UNIQUE>>
+    password : VARCHAR(255)
+    * full_name : VARCHAR(100)
+    phone : VARCHAR(15)
+    gender : ENUM
+    avatar : VARCHAR(500)
+    date_of_birth : DATE
+    address : VARCHAR(500)
+    balance : DECIMAL(15,2)
+    role : ENUM
+    status : ENUM
+    provider : ENUM
+    provider_id : VARCHAR(255)
+    email_verified : BOOLEAN
+    email_verified_at : TIMESTAMP
+    last_login_at : TIMESTAMP
+    campus_id : CHAR(36) <<FK>>
+    canteen_id : CHAR(36) <<FK>>
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG TOKEN
+' =====================================================
+entity "token" as token {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * user_id : CHAR(36) <<FK>>
+    * token : VARCHAR(500) <<UNIQUE>>
+    * type : ENUM
+    * expires_at : TIMESTAMP
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG OTP
+' =====================================================
+entity "otp" as otp {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * email : VARCHAR(255)
+    * otp : VARCHAR(10)
+    * type : ENUM
+    * expires_at : TIMESTAMP
+    verified : BOOLEAN
+    attempts : INT
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG AUDIT_LOG
+' =====================================================
+entity "audit_log" as audit_log {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * user_id : CHAR(36) <<FK>>
+    * action : VARCHAR(100)
+    * entity_type : VARCHAR(50)
+    entity_id : CHAR(36)
+    old_data : JSON
+    new_data : JSON
+    ip_address : VARCHAR(45)
+    user_agent : TEXT
+    created_at : TIMESTAMP
+}
+
+' =====================================================
+' MỐI QUAN HỆ
+' =====================================================
+
+campus ||--o{ canteen : "1 - N"
+campus ||--o{ user : "1 - N"
+canteen ||--o{ user : "1 - N"
+user ||--o{ token : "1 - N"
+user ||--o{ audit_log : "1 - N"
+
+@enduml

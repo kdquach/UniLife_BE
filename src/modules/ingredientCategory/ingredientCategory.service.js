@@ -1,5 +1,6 @@
 import IngredientCategory from "./ingredientCategory.model.js";
 import AppError from "../../utils/AppError.js";
+import { paginatedQuery } from "../../utils/queryHelper.js";
 
 /**
  * Create a new ingredient category
@@ -10,9 +11,16 @@ export const createIngredientCategory = async (data) => {
 };
 
 /**
- * Get all ingredient categories
+ * Get all ingredient categories với phân trang
  */
-export const getAllIngredientCategories = async (filter = {}) => {
+export const getAllIngredientCategories = async (queryParams) => {
+  return paginatedQuery(IngredientCategory, queryParams);
+};
+
+/**
+ * Get all ingredient categories không phân trang (để tương thích code cũ)
+ */
+export const getAllIngredientCategoriesNoPagination = async (filter = {}) => {
   const categories = await IngredientCategory.find(filter).sort({ name: 1 });
   return categories;
 };

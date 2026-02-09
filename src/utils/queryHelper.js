@@ -341,6 +341,9 @@ export const filterPresets = {
     searchFields: ["name", "location", "description"],
     allowedSortFields: ["createdAt", "name"],
   },
+  // Product Catefory filters
+
+  ProductCategory: {},
 };
 
 export default {

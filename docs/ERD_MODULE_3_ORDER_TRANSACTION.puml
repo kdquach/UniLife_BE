@@ -1,0 +1,223 @@
+@startuml ERD_MODULE_3_ORDER_TRANSACTION
+' =====================================================
+' Module 3: Order & Transaction - Đơn hàng & Giao dịch
+' Bao gồm: cart, cart_item, wishlist, wishlist_item,
+'          order, order_item, voucher, voucher_product
+' =====================================================
+
+skinparam linetype ortho
+skinparam roundcorner 5
+skinparam class {
+    BackgroundColor #FEFECE
+    BorderColor #A80036
+    ArrowColor #A80036
+}
+
+title Module 3: Order & Transaction - Đơn hàng & Giao dịch\n(cart, cart_item, wishlist, wishlist_item, order, order_item, voucher, voucher_product)
+
+' =====================================================
+' REFERENCE TABLES
+' =====================================================
+entity "user" as user <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * full_name : VARCHAR(100)
+    ...
+}
+
+entity "canteen" as canteen <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * name : VARCHAR(100)
+    ...
+}
+
+entity "campus" as campus <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * name : VARCHAR(255)
+    ...
+}
+
+entity "product" as product <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * name : VARCHAR(200)
+    * price : DECIMAL(15,2)
+    ...
+}
+
+' =====================================================
+' BẢNG CART
+' =====================================================
+entity "cart" as cart {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * user_id : CHAR(36) <<FK>>
+    canteen_id : CHAR(36) <<FK>>
+    total_price : DECIMAL(15,2)
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+    ..
+    <<UNIQUE(user_id, canteen_id)>>
+}
+
+' =====================================================
+' BẢNG CART_ITEM
+' =====================================================
+entity "cart_item" as cart_item {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * cart_id : CHAR(36) <<FK>>
+    * product_id : CHAR(36) <<FK>>
+    * quantity : INT
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+    ..
+    <<UNIQUE(cart_id, product_id)>>
+}
+
+' =====================================================
+' BẢNG WISHLIST
+' =====================================================
+entity "wishlist" as wishlist {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * user_id : CHAR(36) <<FK, UNIQUE>>
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG WISHLIST_ITEM
+' =====================================================
+entity "wishlist_item" as wishlist_item {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * wishlist_id : CHAR(36) <<FK>>
+    * product_id : CHAR(36) <<FK>>
+    created_at : TIMESTAMP
+    ..
+    <<UNIQUE(wishlist_id, product_id)>>
+}
+
+' =====================================================
+' BẢNG VOUCHER
+' =====================================================
+entity "voucher" as voucher {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * code : VARCHAR(20) <<UNIQUE>>
+    * discount_type : ENUM
+    * value : DECIMAL(15,2)
+    min_order_amount : DECIMAL(15,2)
+    max_discount : DECIMAL(15,2)
+    max_usage : INT
+    used_count : INT
+    * start_date : DATETIME
+    * end_date : DATETIME
+    is_active : BOOLEAN
+    campus_id : CHAR(36) <<FK>>
+    user_usage_limit : INT
+    apply_to : ENUM
+    description : VARCHAR(500)
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG VOUCHER_PRODUCT (Bảng trung gian N-M)
+' =====================================================
+entity "voucher_product" as voucher_product {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * voucher_id : CHAR(36) <<FK>>
+    * product_id : CHAR(36) <<FK>>
+    created_at : TIMESTAMP
+    ..
+    <<UNIQUE(voucher_id, product_id)>>
+}
+
+' =====================================================
+' BẢNG ORDER
+' =====================================================
+entity "order" as order {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * order_number : VARCHAR(50) <<UNIQUE>>
+    * user_id : CHAR(36) <<FK>>
+    * canteen_id : CHAR(36) <<FK>>
+    staff_id : CHAR(36) <<FK>>
+    status : ENUM
+    * sub_total : DECIMAL(15,2)
+    discount : DECIMAL(15,2)
+    * total_amount : DECIMAL(15,2)
+    voucher_id : CHAR(36) <<FK>>
+    voucher_code : VARCHAR(20)
+    payment_method : ENUM
+    payment_status : ENUM
+    payment_transaction_id : VARCHAR(100)
+    payment_amount : DECIMAL(15,2)
+    paid_at : TIMESTAMP
+    refund_amount : DECIMAL(15,2)
+    refunded_at : TIMESTAMP
+    pickup_qr_code : VARCHAR(100)
+    pickup_qr_expire_at : TIMESTAMP
+    pickup_qr_scanned_at : TIMESTAMP
+    pickup_qr_scanned_by : CHAR(36) <<FK>>
+    note : VARCHAR(500)
+    estimated_time : INT
+    prepared_at : TIMESTAMP
+    completed_at : TIMESTAMP
+    cancelled_at : TIMESTAMP
+    cancel_reason : VARCHAR(500)
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG ORDER_ITEM
+' =====================================================
+entity "order_item" as order_item {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * order_id : CHAR(36) <<FK>>
+    * product_id : CHAR(36) <<FK>>
+    * product_name : VARCHAR(200)
+    * quantity : INT
+    * price : DECIMAL(15,2)
+    note : VARCHAR(200)
+    created_at : TIMESTAMP
+}
+
+' =====================================================
+' MỐI QUAN HỆ
+' =====================================================
+
+user ||--o{ cart : "1 - N"
+user ||--|| wishlist : "1 - 1"
+user ||--o{ order : "1 - N"
+
+canteen ||--o{ cart : "1 - N"
+canteen ||--o{ order : "1 - N"
+
+cart ||--o{ cart_item : "1 - N"
+product ||--o{ cart_item : "1 - N"
+
+wishlist ||--o{ wishlist_item : "1 - N"
+product ||--o{ wishlist_item : "1 - N"
+
+campus ||--o{ voucher : "1 - N"
+
+' N-M: Voucher - Product qua Voucher_Product
+voucher ||--o{ voucher_product : "1 - N"
+product ||--o{ voucher_product : "1 - N"
+
+voucher ||--o{ order : "1 - N"
+
+order ||--o{ order_item : "1 - N"
+product ||--o{ order_item : "1 - N"
+
+user ||--o{ order : "1 - N (staff)"
+
+@enduml

@@ -1,0 +1,183 @@
+@startuml ERD_MODULE_2_PRODUCT_MANAGEMENT
+' =====================================================
+' Module 2: Product Management - Quản lý sản phẩm
+' Bao gồm: product_category, ingredient_category, ingredient,
+'          product, product_image, recipe, menu, menu_item
+' =====================================================
+
+skinparam linetype ortho
+skinparam roundcorner 5
+skinparam class {
+    BackgroundColor #FEFECE
+    BorderColor #A80036
+    ArrowColor #A80036
+}
+
+title Module 2: Product Management - Quản lý sản phẩm\n(product_category, ingredient_category, ingredient, product, product_image, recipe, menu, menu_item)
+
+' =====================================================
+' BẢNG CANTEEN (Reference)
+' =====================================================
+entity "canteen" as canteen <<Reference>> {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * name : VARCHAR(100)
+    ...
+}
+
+' =====================================================
+' BẢNG PRODUCT_CATEGORY
+' =====================================================
+entity "product_category" as product_category {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * canteen_id : CHAR(36) <<FK>>
+    * name : VARCHAR(100)
+    description : VARCHAR(500)
+    icon : VARCHAR(255)
+    is_active : BOOLEAN
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+    ..
+    <<UNIQUE(canteen_id, name)>>
+}
+
+' =====================================================
+' BẢNG INGREDIENT_CATEGORY
+' =====================================================
+entity "ingredient_category" as ingredient_category {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * canteen_id : CHAR(36) <<FK>>
+    * name : VARCHAR(100)
+    description : VARCHAR(500)
+    icon : VARCHAR(255)
+    is_active : BOOLEAN
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+    ..
+    <<UNIQUE(canteen_id, name)>>
+}
+
+' =====================================================
+' BẢNG INGREDIENT
+' =====================================================
+entity "ingredient" as ingredient {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * canteen_id : CHAR(36) <<FK>>
+    * category_id : CHAR(36) <<FK>>
+    * name : VARCHAR(100)
+    stock : DECIMAL(15,2)
+    * unit : VARCHAR(50)
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG PRODUCT
+' =====================================================
+entity "product" as product {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * canteen_id : CHAR(36) <<FK>>
+    * category_id : CHAR(36) <<FK>>
+    * name : VARCHAR(200)
+    slug : VARCHAR(250)
+    * price : DECIMAL(15,2)
+    original_price : DECIMAL(15,2)
+    status : ENUM
+    description : TEXT
+    image : VARCHAR(500)
+    calories : INT
+    preparation_time : INT
+    is_popular : BOOLEAN
+    is_new : BOOLEAN
+    stock_quantity : INT
+    low_stock_threshold : INT
+    total_sold : INT
+    rating_average : DECIMAL(3,2)
+    rating_count : INT
+    display_order : INT
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG PRODUCT_IMAGE
+' =====================================================
+entity "product_image" as product_image {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * product_id : CHAR(36) <<FK>>
+    * image_url : VARCHAR(500)
+    display_order : INT
+    created_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG RECIPE (Bảng trung gian N-M)
+' =====================================================
+entity "recipe" as recipe {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * product_id : CHAR(36) <<FK>>
+    * ingredient_id : CHAR(36) <<FK>>
+    * quantity : DECIMAL(10,2)
+    * unit : VARCHAR(50)
+    description : VARCHAR(200)
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+    ..
+    <<UNIQUE(product_id, ingredient_id)>>
+}
+
+' =====================================================
+' BẢNG MENU
+' =====================================================
+entity "menu" as menu {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * canteen_id : CHAR(36) <<FK>>
+    * date : DATE
+    status : ENUM
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG MENU_ITEM (Bảng trung gian N-M)
+' =====================================================
+entity "menu_item" as menu_item {
+    * **id** : CHAR(36) <<PK>>
+    --
+    * menu_id : CHAR(36) <<FK>>
+    * product_id : CHAR(36) <<FK>>
+    display_order : INT
+    created_at : TIMESTAMP
+}
+
+' =====================================================
+' MỐI QUAN HỆ
+' =====================================================
+
+canteen ||--o{ product_category : "1 - N"
+canteen ||--o{ ingredient_category : "1 - N"
+canteen ||--o{ product : "1 - N"
+canteen ||--o{ ingredient : "1 - N"
+canteen ||--o{ menu : "1 - N"
+
+product_category ||--o{ product : "1 - N"
+ingredient_category ||--o{ ingredient : "1 - N"
+
+product ||--o{ product_image : "1 - N"
+
+' N-M: Product - Ingredient qua Recipe
+product ||--o{ recipe : "1 - N"
+ingredient ||--o{ recipe : "1 - N"
+
+' N-M: Menu - Product qua Menu_Item
+menu ||--o{ menu_item : "1 - N"
+product ||--o{ menu_item : "1 - N"
+
+@enduml
