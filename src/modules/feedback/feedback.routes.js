@@ -11,12 +11,15 @@ router.get(
   '/product/:productId/stats',
   feedbackController.getProductRatingStats
 );
-router.get('/:id', feedbackController.getFeedbackById);
 
 // Protected routes
 router.use(protect);
 
+// Lấy feedbacks của user hiện tại (phải đặt trước /:id)
+router.get('/my-feedbacks', feedbackController.getMyFeedbacks);
+
 router.post('/', feedbackController.createFeedback);
+router.get('/:id', feedbackController.getFeedbackById);
 router.patch('/:id', feedbackController.updateFeedback);
 router.delete('/:id', feedbackController.deleteFeedback);
 

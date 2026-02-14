@@ -18,6 +18,16 @@ export const getAllFeedbacks = catchAsync(async (req, res) => {
     .json(formatPaginatedResponse(result, 'Lấy danh sách feedback thành công'));
 });
 
+// Lấy feedbacks của user hiện tại (authenticated)
+export const getMyFeedbacks = catchAsync(async (req, res) => {
+  // Thêm userId vào query để filter
+  const query = { ...req.query, userId: req.user._id };
+  const result = await feedbackService.getAllFeedbacks(query);
+  res
+    .status(200)
+    .json(formatPaginatedResponse(result, 'Lấy feedback của bạn thành công'));
+});
+
 export const getFeedbackById = catchAsync(async (req, res) => {
   const feedback = await feedbackService.getFeedbackById(req.params.id);
   res.status(200).json({ status: 'success', data: { feedback } });
