@@ -39,6 +39,7 @@ feedbackSchema.index({ userId: 1 });
 feedbackSchema.index({ productId: 1 });
 feedbackSchema.index({ orderId: 1 });
 feedbackSchema.index({ rating: 1 });
-feedbackSchema.index({ userId: 1, orderId: 1 }, { unique: true });
+// Một user chỉ có thể feedback 1 lần cho mỗi cặp (order, product)
+feedbackSchema.index({ userId: 1, orderId: 1, productId: 1 }, { unique: true });
 
 export const Feedback = mongoose.model('Feedback', feedbackSchema);

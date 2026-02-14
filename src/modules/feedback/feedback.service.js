@@ -39,7 +39,10 @@ export const createFeedback = async (userId, feedbackData) => {
     return await feedback.populate('userId', 'fullName avatar role _id');
   } catch (err) {
     if (err.code === 11000) {
-      throw new AppError('Bạn đã đánh giá đơn hàng này rồi', 400);
+      throw new AppError(
+        'Bạn đã đánh giá sản phẩm này trong đơn hàng này rồi',
+        400
+      );
     }
     throw err;
   }
