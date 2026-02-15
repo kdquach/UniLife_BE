@@ -11,43 +11,85 @@ router.use(protect);
 // Must be defined before /:id to avoid conflicts
 router.get(
   "/my-assignments",
-  restrictTo("staff", "admin"),
+  restrictTo("staff", "manager", "admin"),
   shiftController.getMyAssignments,
 );
 router.get(
   "/assignments",
-  restrictTo("staff", "admin"),
+  restrictTo("staff", "manager", "admin"),
   shiftController.getShiftAssignments,
 );
 router.post(
   "/assignments",
-  restrictTo("admin"),
+  restrictTo("manager", "admin"),
   shiftController.assignUserToShift,
 );
 router.post(
+  "/assignments/bulk-save",
+  restrictTo("manager", "admin"),
+  shiftController.bulkSaveAssignments,
+);
+router.post(
+  "/assignments/publish",
+  restrictTo("manager", "admin"),
+  shiftController.publishAssignments,
+);
+router.post(
   "/assignments/:id/check-in",
-  restrictTo("staff", "admin"),
+  restrictTo("staff", "manager", "admin"),
   shiftController.checkIn,
 );
 router.post(
   "/assignments/:id/check-out",
-  restrictTo("staff", "admin"),
+  restrictTo("staff", "manager", "admin"),
   shiftController.checkOut,
 );
 router.patch(
   "/assignments/:id",
-  restrictTo("admin"),
+  restrictTo("manager", "admin"),
   shiftController.updateAssignment,
 );
 router.delete(
   "/assignments/:id",
-  restrictTo("admin"),
+  restrictTo("manager", "admin"),
   shiftController.removeUserFromShift,
 );
 
+router.get(
+  "/staff",
+  restrictTo("manager", "admin"),
+  shiftController.getShiftManagerStaffList,
+);
+
+router.get(
+  "/my-change-requests",
+  restrictTo("staff", "manager", "admin"),
+  shiftController.getMyShiftChangeRequests,
+);
+router.get(
+  "/change-request",
+  restrictTo("manager", "admin"),
+  shiftController.getShiftChangeRequests,
+);
+router.post(
+  "/change-request",
+  restrictTo("staff", "manager", "admin"),
+  shiftController.createShiftChangeRequest,
+);
+router.get(
+  "/change-request/shifts",
+  restrictTo("staff", "manager", "admin"),
+  shiftController.getAvailableShiftsForChangeRequest,
+);
+router.patch(
+  "/change-request/:id",
+  restrictTo("manager", "admin"),
+  shiftController.reviewShiftChangeRequest,
+);
+
 // ============ Shift Routes ============
-router.get("/", restrictTo("staff", "admin"), shiftController.getAllShifts);
-router.get("/:id", restrictTo("staff", "admin"), shiftController.getShiftById);
+router.get("/", restrictTo("staff", "manager", "admin"), shiftController.getAllShifts);
+router.get("/:id", restrictTo("staff", "manager", "admin"), shiftController.getShiftById);
 
 // Admin only
 router.post("/", restrictTo("admin"), shiftController.createShift);
