@@ -1,45 +1,45 @@
-import cloudinary from "../config/cloudinary.js";
-import AppError from "../utils/AppError.js";
+import cloudinary from '../config/cloudinary.js';
+import AppError from '../utils/AppError.js';
 
 /**
  * Upload options for different image types
  */
 const uploadPresets = {
   avatar: {
-    folder: "unilife/avatars",
+    folder: 'unilife/avatars',
     transformation: [
-      { width: 400, height: 400, crop: "fill", gravity: "face" },
-      { quality: "auto:good" },
-      { fetch_format: "auto" },
+      { width: 400, height: 400, crop: 'fill', gravity: 'face' },
+      { quality: 'auto:good' },
+      { fetch_format: 'auto' },
     ],
-    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
   },
   banner: {
-    folder: "unilife/banners",
+    folder: 'unilife/banners',
     transformation: [
-      { width: 1920, height: 600, crop: "fill" },
-      { quality: "auto:good" },
-      { fetch_format: "auto" },
+      { width: 1920, height: 600, crop: 'fill' },
+      { quality: 'auto:good' },
+      { fetch_format: 'auto' },
     ],
-    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
   },
   product: {
-    folder: "unilife/products",
+    folder: 'unilife/products',
     transformation: [
-      { width: 800, height: 800, crop: "fill" },
-      { quality: "auto:good" },
-      { fetch_format: "auto" },
+      { width: 800, height: 800, crop: 'fill' },
+      { quality: 'auto:good' },
+      { fetch_format: 'auto' },
     ],
-    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
   },
   canteen: {
-    folder: "unilife/canteens",
+    folder: 'unilife/canteens',
     transformation: [
-      { width: 1200, height: 800, crop: "fill" },
-      { quality: "auto:good" },
-      { fetch_format: "auto" },
+      { width: 1200, height: 800, crop: 'fill' },
+      { quality: 'auto:good' },
+      { fetch_format: 'auto' },
     ],
-    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
   },
 };
 
@@ -52,8 +52,8 @@ const uploadPresets = {
  */
 export const uploadImage = async (
   fileBuffer,
-  type = "avatar",
-  publicId = null,
+  type = 'avatar',
+  publicId = null
 ) => {
   const preset = uploadPresets[type];
   if (!preset) {
@@ -64,7 +64,7 @@ export const uploadImage = async (
     folder: preset.folder,
     transformation: preset.transformation,
     allowed_formats: preset.allowed_formats,
-    resource_type: "image",
+    resource_type: 'image',
   };
 
   if (publicId) {
@@ -96,8 +96,8 @@ export const uploadImage = async (
  */
 export const uploadImageFromBuffer = async (
   buffer,
-  type = "avatar",
-  publicId = null,
+  type = 'avatar',
+  publicId = null
 ) => {
   const preset = uploadPresets[type];
   if (!preset) {
@@ -108,7 +108,7 @@ export const uploadImageFromBuffer = async (
     folder: preset.folder,
     transformation: preset.transformation,
     allowed_formats: preset.allowed_formats,
-    resource_type: "image",
+    resource_type: 'image',
   };
 
   if (publicId) {
@@ -132,7 +132,7 @@ export const uploadImageFromBuffer = async (
             bytes: result.bytes,
           });
         }
-      },
+      }
     );
 
     uploadStream.end(buffer);
@@ -146,7 +146,7 @@ export const uploadImageFromBuffer = async (
  */
 export const deleteImage = async (publicId) => {
   if (!publicId) {
-    throw new AppError("Public ID is required", 400);
+    throw new AppError('Public ID is required', 400);
   }
 
   try {
@@ -164,7 +164,7 @@ export const deleteImage = async (publicId) => {
  */
 export const deleteMultipleImages = async (publicIds) => {
   if (!publicIds || !publicIds.length) {
-    throw new AppError("Public IDs are required", 400);
+    throw new AppError('Public IDs are required', 400);
   }
 
   try {
@@ -184,10 +184,31 @@ export const extractPublicIdFromUrl = (url) => {
   if (!url) return null;
 
   try {
-    // URL format: https://res.cloudinary.com/{cloud_name}/image/upload/v{version}/{folder}/{public_id}.{format}
-    const regex = /\/upload\/(?:v\d+\/)?(.+)\.[a-zA-Z]+$/;
-    const match = url.match(regex);
-    return match ? match[1] : null;
+    const uploadIndex = url.indexOf('/upload/');
+    if (uploadIndex === -1) {
+      return null;
+    }
+
+    let pathPart = url.substring(uploadIndex + 8);
+    const versionMatch = pathPart.match(/v\d+\//);
+
+    if (versionMatch) {
+      pathPart = pathPart.split(versionMatch[0]).pop();
+    } else {
+      const pathSegments = pathPart.split('/');
+      if (
+        pathSegments.length > 1 &&
+        (pathSegments[0].includes(',') ||
+          pathSegments[0].includes('w_') ||
+          pathSegments[0].includes('h_') ||
+          pathSegments[0].includes('c_'))
+      ) {
+        pathSegments.shift();
+        pathPart = pathSegments.join('/');
+      }
+    }
+
+    return pathPart.replace(/\.[a-zA-Z0-9]+$/, '');
   } catch (error) {
     return null;
   }
@@ -201,8 +222,8 @@ export const extractPublicIdFromUrl = (url) => {
  */
 export const getOptimizedUrl = (publicId, options = {}) => {
   const defaultOptions = {
-    quality: "auto",
-    fetch_format: "auto",
+    quality: 'auto',
+    fetch_format: 'auto',
   };
 
   return cloudinary.url(publicId, { ...defaultOptions, ...options });
@@ -219,10 +240,10 @@ export const getThumbnailUrl = (publicId, width = 150, height = 150) => {
   return cloudinary.url(publicId, {
     width,
     height,
-    crop: "fill",
-    gravity: "auto",
-    quality: "auto",
-    fetch_format: "auto",
+    crop: 'fill',
+    gravity: 'auto',
+    quality: 'auto',
+    fetch_format: 'auto',
   });
 };
 
@@ -232,7 +253,7 @@ export const getThumbnailUrl = (publicId, width = 150, height = 150) => {
  * @returns {boolean}
  */
 export const isValidImageType = (mimetype) => {
-  const validTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+  const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
   return validTypes.includes(mimetype);
 };
 

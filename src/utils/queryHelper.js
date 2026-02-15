@@ -15,7 +15,7 @@ export const buildQueryOptions = (queryParams, options = {}) => {
   const {
     page = 1,
     limit = 10,
-    sort = "-createdAt",
+    sort = '-createdAt',
     fields,
     search,
     // searchFields removed from queryParams
@@ -24,7 +24,7 @@ export const buildQueryOptions = (queryParams, options = {}) => {
 
   const {
     maxLimit = 100,
-    defaultSort = "-createdAt",
+    defaultSort = '-createdAt',
     allowedFilters = [],
     allowedSortFields = [],
     searchFields = [], // searchFields only from options
@@ -34,15 +34,15 @@ export const buildQueryOptions = (queryParams, options = {}) => {
   const parsedPage = Math.max(1, parseInt(page, 10) || 1);
   const parsedLimit = Math.min(
     Math.max(1, parseInt(limit, 10) || 10),
-    maxLimit,
+    maxLimit
   );
   const skip = (parsedPage - 1) * parsedLimit;
 
   // Parse sort
   let sortObj = {};
-  const sortFields = sort.split(",");
+  const sortFields = sort.split(',');
   sortFields.forEach((field) => {
-    const isDescending = field.startsWith("-");
+    const isDescending = field.startsWith('-');
     const fieldName = isDescending ? field.slice(1) : field;
 
     // Only allow sorting on specified fields if provided
@@ -56,7 +56,7 @@ export const buildQueryOptions = (queryParams, options = {}) => {
 
   // If no valid sort fields, use default
   if (Object.keys(sortObj).length === 0) {
-    const isDescending = defaultSort.startsWith("-");
+    const isDescending = defaultSort.startsWith('-');
     const fieldName = isDescending ? defaultSort.slice(1) : defaultSort;
     sortObj[fieldName] = isDescending ? -1 : 1;
   }
@@ -64,7 +64,7 @@ export const buildQueryOptions = (queryParams, options = {}) => {
   // Parse field selection
   let selectFields = null;
   if (fields) {
-    selectFields = fields.split(",").join(" ");
+    selectFields = fields.split(',').join(' ');
   }
 
   // Build filter object
@@ -80,7 +80,7 @@ export const buildQueryOptions = (queryParams, options = {}) => {
     const value = filters[key];
 
     // Handle special filter operators
-    if (typeof value === "string") {
+    if (typeof value === 'string') {
       // Range filters: field[gte]=value, field[lte]=value
       const rangeMatch = key.match(/^(\w+)\[(gte|gt|lte|lt|ne)\]$/);
       if (rangeMatch) {
@@ -96,13 +96,13 @@ export const buildQueryOptions = (queryParams, options = {}) => {
       const arrayMatch = key.match(/^(\w+)\[(in|nin)\]$/);
       if (arrayMatch) {
         const [, fieldName, operator] = arrayMatch;
-        filterObj[fieldName] = { [`$${operator}`]: value.split(",") };
+        filterObj[fieldName] = { [`$${operator}`]: value.split(',') };
         return;
       }
 
       // Boolean filters
-      if (value === "true" || value === "false") {
-        filterObj[key] = value === "true";
+      if (value === 'true' || value === 'false') {
+        filterObj[key] = value === 'true';
         return;
       }
 
@@ -122,7 +122,7 @@ export const buildQueryOptions = (queryParams, options = {}) => {
   if (search && searchFields.length > 0) {
     searchQuery = {
       $or: searchFields.map((field) => ({
-        [field]: { $regex: search, $options: "i" },
+        [field]: { $regex: search, $options: 'i' },
       })),
     };
   }
@@ -147,7 +147,12 @@ export const buildQueryOptions = (queryParams, options = {}) => {
  * @param {Object} baseFilter - Base filter to always apply
  * @returns {Object} Query and count promise
  */
-export const applyQueryOptions = (Model, queryOptions, baseFilter = {}) => {
+export const applyQueryOptions = (
+  Model,
+  queryOptions,
+  baseFilter = {},
+  mongooseOptions = {}
+) => {
   const { pagination, sort, select, filter, search } = queryOptions;
 
   // Combine all filters
@@ -163,6 +168,10 @@ export const applyQueryOptions = (Model, queryOptions, baseFilter = {}) => {
     .skip(pagination.skip)
     .limit(pagination.limit);
 
+  if (mongooseOptions && Object.keys(mongooseOptions).length > 0) {
+    query = query.setOptions(mongooseOptions);
+  }
+
   // Apply field selection
   if (select) {
     query = query.select(select);
@@ -170,6 +179,10 @@ export const applyQueryOptions = (Model, queryOptions, baseFilter = {}) => {
 
   // Get total count
   const countQuery = Model.countDocuments(combinedFilter);
+
+  if (mongooseOptions && Object.keys(mongooseOptions).length > 0) {
+    countQuery.setOptions(mongooseOptions);
+  }
 
   return { query, countQuery };
 };
@@ -182,13 +195,19 @@ export const applyQueryOptions = (Model, queryOptions, baseFilter = {}) => {
  * @returns {Object} Paginated response
  */
 export const paginatedQuery = async (Model, queryParams, options = {}) => {
-  const { baseFilter = {}, populate = [], ...queryOptions } = options;
+  const {
+    baseFilter = {},
+    populate = [],
+    mongooseOptions = {},
+    ...queryOptions
+  } = options;
 
   const parsedOptions = buildQueryOptions(queryParams, queryOptions);
   const { query, countQuery } = applyQueryOptions(
     Model,
     parsedOptions,
     baseFilter,
+    mongooseOptions
   );
 
   // Apply populate
@@ -227,7 +246,7 @@ export const paginatedQuery = async (Model, queryParams, options = {}) => {
 export const buildDateRangeFilter = (
   startDate,
   endDate,
-  fieldName = "createdAt",
+  fieldName = 'createdAt'
 ) => {
   const filter = {};
 
@@ -252,7 +271,7 @@ export const buildDateRangeFilter = (
  */
 export const formatPaginatedResponse = (
   result,
-  message = "Lấy danh sách thành công",
+  message = 'Lấy danh sách thành công'
 ) => {
   return {
     success: true,
@@ -268,78 +287,78 @@ export const formatPaginatedResponse = (
 export const filterPresets = {
   // User filters
   user: {
-    allowedFilters: ["role", "status", "emailVerified", "canteenId"],
-    searchFields: ["fullName", "email", "phone"],
-    allowedSortFields: ["createdAt", "fullName", "email", "balance"],
+    allowedFilters: ['role', 'status', 'emailVerified', 'canteenId'],
+    searchFields: ['fullName', 'email', 'phone'],
+    allowedSortFields: ['createdAt', 'fullName', 'email', 'balance'],
   },
 
   // Product filters
   product: {
-    allowedFilters: ["categoryId", "canteenId", "status", "isPopular", "isNew"],
-    searchFields: ["name", "description", "slug"],
-    allowedSortFields: ["createdAt", "name", "price", "stockQuantity"],
+    allowedFilters: ['categoryId', 'canteenId', 'status', 'isPopular', 'isNew'],
+    searchFields: ['name', 'description', 'slug'],
+    allowedSortFields: ['createdAt', 'name', 'price', 'stockQuantity'],
   },
 
   // Order filters
   order: {
     allowedFilters: [
-      "status",
-      "canteenId",
-      "userId",
-      "payment.method",
-      "payment.status",
+      'status',
+      'canteenId',
+      'userId',
+      'payment.method',
+      'payment.status',
     ],
-    searchFields: ["orderNumber"],
-    allowedSortFields: ["createdAt", "totalAmount", "status"],
+    searchFields: ['orderNumber'],
+    allowedSortFields: ['createdAt', 'totalAmount', 'status'],
   },
 
   // Ingredient filters
   ingredient: {
-    allowedFilters: ["categoryId", "canteenId"],
-    searchFields: ["name"],
-    allowedSortFields: ["createdAt", "name", "stock"],
+    allowedFilters: ['categoryId', 'canteenId'],
+    searchFields: ['name'],
+    allowedSortFields: ['createdAt', 'name', 'stock'],
   },
 
   // Feedback filters
   feedback: {
-    allowedFilters: ["rating", "status", "productId", "userId", "canteenId"],
-    searchFields: ["comment"],
-    allowedSortFields: ["createdAt", "rating"],
+    allowedFilters: ['rating', 'status', 'productId', 'userId', 'canteenId'],
+    searchFields: ['comment'],
+    allowedSortFields: ['createdAt', 'rating'],
   },
 
   // Voucher filters
   voucher: {
-    allowedFilters: ["isActive", "discountType"],
-    searchFields: ["code", "description"],
-    allowedSortFields: ["createdAt", "code", "value", "startDate", "endDate"],
+    allowedFilters: ['isActive', 'discountType'],
+    searchFields: ['code', 'description'],
+    allowedSortFields: ['createdAt', 'code', 'value', 'startDate', 'endDate'],
   },
 
   // Shift filters
   shift: {
-    allowedFilters: ["canteenId", "status"],
-    searchFields: ["name"],
-    allowedSortFields: ["createdAt", "name", "startTime"],
+    allowedFilters: ['canteenId', 'status'],
+    searchFields: ['name'],
+    allowedSortFields: ['createdAt', 'name', 'startTime'],
   },
 
   // Notification filters
   notification: {
-    allowedFilters: ["type", "isRead", "userId", "canteenId"],
-    searchFields: ["title", "content"],
-    allowedSortFields: ["createdAt", "isRead"],
+    allowedFilters: ['type', 'isRead', 'userId', 'canteenId'],
+    searchFields: ['title', 'content'],
+    allowedSortFields: ['createdAt', 'isRead'],
   },
 
   // Banner filters
   banner: {
-    allowedFilters: ["isActive", "canteenId"],
-    searchFields: ["title"],
-    allowedSortFields: ["createdAt", "order"],
+    allowedFilters: ['isActive', 'canteenId'],
+    searchFields: ['title'],
+    allowedSortFields: ['createdAt', 'order'],
   },
 
   // Canteen filters
   canteen: {
-    allowedFilters: ["status"],
-    searchFields: ["name", "location", "description"],
-    allowedSortFields: ["createdAt", "name"],
+    allowedFilters: ['status'],
+    searchFields: ['name', 'location', 'description'],
+    allowedSortFields: ['createdAt', 'name'],
   },
   // Product Catefory filters
 
