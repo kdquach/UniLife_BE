@@ -1,9 +1,9 @@
-import multer from "multer";
-import AppError from "../utils/AppError.js";
+import multer from 'multer';
+import AppError from '../utils/AppError.js';
 import {
   isValidImageType,
   getFileSizeLimit,
-} from "../services/upload.service.js";
+} from '../services/upload.service.js';
 
 /**
  * Multer memory storage configuration
@@ -23,10 +23,10 @@ const fileFilter = (req, file, cb) => {
   } else {
     cb(
       new AppError(
-        "Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed.",
-        400,
+        'Invalid file type. Only JPG, PNG, and WebP are allowed.',
+        400
       ),
-      false,
+      false
     );
   }
 };
@@ -49,34 +49,34 @@ const createUploader = (type) => {
 /**
  * Middleware for uploading a single avatar image
  */
-export const uploadAvatar = createUploader("avatar").single("avatar");
+export const uploadAvatar = createUploader('avatar').single('avatar');
 
 /**
  * Middleware for uploading a single banner image
  */
-export const uploadBanner = createUploader("banner").single("banner");
+export const uploadBanner = createUploader('banner').single('banner');
 
 /**
  * Middleware for uploading a single product image
  */
-export const uploadProductImage = createUploader("product").single("image");
+export const uploadProductImage = createUploader('product').single('image');
 
 /**
  * Middleware for uploading multiple product images
  */
-export const uploadProductImages = createUploader("product").array("images", 5);
+export const uploadProductImages = createUploader('product').array('images', 5);
 
 /**
  * Middleware for uploading a single canteen image
  */
-export const uploadCanteenImage = createUploader("canteen").single("image");
+export const uploadCanteenImage = createUploader('canteen').single('image');
 
 /**
  * Generic single file upload middleware
  * @param {string} fieldName - Form field name
  * @param {string} type - Upload type
  */
-export const uploadSingle = (fieldName, type = "product") => {
+export const uploadSingle = (fieldName, type = 'product') => {
   return createUploader(type).single(fieldName);
 };
 
@@ -86,7 +86,7 @@ export const uploadSingle = (fieldName, type = "product") => {
  * @param {number} maxCount - Maximum number of files
  * @param {string} type - Upload type
  */
-export const uploadMultiple = (fieldName, maxCount = 5, type = "product") => {
+export const uploadMultiple = (fieldName, maxCount = 5, type = 'product') => {
   return createUploader(type).array(fieldName, maxCount);
 };
 
@@ -95,7 +95,7 @@ export const uploadMultiple = (fieldName, maxCount = 5, type = "product") => {
  * @param {Array} fields - Array of field configurations
  * @param {string} type - Upload type
  */
-export const uploadFields = (fields, type = "product") => {
+export const uploadFields = (fields, type = 'product') => {
   return createUploader(type).fields(fields);
 };
 
@@ -104,14 +104,14 @@ export const uploadFields = (fields, type = "product") => {
  */
 export const handleUploadError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
-    if (err.code === "LIMIT_FILE_SIZE") {
-      return next(new AppError("File size is too large", 400));
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return next(new AppError('File size is too large', 400));
     }
-    if (err.code === "LIMIT_FILE_COUNT") {
-      return next(new AppError("Too many files uploaded", 400));
+    if (err.code === 'LIMIT_FILE_COUNT') {
+      return next(new AppError('Too many files uploaded', 400));
     }
-    if (err.code === "LIMIT_UNEXPECTED_FILE") {
-      return next(new AppError("Unexpected field name", 400));
+    if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+      return next(new AppError('Unexpected field name', 400));
     }
     return next(new AppError(err.message, 400));
   }
