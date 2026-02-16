@@ -16,11 +16,23 @@ router.post(
   restrictTo("staff", "admin"),
   menuController.createMenuSchedule,
 );
+router.post(
+  "/schedules/:id/duplicate",
+  protect,
+  restrictTo("staff", "admin"),
+  menuController.duplicateSchedule,
+);
 router.patch(
   "/schedules/:id",
   protect,
   restrictTo("staff", "admin"),
   menuController.updateMenuSchedule,
+);
+router.patch(
+  "/schedules/:id/toggle",
+  protect,
+  restrictTo("staff", "admin"),
+  menuController.toggleScheduleStatus,
 );
 router.delete(
   "/schedules/:id",
@@ -32,7 +44,7 @@ router.delete(
 // ============ Menu Routes ============
 // Public routes
 router.get("/", menuController.getAllMenus);
-router.get("/canteen/:canteenId/active", menuController.getActiveMenuByCanteen);
+router.get("/canteen/:canteenId/current-menu", menuController.getCurrentMenuByCanteen);
 router.get("/:id", menuController.getMenuById);
 
 // Protected routes

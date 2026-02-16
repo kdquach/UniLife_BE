@@ -8,7 +8,8 @@ import AppError from "../../utils/AppError.js";
  * @returns {Promise<Object>} Created menu
  */
 export const createMenu = async (menuData) => {
-  const menu = await Menu.create(menuData);
+
+  const menu = await Menu.create(menuData)
   return menu;
 };
 
@@ -26,15 +27,11 @@ export const getAllMenus = async (query = {}) => {
   if (query.status) {
     filter.status = query.status;
   }
-  if (query.date) {
-    filter.date = new Date(query.date);
-  }
 
   const menus = await Menu.find(filter)
     .populate("canteenId", "name location")
     .populate("items.productId", "name price image")
-    .sort({ date: -1 });
-
+    .sort({ createdAt: -1 });
   return menus;
 };
 
@@ -135,9 +132,10 @@ export const deleteMenu = async (id) => {
   if (!menu) {
     throw new AppError("Menu not found", 404);
   }
-
-  // Also delete associated schedules
-  await MenuSchedule.deleteMany({ menuId: id });
+  if (menu.status === 'draft') {
+    // Also delete associated schedules
+    await Menu.findByIdAndDelete(id)
+  }
 };
 
 /**
@@ -188,7 +186,32 @@ export const removeMenuItem = async (menuId, productId) => {
  * @returns {Promise<Object>} Created schedule
  */
 export const createMenuSchedule = async (scheduleData) => {
-  const schedule = await MenuSchedule.create(scheduleData);
+  const { menuId, canteenId, startAt, endAt } = scheduleData
+
+  if (new Date(startAt) >= new Date(endAt)) {
+    throw new AppError("Invalid time range")
+  }
+
+  //check overlapping
+  const overlap = await MenuSchedule.findOne(
+    {
+      canteenId,
+      status: 'enabled',
+      startAt: { $lt: startAt },
+      endAt: { $gt: endAt },
+    }
+  )
+
+  if (overlap) {
+    throw new AppError("Invalid time range")
+  }
+
+  const schedule = await MenuSchedule.create({
+    menuId,
+    canteenId,
+    startAt,
+    endAt,
+  })
   return schedule;
 };
 
@@ -203,19 +226,14 @@ export const getAllMenuSchedules = async (query = {}) => {
   if (query.canteenId) {
     filter.canteenId = query.canteenId;
   }
-  if (query.menuId) {
-    filter.menuId = query.menuId;
-  }
+
   if (query.status) {
     filter.status = query.status;
   }
 
-  const schedules = await MenuSchedule.find(filter)
+  return await MenuSchedule.find(filter)
     .populate("menuId")
-    .populate("canteenId", "name")
-    .sort({ startDate: -1 });
-
-  return schedules;
+    .sort({ startAt: -1 });
 };
 
 /**
@@ -225,12 +243,17 @@ export const getAllMenuSchedules = async (query = {}) => {
  */
 export const getMenuScheduleById = async (id) => {
   const schedule = await MenuSchedule.findById(id)
-    .populate("menuId")
-    .populate("canteenId", "name location");
+    .populate({
+      path: "menuId",
+      populate: {
+        path: "items.productId",
+      },
+    });
 
   if (!schedule) {
-    throw new AppError("Menu schedule not found", 404);
+    throw new Error("Schedule not found");
   }
+
   return schedule;
 };
 
@@ -241,25 +264,172 @@ export const getMenuScheduleById = async (id) => {
  * @returns {Promise<Object>} Updated schedule
  */
 export const updateMenuSchedule = async (id, updateData) => {
-  const schedule = await MenuSchedule.findByIdAndUpdate(id, updateData, {
-    new: true,
-    runValidators: true,
-  });
+  const schedule = await MenuSchedule.findById(id);
 
   if (!schedule) {
     throw new AppError("Menu schedule not found", 404);
   }
 
+  const now = new Date();
+  const isRunning =
+    now >= schedule.startAt && now <= schedule.endAt;
+
+  // Không cho update nếu đang chạy
+  if (isRunning) {
+    throw new AppError(
+      "Cannot update a running schedule",
+      400
+    );
+  }
+
+  const newStart = updateData.startAt
+    ? new Date(updateData.startAt)
+    : schedule.startAt;
+
+  const newEnd = updateData.endAt
+    ? new Date(updateData.endAt)
+    : schedule.endAt;
+
+  if (newStart >= newEnd) {
+    throw new AppError(
+      "Start time must be before end time",
+      400
+    );
+  }
+
+  // Check overlap (loại trừ chính nó)
+  const overlap = await MenuSchedule.findOne({
+    _id: { $ne: id },
+    canteenId: schedule.canteenId,
+    status: "enabled",
+    startAt: { $lt: newEnd },
+    endAt: { $gt: newStart },
+  });
+
+  if (overlap) {
+    throw new AppError(
+      "Schedule overlaps with existing active schedule",
+      400
+    );
+  }
+
+  schedule.startAt = newStart;
+  schedule.endAt = newEnd;
+
+  await schedule.save();
+
   return schedule;
 };
+
+export const toggleScheduleStatus = async (scheduleId) => {
+  const schedule = await MenuSchedule.findById(scheduleId);
+
+  if (!schedule) {
+    throw new Error("Schedule not found");
+  }
+
+  const now = new Date();
+  const isRunning =
+    now >= schedule.startAt && now <= schedule.endAt;
+
+  // =============================
+  // CASE 1: ĐANG ENABLE → muốn DISABLE
+  // =============================
+  if (schedule.status === "enabled") {
+    // Không cho tắt nếu đang chạy
+    if (isRunning) {
+      throw new Error("Cannot disable a running schedule");
+    }
+
+    schedule.status = "disabled";
+    await schedule.save();
+    return schedule;
+  }
+
+  // =============================
+  // CASE 2: ĐANG DISABLED → muốn ENABLE
+  // =============================
+  if (schedule.status === "disabled") {
+    // Không cho bật nếu đã hết hạn
+    if (schedule.endAt < now) {
+      throw new Error("Cannot enable expired schedule");
+    }
+
+    // Check overlap với schedule khác
+    const overlap = await MenuSchedule.findOne({
+      _id: { $ne: scheduleId },
+      canteenId: schedule.canteenId,
+      status: "enabled",
+      startAt: { $lt: schedule.endAt },
+      endAt: { $gt: schedule.startAt },
+    });
+
+    if (overlap) {
+      throw new Error(
+        "Schedule overlaps with existing active schedule"
+      );
+    }
+
+    schedule.status = "enabled";
+    await schedule.save();
+    return schedule;
+  }
+
+  return schedule;
+};
+
+export const duplicateSchedule = async (scheduleId, newStart, newEnd) => {
+  const oldSchedule = await MenuSchedule.findById(scheduleId);
+
+  if (!oldSchedule) {
+    throw new Error("Schedule not found");
+  }
+
+  return await createMenuSchedule({
+    menuId: oldSchedule.menuId,
+    canteenId: oldSchedule.canteenId,
+    startAt: newStart,
+    endAt: newEnd,
+  });
+};
+
+export const getCurrentMenuByCanteen = async (canteenId) => {
+  const now = new Date()
+  const schedule = await MenuSchedule.findOne({
+    canteenId,
+    status: "enabled",
+    startAt: { $lte: now },
+    endAt: { $gte: now },
+  }).
+    populate({
+      path: "menuId",
+      populate: { path: "items.productId", },
+    })
+  return schedule;
+}
+
 
 /**
  * Delete menu schedule
  * @param {string} id - Schedule ID
  */
 export const deleteMenuSchedule = async (id) => {
-  const schedule = await MenuSchedule.findByIdAndDelete(id);
+  const schedule = await MenuSchedule.findById(id);
+
   if (!schedule) {
     throw new AppError("Menu schedule not found", 404);
   }
+
+  const now = new Date();
+  const isRunning =
+    now >= schedule.startAt && now <= schedule.endAt;
+
+  if (schedule.status === "enabled" && isRunning) {
+    throw new AppError("Cannot delete a running schedule", 400);
+  }
+
+  await schedule.deleteOne();
+
+  return true;
 };
+

@@ -30,7 +30,7 @@ import bannerRoutes from './modules/banner/banner.routes.js';
 import notificationRoutes from './modules/notification/notification.routes.js';
 import reportRoutes from './modules/report/report.routes.js';
 import uploadRoutes from './modules/upload/upload.routes.js';
-import paymentRoutes from './modules/payment/momo.routes.js';
+import paymentRoutes from './modules/payment/payment.routes.js';
 
 
 // Import error handler
@@ -93,7 +93,7 @@ app.use('/api/banners', bannerRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/upload', uploadRoutes);
-app.use('/api/momo', paymentRoutes)
+app.use('/api/payment', paymentRoutes)
 
 // ============ Error Handling ============
 

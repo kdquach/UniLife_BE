@@ -23,9 +23,9 @@ const menuSchema = new mongoose.Schema(
       ref: "Canteen",
       required: [true, "Canteen ID is required"],
     },
-    date: {
-      type: Date,
-      required: [true, "Menu date is required"],
+    name: {
+      type: String,
+      required: true
     },
     status: {
       type: String,
@@ -41,7 +41,7 @@ const menuSchema = new mongoose.Schema(
 );
 
 // Indexes
-menuSchema.index({ canteenId: 1, date: 1 });
+menuSchema.index({ canteenId: 1 });
 menuSchema.index({ status: 1 });
 
 const Menu = mongoose.model("Menu", menuSchema);
