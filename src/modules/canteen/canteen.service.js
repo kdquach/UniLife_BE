@@ -70,3 +70,4 @@ export const deleteCanteen = async (id) => {
     throw new AppError("Canteen not found", 404);
   }
 };
+

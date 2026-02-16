@@ -79,3 +79,4 @@ export const deleteCanteen = catchAsync(async (req, res) => {
     data: null,
   });
 });
+

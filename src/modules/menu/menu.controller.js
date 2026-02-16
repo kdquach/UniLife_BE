@@ -9,6 +9,10 @@ import * as menuService from "./menu.service.js";
  * @access Private (Staff, Admin)
  */
 export const createMenu = catchAsync(async (req, res) => {
+  const { canteenId } = req.body
+  if (!canteenId) {
+    return res.status(400).json({ message: "canteenId is required" });
+  }
   const menu = await menuService.createMenu(req.body);
 
   res.status(201).json({
@@ -52,25 +56,7 @@ export const getMenuById = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * Get active menu by canteen
- * @route GET /api/menus/canteen/:canteenId/active
- * @access Public
- */
-export const getActiveMenuByCanteen = catchAsync(async (req, res) => {
-  const date = req.query.date ? new Date(req.query.date) : new Date();
-  const menu = await menuService.getActiveMenuByCanteen(
-    req.params.canteenId,
-    date,
-  );
 
-  res.status(200).json({
-    status: "success",
-    data: {
-      menu,
-    },
-  });
-});
 
 /**
  * Update menu
@@ -208,6 +194,65 @@ export const updateMenuSchedule = catchAsync(async (req, res) => {
 });
 
 /**
+ * @route PATCH /api/menus/schedules/:id/toggle
+ * @access Private (Staff, Admin)
+ */
+export const toggleScheduleStatus = catchAsync(async (req, res) => {
+  const updatedSchedule = await menuService.toggleScheduleStatus(
+    req.params.id
+  );
+
+  res.status(200).json({
+    message: "Schedule status toggled successfully",
+    data: updatedSchedule,
+  });
+});
+
+/**
+ * @route POST /api/menus/schedules/:id/duplicate
+ * @access Private (Staff, Admin)
+ */
+export const duplicateSchedule = catchAsync(async (req, res) => {
+  const { id } = req.params;
+  const { startAt, endAt } = req.body;
+
+  if (!startAt || !endAt) {
+    return res.status(400).json({
+      message: "startAt and endAt are required",
+    });
+  }
+
+  const newSchedule = await menuService.duplicateSchedule(
+    id,
+    startAt,
+    endAt
+  );
+
+  res.status(201).json({
+    message: "Schedule duplicated successfully",
+    data: newSchedule,
+  });
+});
+
+export const getCurrentMenuByCanteen = catchAsync(async (req, res) => {
+  const { canteenId } = req.params;
+
+  const schedule =
+    await menuService.getCurrentMenuByCanteen(canteenId);
+
+  if (!schedule) {
+    return res.status(404).json({
+      message: "No active menu found for this canteen",
+    });
+  }
+
+  res.status(200).json({
+    message: "Current active menu fetched successfully",
+    data: schedule,
+  });
+});
+
+/**
  * Delete menu schedule
  * @route DELETE /api/menus/schedules/:id
  * @access Private (Admin)
@@ -220,3 +265,23 @@ export const deleteMenuSchedule = catchAsync(async (req, res) => {
     data: null,
   });
 });
+
+// /**
+//  * Get active menu by canteen
+//  * @route GET /api/menus/canteen/:canteenId/active
+//  * @access Public
+//  */
+// export const getActiveMenuByCanteen = catchAsync(async (req, res) => {
+//   const date = req.query.date ? new Date(req.query.date) : new Date();
+//   const menu = await menuService.getActiveMenuByCanteen(
+//     req.params.canteenId,
+//     date,
+//   );
+
+//   res.status(200).json({
+//     status: "success",
+//     data: {
+//       menu,
+//     },
+//   });
+// });

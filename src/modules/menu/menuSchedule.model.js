@@ -5,50 +5,33 @@ const menuScheduleSchema = new mongoose.Schema(
     menuId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Menu",
-      required: [true, "Menu ID is required"],
+      required: true,
     },
     canteenId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Canteen",
-      required: [true, "Canteen ID is required"],
+      required: true,
     },
-    startDate: {
+    startAt: {
       type: Date,
-      required: [true, "Start date is required"],
+      required: true,
     },
-    endDate: {
+    endAt: {
       type: Date,
-      required: [true, "End date is required"],
-    },
-    startTime: {
-      type: String,
-      required: [true, "Start time is required"],
-      match: [
-        /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/,
-        "Invalid time format (HH:MM)",
-      ],
-    },
-    endTime: {
-      type: String,
-      required: [true, "End time is required"],
-      match: [
-        /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/,
-        "Invalid time format (HH:MM)",
-      ],
+      required: true,
     },
     status: {
       type: String,
-      enum: ["scheduled", "active", "completed", "cancelled"],
-      default: "scheduled",
+      enum: ["enabled", "disabled"],
+      default: "enabled",
     },
   },
-  {
-    timestamps: true,
-  },
+  { timestamps: true }
 );
 
+
 // Indexes
-menuScheduleSchema.index({ canteenId: 1, startDate: 1, endDate: 1 });
+menuScheduleSchema.index({ canteenId: 1, startAt: 1, endAt: 1 }, { unique: false });
 menuScheduleSchema.index({ menuId: 1 });
 menuScheduleSchema.index({ status: 1 });
 

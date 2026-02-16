@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import momoConfig from "./momo.config.js";
+import momoConfig from "./payment.config.js";
 import Order from "../order/order.model.js";
 
 export const createMomoPaymentRequest = async ({
