@@ -239,7 +239,14 @@ export const checkOut = async (assignmentId, staffId) => {
 
   assignment.status = "checked_out";
   assignment.checkOutTime = new Date();
-  assignment.calculateWorkHours();
+
+  // Calculate work hours inline (calculateWorkHours removed in v2.0)
+  if (assignment.checkInTime && assignment.checkOutTime) {
+    const totalMs = assignment.checkOutTime - assignment.checkInTime;
+    assignment.actualWorkHours = totalMs / (1000 * 60 * 60);
+    assignment.actualWorkMinutes = Math.round(totalMs / (1000 * 60));
+  }
+
   await assignment.save();
 
   return assignment;
