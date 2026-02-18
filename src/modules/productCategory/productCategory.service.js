@@ -26,15 +26,22 @@ export const createProductCategory = async (data) => {
 /**
  * Get all product categories
  */
-export const getAllProductCategories = async (queryParams) => {
-  return paginatedQuery(ProductCategory, queryParams);
+export const getAllProductCategories = async (queryParams, canteenId) => {
+  // Thêm filter canteenId nếu có
+  const options = canteenId ? { baseFilter: { canteenId } } : {};
+  return paginatedQuery(ProductCategory, queryParams, options);
 };
 
 /**
  * Get product category by ID
  */
-export const getProductCategoryById = async (id) => {
-  const category = await ProductCategory.findById(id);
+export const getProductCategoryById = async (id, canteenId) => {
+  const filter = { _id: id };
+  if (canteenId) {
+    filter.canteenId = canteenId;
+  }
+
+  const category = await ProductCategory.findOne(filter);
   if (!category) {
     throw new AppError("Product category not found", 404);
   }
@@ -44,14 +51,20 @@ export const getProductCategoryById = async (id) => {
 /**
  * Update product category
  */
-export const updateProductCategory = async (id, updateData) => {
+export const updateProductCategory = async (id, updateData, canteenId) => {
+  // Kiểm tra category có tồn tại và thuộc canteen không
+  const filter = { _id: id };
+  if (canteenId) {
+    filter.canteenId = canteenId;
+  }
+
+  const currentCategory = await ProductCategory.findOne(filter);
+  if (!currentCategory) {
+    throw new AppError("Product category not found", 404);
+  }
+
   // Nếu update name, kiểm tra xem tên mới đã tồn tại chưa
   if (updateData.name) {
-    const currentCategory = await ProductCategory.findById(id);
-    if (!currentCategory) {
-      throw new AppError("Product category not found", 404);
-    }
-
     const existingCategory = await ProductCategory.findOne({
       _id: { $ne: id }, // Loại trừ chính nó
       canteenId: currentCategory.canteenId,
@@ -81,8 +94,13 @@ export const updateProductCategory = async (id, updateData) => {
 /**
  * Delete product category
  */
-export const deleteProductCategory = async (id) => {
-  const category = await ProductCategory.findByIdAndDelete(id);
+export const deleteProductCategory = async (id, canteenId) => {
+  const filter = { _id: id };
+  if (canteenId) {
+    filter.canteenId = canteenId;
+  }
+
+  const category = await ProductCategory.findOneAndDelete(filter);
   if (!category) {
     throw new AppError("Product category not found", 404);
   }
@@ -92,8 +110,13 @@ export const deleteProductCategory = async (id) => {
 /**
  * Get active product categories
  */
-export const getActiveProductCategories = async () => {
-  const categories = await ProductCategory.find({ isActive: true }).sort({
+export const getActiveProductCategories = async (canteenId) => {
+  const filter = { isActive: true };
+  if (canteenId) {
+    filter.canteenId = canteenId;
+  }
+
+  const categories = await ProductCategory.find(filter).sort({
     name: 1,
   });
   return categories;

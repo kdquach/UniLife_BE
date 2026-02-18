@@ -34,8 +34,12 @@ export const createIngredientCategory = catchAsync(async (req, res) => {
  * @access Public
  */
 export const getAllIngredientCategories = catchAsync(async (req, res) => {
+  // Lọc theo canteenId của user nếu có
+  const canteenId = req.user?.canteenId;
+
   const result = await ingredientCategoryService.getAllIngredientCategories(
     req.query,
+    canteenId,
   );
 
   res
@@ -54,8 +58,9 @@ export const getAllIngredientCategories = catchAsync(async (req, res) => {
  * @access Public
  */
 export const getActiveIngredientCategories = catchAsync(async (req, res) => {
+  const canteenId = req.user?.canteenId;
   const categories =
-    await ingredientCategoryService.getActiveIngredientCategories();
+    await ingredientCategoryService.getActiveIngredientCategories(canteenId);
 
   res.status(200).json({
     status: "success",
@@ -70,8 +75,10 @@ export const getActiveIngredientCategories = catchAsync(async (req, res) => {
  * @access Public
  */
 export const getIngredientCategoryById = catchAsync(async (req, res) => {
+  const canteenId = req.user?.canteenId;
   const category = await ingredientCategoryService.getIngredientCategoryById(
     req.params.id,
+    canteenId,
   );
 
   res.status(200).json({
@@ -87,9 +94,11 @@ export const getIngredientCategoryById = catchAsync(async (req, res) => {
  * @access Private (Admin, Manager)
  */
 export const updateIngredientCategory = catchAsync(async (req, res) => {
+  const canteenId = req.user?.canteenId;
   const category = await ingredientCategoryService.updateIngredientCategory(
     req.params.id,
     req.body,
+    canteenId,
   );
 
   res.status(200).json({
@@ -105,7 +114,11 @@ export const updateIngredientCategory = catchAsync(async (req, res) => {
  * @access Private (Admin)
  */
 export const deleteIngredientCategory = catchAsync(async (req, res) => {
-  await ingredientCategoryService.deleteIngredientCategory(req.params.id);
+  const canteenId = req.user?.canteenId;
+  await ingredientCategoryService.deleteIngredientCategory(
+    req.params.id,
+    canteenId,
+  );
 
   res.status(200).json({
     success: true,

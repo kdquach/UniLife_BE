@@ -34,18 +34,12 @@ export const createProductCategory = catchAsync(async (req, res) => {
  * @access Public
  */
 export const getAllProductCategories = catchAsync(async (req, res) => {
-  // const filter = req.query.active === "true" ? { isActive: true } : {};
-  // const categories =
-  //   await productCategoryService.getAllProductCategories(filter);
-
-  // res.status(200).json({
-  //   status: "success",
-  //   results: categories.length,
-  //   data: { categories },
-  // });
+  // Lọc theo canteenId của user nếu có
+  const canteenId = req.user?.canteenId;
 
   const result = await productCategoryService.getAllProductCategories(
     req.query,
+    canteenId,
   );
 
   res
@@ -59,7 +53,9 @@ export const getAllProductCategories = catchAsync(async (req, res) => {
  * @access Public
  */
 export const getActiveProductCategories = catchAsync(async (req, res) => {
-  const categories = await productCategoryService.getActiveProductCategories();
+  const canteenId = req.user?.canteenId;
+  const categories =
+    await productCategoryService.getActiveProductCategories(canteenId);
 
   res.status(200).json({
     status: "success",
@@ -74,8 +70,10 @@ export const getActiveProductCategories = catchAsync(async (req, res) => {
  * @access Public
  */
 export const getProductCategoryById = catchAsync(async (req, res) => {
+  const canteenId = req.user?.canteenId;
   const category = await productCategoryService.getProductCategoryById(
     req.params.id,
+    canteenId,
   );
 
   res.status(200).json({
@@ -91,9 +89,11 @@ export const getProductCategoryById = catchAsync(async (req, res) => {
  * @access Private (Admin, Manager)
  */
 export const updateProductCategory = catchAsync(async (req, res) => {
+  const canteenId = req.user?.canteenId;
   const category = await productCategoryService.updateProductCategory(
     req.params.id,
     req.body,
+    canteenId,
   );
 
   res.status(200).json({
@@ -109,7 +109,8 @@ export const updateProductCategory = catchAsync(async (req, res) => {
  * @access Private (Admin)
  */
 export const deleteProductCategory = catchAsync(async (req, res) => {
-  await productCategoryService.deleteProductCategory(req.params.id);
+  const canteenId = req.user?.canteenId;
+  await productCategoryService.deleteProductCategory(req.params.id, canteenId);
 
   res.status(200).json({
     success: true,
