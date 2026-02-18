@@ -122,6 +122,15 @@ const productSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Xoa mem
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -135,6 +144,7 @@ productSchema.index({ status: 1 });
 productSchema.index({ name: 'text', description: 'text' });
 productSchema.index({ slug: 1 });
 productSchema.index({ isPopular: 1, totalSold: -1 });
+productSchema.index({ isDeleted: 1 });
 
 // Generate slug from name
 productSchema.pre('save', function (next) {
@@ -146,6 +156,28 @@ productSchema.pre('save', function (next) {
       .replace(/-+/g, '-');
   }
   next();
+});
+
+productSchema.pre(/^find/, function (next) {
+  const options = this.getOptions ? this.getOptions() : {};
+
+  if (options?.includeDeleted) {
+    return next();
+  }
+
+  this.where({ isDeleted: { $ne: true } });
+  return next();
+});
+
+productSchema.pre('countDocuments', function (next) {
+  const options = this.getOptions ? this.getOptions() : {};
+
+  if (options?.includeDeleted) {
+    return next();
+  }
+
+  this.where({ isDeleted: { $ne: true } });
+  return next();
 });
 
 // productSchema.pre("save", function (next) {

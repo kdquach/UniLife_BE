@@ -1,9 +1,10 @@
 
 
 import express from "express";
-import { createMomoPayment, getMomoPaymentResult } from "./momo.controller.js";
+import { createMomoPayment, getMomoPaymentResult } from "./payment.controller.js";
 
 const router = express.Router();
+
 
 router.post('/create', createMomoPayment)
 

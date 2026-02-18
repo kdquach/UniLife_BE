@@ -6,6 +6,8 @@ import {
   formatPaginatedResponse,
 } from "../../utils/queryHelper.js";
 import { Shift, StaffShift } from "./shift.model.js";
+import User from "../user/user.model.js";
+import { ShiftChangeRequest } from "./shiftChangeRequest.model.js";
 
 // ============ Shift Controllers ============
 
@@ -221,5 +223,146 @@ export const updateAssignment = catchAsync(async (req, res) => {
     data: {
       assignment,
     },
+  });
+});
+
+export const bulkSaveAssignments = catchAsync(async (req, res) => {
+  const assignments = Array.isArray(req.body?.assignments) ? req.body.assignments : [];
+  const data = await shiftService.bulkSaveAssignments(assignments, req.user);
+
+  res.status(200).json({
+    success: true,
+    message: "Lưu nháp phân ca thành công",
+    data,
+  });
+});
+
+export const publishAssignments = catchAsync(async (req, res) => {
+  const data = await shiftService.publishAssignments(req.body || {}, req.user);
+
+  res.status(200).json({
+    success: true,
+    message: "Phát hành lịch làm việc thành công",
+    data,
+  });
+});
+
+export const getShiftManagerStaffList = catchAsync(async (req, res) => {
+  const filter = {
+    role: "staff",
+    status: "active",
+  };
+
+  if (req.user?.canteenId) {
+    filter.canteenId = req.user.canteenId;
+  }
+
+  if (req.query?.search) {
+    filter.$or = [
+      { fullName: { $regex: req.query.search, $options: "i" } },
+      { email: { $regex: req.query.search, $options: "i" } },
+    ];
+  }
+
+  const users = await User.find(filter)
+    .select("_id fullName email canteenId")
+    .sort({ fullName: 1 })
+    .limit(200);
+
+  res.status(200).json({
+    success: true,
+    data: users,
+  });
+});
+
+export const getMyShiftChangeRequests = catchAsync(async (req, res) => {
+  const filter = { staffId: req.user._id };
+
+  if (req.query?.status) {
+    filter.status = req.query.status;
+  }
+
+  const requests = await ShiftChangeRequest.find(filter)
+    .populate("staffId", "fullName email")
+    .populate({
+      path: "staffShiftId",
+      populate: { path: "shiftId", select: "name startTime endTime" },
+    })
+    .populate("requestedShiftId", "name startTime endTime")
+    .sort({ createdAt: -1 })
+    .limit(200);
+
+  res.status(200).json({
+    success: true,
+    data: requests,
+  });
+});
+
+export const getShiftChangeRequests = catchAsync(async (req, res) => {
+  const filter = {};
+
+  if (req.query?.status) {
+    filter.status = req.query.status;
+  }
+
+  const requests = await ShiftChangeRequest.find(filter)
+    .populate("staffId", "fullName email")
+    .populate({
+      path: "staffShiftId",
+      populate: { path: "shiftId", select: "name startTime endTime" },
+    })
+    .populate("requestedShiftId", "name startTime endTime")
+    .sort({ createdAt: -1 })
+    .limit(200);
+
+  const scoped = req.user?.canteenId
+    ? requests.filter(
+        (item) =>
+          String(item?.staffShiftId?.canteenId || "") ===
+          String(req.user.canteenId),
+      )
+    : requests;
+
+  res.status(200).json({
+    success: true,
+    data: scoped,
+  });
+});
+
+export const createShiftChangeRequest = catchAsync(async (req, res) => {
+  const payload = {
+    staffShiftId: req.body?.staffShiftId,
+    reason: req.body?.reason,
+  };
+
+  const request = await shiftService.createShiftChangeRequest(payload, req.user);
+
+  res.status(201).json({
+    success: true,
+    message: "Tạo yêu cầu đổi ca thành công",
+    data: { request },
+  });
+});
+
+export const reviewShiftChangeRequest = catchAsync(async (req, res) => {
+  const request = await shiftService.reviewShiftChangeRequest(
+    req.params.id,
+    req.body?.status,
+    req.user,
+  );
+
+  res.status(200).json({
+    success: true,
+    message: "Cập nhật yêu cầu đổi ca thành công",
+    data: { request },
+  });
+});
+
+export const getAvailableShiftsForChangeRequest = catchAsync(async (req, res) => {
+  const shifts = await shiftService.getAvailableShiftsForChangeRequest(req.user);
+
+  res.status(200).json({
+    success: true,
+    data: shifts,
   });
 });

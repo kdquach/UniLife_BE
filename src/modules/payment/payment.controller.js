@@ -1,6 +1,6 @@
 import catchAsync from "../../utils/catchAsync.js";
 import AppError from "../../utils/AppError.js";
-import * as momoService from "./momo.service.js";
+import * as momoService from "./payment.service.js";
 import crypto from "crypto";
 
 

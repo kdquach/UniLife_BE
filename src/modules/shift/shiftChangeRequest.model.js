@@ -15,7 +15,7 @@ const shiftChangeRequestSchema = new mongoose.Schema(
     requestedShiftId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Shift",
-      required: [true, "Requested shift ID is required"],
+      default: null,
     },
     reason: {
       type: String,
