@@ -31,6 +31,19 @@ const shiftSchema = new mongoose.Schema(
         message: "Day of week must be between 0 (Sunday) and 6 (Saturday)",
       },
     },
+    durationMinutes: {
+      type: Number,
+      default: 240,
+      min: [0, "Duration must be positive"],
+    },
+    gracePeriodBefore: {
+      type: Number, // minutes before shift start allowed to check-in
+      default: 15,
+    },
+    gracePeriodAfter: {
+      type: Number, // minutes after shift start still allowed to check-in
+      default: 30,
+    },
     maxStaff: {
       type: Number,
       default: 5,
@@ -51,71 +64,8 @@ const shiftSchema = new mongoose.Schema(
 shiftSchema.index({ canteenId: 1 });
 shiftSchema.index({ status: 1 });
 
-// Staff Assignment Schema - for assigning staff to specific shifts on specific dates
-const staffShiftSchema = new mongoose.Schema(
-  {
-    shiftId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Shift",
-      required: [true, "Shift ID is required"],
-    },
-    staffId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: [true, "Staff ID is required"],
-    },
-    canteenId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Canteen",
-      required: [true, "Canteen ID is required"],
-    },
-    date: {
-      type: Date,
-      required: [true, "Date is required"],
-    },
-    status: {
-      type: String,
-      enum: ["scheduled", "checked_in", "checked_out", "absent", "cancelled"],
-      default: "scheduled",
-    },
-    checkInTime: {
-      type: Date,
-    },
-    checkOutTime: {
-      type: Date,
-    },
-    actualWorkHours: {
-      type: Number,
-      default: 0,
-    },
-    notes: {
-      type: String,
-      trim: true,
-      maxlength: [500, "Notes cannot exceed 500 characters"],
-    },
-    assignedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-    },
-  },
-  {
-    timestamps: true,
-  },
-);
+export const Shift =
+  mongoose.models.Shift || mongoose.model("Shift", shiftSchema);
 
-staffShiftSchema.index({ shiftId: 1, date: 1 });
-staffShiftSchema.index({ staffId: 1, date: 1 });
-staffShiftSchema.index({ canteenId: 1, date: 1 });
-staffShiftSchema.index({ status: 1 });
-
-// Calculate actual work hours when checking out
-staffShiftSchema.methods.calculateWorkHours = function () {
-  if (this.checkInTime && this.checkOutTime) {
-    this.actualWorkHours =
-      (this.checkOutTime - this.checkInTime) / (1000 * 60 * 60);
-  }
-  return this.actualWorkHours;
-};
-
-export const Shift = mongoose.model("Shift", shiftSchema);
-export const StaffShift = mongoose.model("StaffShift", staffShiftSchema);
+// Re-export StaffShift from its dedicated file for backward compatibility
+export { StaffShift } from "./staffShift.model.js";
