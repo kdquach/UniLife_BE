@@ -26,8 +26,10 @@ export const createIngredientCategory = async (data) => {
 /**
  * Get all ingredient categories với phân trang
  */
-export const getAllIngredientCategories = async (queryParams) => {
-  return paginatedQuery(IngredientCategory, queryParams);
+export const getAllIngredientCategories = async (queryParams, canteenId) => {
+  // Thêm filter canteenId nếu có
+  const options = canteenId ? { baseFilter: { canteenId } } : {};
+  return paginatedQuery(IngredientCategory, queryParams, options);
 };
 
 /**
@@ -41,8 +43,13 @@ export const getAllIngredientCategoriesNoPagination = async (filter = {}) => {
 /**
  * Get ingredient category by ID
  */
-export const getIngredientCategoryById = async (id) => {
-  const category = await IngredientCategory.findById(id);
+export const getIngredientCategoryById = async (id, canteenId) => {
+  const filter = { _id: id };
+  if (canteenId) {
+    filter.canteenId = canteenId;
+  }
+
+  const category = await IngredientCategory.findOne(filter);
   if (!category) {
     throw new AppError("Ingredient category not found", 404);
   }
@@ -52,14 +59,20 @@ export const getIngredientCategoryById = async (id) => {
 /**
  * Update ingredient category
  */
-export const updateIngredientCategory = async (id, updateData) => {
+export const updateIngredientCategory = async (id, updateData, canteenId) => {
+  // Kiểm tra category có tồn tại và thuộc canteen không
+  const filter = { _id: id };
+  if (canteenId) {
+    filter.canteenId = canteenId;
+  }
+
+  const currentCategory = await IngredientCategory.findOne(filter);
+  if (!currentCategory) {
+    throw new AppError("Ingredient category not found", 404);
+  }
+
   // Nếu update name, kiểm tra xem tên mới đã tồn tại chưa
   if (updateData.name) {
-    const currentCategory = await IngredientCategory.findById(id);
-    if (!currentCategory) {
-      throw new AppError("Ingredient category not found", 404);
-    }
-
     const existingCategory = await IngredientCategory.findOne({
       _id: { $ne: id }, // Loại trừ chính nó
       canteenId: currentCategory.canteenId,
@@ -89,8 +102,13 @@ export const updateIngredientCategory = async (id, updateData) => {
 /**
  * Delete ingredient category
  */
-export const deleteIngredientCategory = async (id) => {
-  const category = await IngredientCategory.findByIdAndDelete(id);
+export const deleteIngredientCategory = async (id, canteenId) => {
+  const filter = { _id: id };
+  if (canteenId) {
+    filter.canteenId = canteenId;
+  }
+
+  const category = await IngredientCategory.findOneAndDelete(filter);
   if (!category) {
     throw new AppError("Ingredient category not found", 404);
   }
@@ -100,8 +118,13 @@ export const deleteIngredientCategory = async (id) => {
 /**
  * Get active ingredient categories
  */
-export const getActiveIngredientCategories = async () => {
-  const categories = await IngredientCategory.find({ isActive: true }).sort({
+export const getActiveIngredientCategories = async (canteenId) => {
+  const filter = { isActive: true };
+  if (canteenId) {
+    filter.canteenId = canteenId;
+  }
+
+  const categories = await IngredientCategory.find(filter).sort({
     name: 1,
   });
   return categories;
