@@ -31,6 +31,17 @@ export const createOrder = catchAsync(async (req, res) => {
  * @access Private (Staff, Admin)
  */
 export const getAllOrders = catchAsync(async (req, res) => {
+  // Enforce Canteen isolation for Staff
+  if (req.user.role === "staff") {
+    if (!req.user.canteenId) {
+      return res.status(403).json({
+        status: "fail",
+        message: "Tài khoản nhân viên chưa được gán vào Canteen nào",
+      });
+    }
+    req.query.canteenId = req.user.canteenId.toString();
+  }
+
   const result = await paginatedQuery(Order, req.query, {
     ...filterPresets.order,
     populate: [
@@ -51,6 +62,19 @@ export const getAllOrders = catchAsync(async (req, res) => {
  */
 export const getOrderById = catchAsync(async (req, res) => {
   const order = await orderService.getOrderById(req.params.id);
+
+  // Cross-Canteen isolation check for read
+  if (req.user.role === "staff") {
+    const orderCanteen = order.canteenId?._id
+      ? order.canteenId._id.toString()
+      : order.canteenId?.toString();
+    if (orderCanteen !== req.user.canteenId?.toString()) {
+      return res.status(403).json({
+        status: "fail",
+        message: "Bạn không có quyền xem đơn hàng của Canteen khác",
+      });
+    }
+  }
 
   res.status(200).json({
     status: "success",
@@ -121,6 +145,19 @@ export const reOrder = catchAsync(async (req, res) => {
 export const getOrderByQRCode = catchAsync(async (req, res) => {
   const order = await orderService.getOrderByQRCode(req.params.code);
 
+  // Cross-Canteen isolation check for read
+  if (req.user.role === "staff") {
+    const orderCanteen = order.canteenId?._id
+      ? order.canteenId._id.toString()
+      : order.canteenId?.toString();
+    if (orderCanteen !== req.user.canteenId?.toString()) {
+      return res.status(403).json({
+        status: "fail",
+        message: "Bạn không có quyền xem đơn hàng của Canteen khác",
+      });
+    }
+  }
+
   res.status(200).json({
     status: "success",
     data: {
@@ -139,6 +176,8 @@ export const updateOrderStatus = catchAsync(async (req, res) => {
     req.params.id,
     req.body.status,
     req.user._id,
+    req.user.role,
+    req.user.canteenId,
   );
 
   res.status(200).json({
@@ -187,7 +226,12 @@ export const cancelOrder = catchAsync(async (req, res) => {
  * @access Private (Staff)
  */
 export const completeOrder = catchAsync(async (req, res) => {
-  const order = await orderService.completeOrder(req.params.id, req.user._id);
+  const order = await orderService.completeOrder(
+    req.params.id,
+    req.user._id,
+    req.user.role,
+    req.user.canteenId,
+  );
 
   res.status(200).json({
     status: "success",
@@ -210,6 +254,68 @@ export const getOrderStats = catchAsync(async (req, res) => {
     status: "success",
     data: {
       stats,
+    },
+  });
+});
+
+/**
+ * Scan QR and complete order (combined endpoint)
+ * @route POST /api/orders/scan-complete
+ * @access Private (Staff, Admin)
+ */
+export const scanAndComplete = catchAsync(async (req, res) => {
+  const { qrToken } = req.body;
+
+  if (!qrToken) {
+    return res.status(400).json({
+      status: "fail",
+      message: "Vui lòng cung cấp mã QR",
+    });
+  }
+
+  const order = await orderService.scanAndCompleteOrder(
+    qrToken,
+    req.user._id,
+    req.user.role,
+    req.user.canteenId,
+  );
+
+  res.status(200).json({
+    status: "success",
+    message: "Xác nhận trả hàng thành công",
+    data: {
+      order,
+    },
+  });
+});
+
+/**
+ * Manual complete order (fallback when camera fails)
+ * @route POST /api/orders/manual-complete
+ * @access Private (Staff, Admin)
+ */
+export const manualComplete = catchAsync(async (req, res) => {
+  const { orderNumber } = req.body;
+
+  if (!orderNumber) {
+    return res.status(400).json({
+      status: "fail",
+      message: "Vui lòng nhập mã đơn hàng",
+    });
+  }
+
+  const order = await orderService.manualCompleteOrder(
+    orderNumber,
+    req.user._id,
+    req.user.role,
+    req.user.canteenId,
+  );
+
+  res.status(200).json({
+    status: "success",
+    message: "Xác nhận trả hàng thành công",
+    data: {
+      order,
     },
   });
 });

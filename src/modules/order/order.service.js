@@ -1,22 +1,25 @@
-import mongoose from 'mongoose';
-import Order from './order.model.js';
-import Product from '../product/product.model.js';
-import AppError from '../../utils/AppError.js';
-import * as voucherService from '../voucher/voucher.service.js';
-import { Cart } from '../cart/cart.model.js';
-import { filterPresets, paginatedQuery } from '../../utils/queryHelper.js';
-import { checkMenuAvailability } from '../menu/menu.service.js';
+import mongoose from "mongoose";
+import Order from "./order.model.js";
+import Product from "../product/product.model.js";
+import Canteen from "../canteen/canteen.model.js";
+import AppError from "../../utils/AppError.js";
+import * as voucherService from "../voucher/voucher.service.js";
+import { Cart } from "../cart/cart.model.js";
+import { filterPresets, paginatedQuery } from "../../utils/queryHelper.js";
+import { checkMenuAvailability } from "../menu/menu.service.js";
 import {
   deductProductInventory,
   restoreProductInventory,
-} from '../product/inventory/product.inventory.service.js';
+} from "../product/inventory/product.inventory.service.js";
+import { verifyQRToken } from "../../utils/qrToken.js";
+import { notifyCanteen } from "../../websocket/notify.js";
 
 // Helper: Xử lý inventory khi tạo order
 const handleInventoryForOrder = async (orderItems) => {
   const inventoryResults = [];
 
   for (const item of orderItems) {
-    const product = await Product.findById(item.productId).select('recipe');
+    const product = await Product.findById(item.productId).select("recipe");
 
     if (!product) {
       throw new AppError(`Sản phẩm không tồn tại: ${item.productId}`, 404);
@@ -30,7 +33,7 @@ const handleInventoryForOrder = async (orderItems) => {
       const result = await deductProductInventory(
         item.productId,
         recipeItems,
-        item.quantity
+        item.quantity,
       );
       inventoryResults.push({
         productId: item.productId,
@@ -44,7 +47,7 @@ const handleInventoryForOrder = async (orderItems) => {
         await restoreProductInventory(
           successful.productId,
           successful.recipeItems,
-          successful.quantity
+          successful.quantity,
         );
       }
       throw error;
@@ -57,7 +60,7 @@ const handleInventoryForOrder = async (orderItems) => {
 // Helper: Hoàn lại inventory khi hủy order
 const handleInventoryRestoreForOrder = async (orderItems) => {
   for (const item of orderItems) {
-    const product = await Product.findById(item.productId).select('recipe');
+    const product = await Product.findById(item.productId).select("recipe");
 
     if (!product) {
       console.warn(`Sản phẩm không tồn tại khi hoàn kho: ${item.productId}`);
@@ -82,7 +85,7 @@ export const getMyOrders = async (userId, queryParams) => {
   const options = {
     ...filterPresets.order,
     baseFilter,
-    populate: [{ path: 'canteenId', select: 'name location image' }],
+    populate: [{ path: "canteenId", select: "name location image" }],
   };
 
   const result = await paginatedQuery(Order, queryParams, options);
@@ -90,11 +93,11 @@ export const getMyOrders = async (userId, queryParams) => {
   if (result.data && result.data.length > 0) {
     // Bước 1: Lọc bỏ đơn lỗi Canteen
     let validOrders = result.data.filter(
-      (order) => order.canteenId && order.canteenId._id
+      (order) => order.canteenId && order.canteenId._id,
     );
 
     // Các trạng thái ĐƯỢC PHÉP xem mã QR
-    const ALLOWED_QR_STATUSES = ['pending', 'confirmed', 'preparing', 'ready'];
+    const ALLOWED_QR_STATUSES = ["pending", "confirmed", "preparing", "ready"];
 
     validOrders = validOrders.map((order) => {
       // Convert Mongoose Document sang Plain Object để có thể sửa đổi field
@@ -135,7 +138,7 @@ export const createOrder = async (orderData, userId) => {
     if (!product) {
       throw new AppError(`Product not found: ${item.productId}`, 404);
     }
-    if (product.status !== 'available') {
+    if (product.status !== "available") {
       throw new AppError(`Product not available: ${product.name}`, 400);
     }
 
@@ -162,7 +165,7 @@ export const createOrder = async (orderData, userId) => {
       finalSubTotal,
       orderItems,
       campusId,
-      userId
+      userId,
     );
     discount = voucherResult.discountAmount;
     voucherId = voucherResult.voucher._id;
@@ -198,11 +201,11 @@ export const createOrder = async (orderData, userId) => {
             totalAmount,
             voucherId,
             voucherCode: voucherCodeApplied,
-            payment: payment || { method: 'cash', status: 'pending' },
+            payment: payment || { method: "cash", status: "pending" },
             note,
           },
         ],
-        { session }
+        { session },
       );
 
       // Commit voucher usage atomically
@@ -211,7 +214,7 @@ export const createOrder = async (orderData, userId) => {
         order._id,
         userId,
         discount,
-        session
+        session,
       );
 
       await session.commitTransaction();
@@ -237,7 +240,7 @@ export const createOrder = async (orderData, userId) => {
       subTotal: finalSubTotal,
       discount: 0,
       totalAmount,
-      payment: payment || { method: 'cash', status: 'pending' },
+      payment: payment || { method: "cash", status: "pending" },
       note,
     });
 
@@ -252,8 +255,8 @@ export const createOrder = async (orderData, userId) => {
 export const confirmOrderFromRedirect = async (orderId) => {
   const order = await Order.findOneAndUpdate(
     { _id: orderId },
-    { status: 'completed' },
-    { new: true }
+    { status: "completed" },
+    { new: true },
   );
 
   return order;
@@ -268,14 +271,14 @@ export const confirmOrderFromRedirect = async (orderId) => {
 export const reOrderToCart = async (userId, orderId, currentCanteenId) => {
   // 1. Lấy đơn hàng cũ (Snapshot quá khứ)
   const oldOrder = await Order.findOne({ _id: orderId, userId });
-  if (!oldOrder) throw new AppError('Không tìm thấy đơn hàng cũ', 404);
+  if (!oldOrder) throw new AppError("Không tìm thấy đơn hàng cũ", 404);
 
   // 2. Kiểm tra Campus
   // Nếu đơn cũ ở Canteen A, mà User đang đứng ở Canteen B -> Chặn ngay.
   if (oldOrder.canteenId.toString() !== currentCanteenId.toString()) {
     throw new AppError(
-      'Không thể đặt lại đơn hàng của Canteen khác khu vực hiện tại.',
-      400
+      "Không thể đặt lại đơn hàng của Canteen khác khu vực hiện tại.",
+      400,
     );
   }
 
@@ -297,8 +300,8 @@ export const reOrderToCart = async (userId, orderId, currentCanteenId) => {
       cart.items.length > 0
     ) {
       throw new AppError(
-        'Giỏ hàng đang chứa món của Canteen khác. Vui lòng thanh toán hoặc xóa giỏ hàng trước.',
-        400
+        "Giỏ hàng đang chứa món của Canteen khác. Vui lòng thanh toán hoặc xóa giỏ hàng trước.",
+        400,
       );
     }
 
@@ -321,10 +324,10 @@ export const reOrderToCart = async (userId, orderId, currentCanteenId) => {
     // LOGIC KIỂM TRA (VALIDATION CHAIN)
 
     // Check 1: Product tồn tại và còn Active?
-    if (!product || product.status !== 'available') {
+    if (!product || product.status !== "available") {
       report.failedItems.push({
         name: item.productName,
-        reason: 'Ngừng kinh doanh hoặc đã bị xóa',
+        reason: "Ngừng kinh doanh hoặc đã bị xóa",
       });
       continue;
     }
@@ -332,12 +335,12 @@ export const reOrderToCart = async (userId, orderId, currentCanteenId) => {
     // Check 2: Hôm nay có bán không?
     const isAvailableToday = await checkMenuAvailability(
       item.productId,
-      currentCanteenId
+      currentCanteenId,
     );
     if (!isAvailableToday) {
       report.failedItems.push({
         name: product.name,
-        reason: 'Hôm nay không phục vụ',
+        reason: "Hôm nay không phục vụ",
       });
       continue;
     }
@@ -346,7 +349,7 @@ export const reOrderToCart = async (userId, orderId, currentCanteenId) => {
     if (product.stock < item.quantity) {
       report.failedItems.push({
         name: product.name,
-        reason: 'Số lượng trong kho không đủ (Yêu cầu: ' + item.quantity + ')',
+        reason: "Số lượng trong kho không đủ (Yêu cầu: " + item.quantity + ")",
       });
       continue;
     }
@@ -356,7 +359,7 @@ export const reOrderToCart = async (userId, orderId, currentCanteenId) => {
 
     // B. Merge vào Cart
     const existingItemIndex = cart.items.findIndex(
-      (cartItem) => cartItem.productId.toString() === item.productId.toString()
+      (cartItem) => cartItem.productId.toString() === item.productId.toString(),
     );
 
     if (existingItemIndex > -1) {
@@ -372,7 +375,7 @@ export const reOrderToCart = async (userId, orderId, currentCanteenId) => {
       } else {
         report.failedItems.push({
           name: product.name,
-          reason: 'Tổng số lượng vượt quá tồn kho',
+          reason: "Tổng số lượng vượt quá tồn kho",
         });
       }
     } else {
@@ -381,7 +384,7 @@ export const reOrderToCart = async (userId, orderId, currentCanteenId) => {
         productId: product._id,
         quantity: item.quantity,
         price: currentPrice, // QUAN TRỌNG: Dùng giá hiện tại
-        note: item.note || '', // Copy note cũ (nếu có)
+        note: item.note || "", // Copy note cũ (nếu có)
       });
       report.successItems.push(product.name);
     }
@@ -428,12 +431,12 @@ export const getAllOrders = async (query = {}) => {
   }
 
   const orders = await Order.find(filter)
-    .populate('userId', 'name email')
-    .populate('canteenId', 'name location')
-    .populate('staffId', 'name')
+    .populate("userId", "name email")
+    .populate("canteenId", "name location")
+    .populate("staffId", "name")
     .populate({
-      path: 'items.productId',
-      select: 'name image',
+      path: "items.productId",
+      select: "name image",
       options: { includeDeleted: true },
     })
     .sort({ createdAt: -1 });
@@ -448,17 +451,17 @@ export const getAllOrders = async (query = {}) => {
  */
 export const getOrderById = async (id) => {
   const order = await Order.findById(id)
-    .populate('userId', 'name email')
-    .populate('canteenId', 'name location')
-    .populate('staffId', 'name')
+    .populate("userId", "name email")
+    .populate("canteenId", "name location")
+    .populate("staffId", "name")
     .populate({
-      path: 'items.productId',
-      select: 'name image price',
+      path: "items.productId",
+      select: "name image price",
       options: { includeDeleted: true },
     });
 
   if (!order) {
-    throw new AppError('Order not found', 404);
+    throw new AppError("Order not found", 404);
   }
   return order;
 };
@@ -470,10 +473,10 @@ export const getOrderById = async (id) => {
  */
 export const getOrdersByUser = async (userId) => {
   const orders = await Order.find({ userId })
-    .populate('canteenId', 'name location')
+    .populate("canteenId", "name location")
     .populate({
-      path: 'items.productId',
-      select: 'name image',
+      path: "items.productId",
+      select: "name image",
       options: { includeDeleted: true },
     })
     .sort({ createdAt: -1 });
@@ -482,27 +485,30 @@ export const getOrdersByUser = async (userId) => {
 };
 
 /**
- * Get order by QR code
- * @param {string} code - QR code
+ * Get order by QR code (JWT token)
+ * @param {string} code - QR code (JWT token)
  * @returns {Promise<Object>} Order object
  */
 export const getOrderByQRCode = async (code) => {
-  const order = await Order.findOne({ 'pickupQRCode.code': code })
-    .populate('userId', 'name email')
-    .populate('canteenId', 'name location')
+  // Decode JWT token
+  let decoded;
+  try {
+    decoded = verifyQRToken(code);
+  } catch (error) {
+    throw new AppError(error.message, 400);
+  }
+
+  const order = await Order.findById(decoded.orderId)
+    .populate("userId", "name email")
+    .populate("canteenId", "name location")
     .populate({
-      path: 'items.productId',
-      select: 'name image',
+      path: "items.productId",
+      select: "name image",
       options: { includeDeleted: true },
     });
 
   if (!order) {
-    throw new AppError('Order not found', 404);
-  }
-
-  // Check if QR code expired
-  if (order.pickupQRCode.expireAt < new Date()) {
-    throw new AppError('QR code has expired', 400);
+    throw new AppError("Không tìm thấy đơn hàng", 404);
   }
 
   return order;
@@ -515,16 +521,35 @@ export const getOrderByQRCode = async (code) => {
  * @param {string} staffId - Staff ID (optional)
  * @returns {Promise<Object>} Updated order
  */
-export const updateOrderStatus = async (id, status, staffId = null) => {
+export const updateOrderStatus = async (
+  id,
+  status,
+  staffId = null,
+  userRole = null,
+  staffCanteenId = null,
+) => {
   const order = await Order.findById(id);
 
   if (!order) {
-    throw new AppError('Order not found', 404);
+    throw new AppError("Không tìm thấy đơn hàng", 404);
+  }
+
+  // Cross-Canteen isolation check
+  if (userRole === "staff") {
+    const orderCanteen = order.canteenId._id
+      ? order.canteenId._id.toString()
+      : order.canteenId.toString();
+    if (orderCanteen !== staffCanteenId?.toString()) {
+      throw new AppError(
+        "Bạn không có quyền cập nhật đơn hàng của Canteen khác",
+        403,
+      );
+    }
   }
 
   const previousStatus = order.status;
 
-  if (status === 'cancelled' && previousStatus !== 'cancelled') {
+  if (status === "cancelled" && previousStatus !== "cancelled") {
     // Hoàn kho khi staff/admin chuyển trạng thái sang cancelled
     await handleInventoryRestoreForOrder(order.items);
   }
@@ -536,6 +561,26 @@ export const updateOrderStatus = async (id, status, staffId = null) => {
   }
 
   await order.save();
+
+  // Emit WebSocket event for real-time sync
+  if (order.canteenId) {
+    try {
+      const canteenId = order.canteenId._id
+        ? order.canteenId._id.toString()
+        : order.canteenId.toString();
+      notifyCanteen(canteenId, {
+        type: "order:statusChanged",
+        order: {
+          _id: order._id,
+          orderNumber: order.orderNumber,
+          status: order.status,
+          previousStatus,
+        },
+      });
+    } catch (error) {
+      console.error("WebSocket notification failed:", error.message);
+    }
+  }
 
   return order;
 };
@@ -550,11 +595,11 @@ export const updatePaymentStatus = async (id, paymentData) => {
   const order = await Order.findById(id);
 
   if (!order) {
-    throw new AppError('Order not found', 404);
+    throw new AppError("Order not found", 404);
   }
 
-  if (paymentData.status === 'completed') {
-    order.payment.status = 'completed';
+  if (paymentData.status === "completed") {
+    order.payment.status = "completed";
     order.payment.paidAt = new Date();
   } else {
     order.payment.status = paymentData.status;
@@ -579,23 +624,23 @@ export const cancelOrder = async (id, userId) => {
   const order = await Order.findById(id);
 
   if (!order) {
-    throw new AppError('Order not found', 404);
+    throw new AppError("Order not found", 404);
   }
 
   // Only allow cancellation for pending orders
-  if (!['pending', 'confirmed'].includes(order.status)) {
-    throw new AppError('Cannot cancel order in current status', 400);
+  if (!["pending", "confirmed"].includes(order.status)) {
+    throw new AppError("Cannot cancel order in current status", 400);
   }
 
   // Check if user owns the order or is staff/admin
   if (order.userId.toString() !== userId.toString()) {
-    throw new AppError('You are not authorized to cancel this order', 403);
+    throw new AppError("You are not authorized to cancel this order", 403);
   }
 
   // Hoàn lại tồn kho
   await handleInventoryRestoreForOrder(order.items);
 
-  order.status = 'cancelled';
+  order.status = "cancelled";
   await order.save();
 
   return order;
@@ -603,24 +648,96 @@ export const cancelOrder = async (id, userId) => {
 
 /**
  * Complete order (mark as picked up)
+ * Idempotent: if already completed, returns existing order
+ * Records audit: scannedBy + scannedAt
+ * Optimistic locking via __v prevents concurrent duplicate completion
  * @param {string} id - Order ID
  * @param {string} staffId - Staff ID
  * @returns {Promise<Object>} Completed order
  */
-export const completeOrder = async (id, staffId) => {
+export const completeOrder = async (
+  id,
+  staffId,
+  userRole = null,
+  staffCanteenId = null,
+) => {
   const order = await Order.findById(id);
 
   if (!order) {
-    throw new AppError('Order not found', 404);
+    throw new AppError("Không tìm thấy đơn hàng", 404);
   }
 
-  if (order.status !== 'ready') {
-    throw new AppError('Order is not ready for pickup', 400);
+  // Cross-Canteen isolation check
+  if (userRole === "staff") {
+    const orderCanteen = order.canteenId._id
+      ? order.canteenId._id.toString()
+      : order.canteenId.toString();
+    if (orderCanteen !== staffCanteenId?.toString()) {
+      throw new AppError(
+        "Bạn không có quyền xử lý đơn hàng của Canteen khác",
+        403,
+      );
+    }
   }
 
-  order.status = 'completed';
+  // Idempotency: if already completed, return as-is (200 OK)
+  if (order.status === "completed") {
+    return order;
+  }
+
+  if (order.status !== "ready") {
+    if (["pending", "confirmed", "preparing"].includes(order.status)) {
+      throw new AppError("Món chưa sẵn sàng để trả", 400);
+    }
+    if (order.status === "cancelled") {
+      throw new AppError("Đơn hàng đã bị hủy", 400);
+    }
+    throw new AppError(
+      "Không thể hoàn thành đơn hàng ở trạng thái hiện tại",
+      400,
+    );
+  }
+
+  order.status = "completed";
   order.staffId = staffId;
-  await order.save();
+
+  // Audit: Record who scanned and when
+  if (!order.pickupQRCode) {
+    order.pickupQRCode = {};
+  }
+  order.pickupQRCode.scannedBy = staffId;
+  order.pickupQRCode.scannedAt = new Date();
+
+  try {
+    await order.save();
+  } catch (error) {
+    // Optimistic locking: VersionError means another staff already completed
+    if (error.name === "VersionError") {
+      throw new AppError("Đơn hàng đã được xử lý bởi nhân viên khác", 409);
+    }
+    throw error;
+  }
+
+  // Emit WebSocket event for real-time sync
+  if (order.canteenId) {
+    try {
+      const canteenId = order.canteenId._id
+        ? order.canteenId._id.toString()
+        : order.canteenId.toString();
+      notifyCanteen(canteenId, {
+        type: "order:statusChanged",
+        order: {
+          _id: order._id,
+          orderNumber: order.orderNumber,
+          status: "completed",
+          previousStatus: "ready",
+          scannedBy: staffId,
+        },
+      });
+    } catch (error) {
+      console.error("WebSocket notification failed:", error.message);
+    }
+  }
 
   return order;
 };
@@ -645,12 +762,132 @@ export const getOrderStats = async (canteenId, startDate, endDate) => {
     { $match: matchStage },
     {
       $group: {
-        _id: '$status',
+        _id: "$status",
         count: { $sum: 1 },
-        totalRevenue: { $sum: '$totalAmount' },
+        totalRevenue: { $sum: "$totalAmount" },
       },
     },
   ]);
 
   return stats;
+};
+
+/**
+ * Scan QR and complete order (combined endpoint)
+ * Decodes JWT QR token → validates order → marks as completed
+ * @param {string} qrToken - JWT token from QR code
+ * @param {string} staffId - Staff ID performing the scan
+ * @returns {Promise<Object>} Completed order
+ */
+export const scanAndCompleteOrder = async (
+  qrToken,
+  staffId,
+  userRole = null,
+  staffCanteenId = null,
+) => {
+  // Step 1: Decode QR token
+  let decoded;
+  try {
+    decoded = verifyQRToken(qrToken);
+  } catch (error) {
+    throw new AppError(error.message, 400);
+  }
+
+  // Step 2: Complete the order
+  return await completeOrder(
+    decoded.orderId,
+    staffId,
+    userRole,
+    staffCanteenId,
+  );
+};
+
+/**
+ * Manual complete order by order number (fallback when camera fails)
+ * @param {string} orderNumber - Order number (e.g. ORD-20260220-ABC123)
+ * @param {string} staffId - Staff ID performing the action
+ * @returns {Promise<Object>} Completed order
+ */
+export const manualCompleteOrder = async (
+  orderNumber,
+  staffId,
+  userRole = null,
+  staffCanteenId = null,
+) => {
+  const order = await Order.findOne({ orderNumber });
+
+  if (!order) {
+    throw new AppError("Không tìm thấy đơn hàng với mã này", 404);
+  }
+
+  // Check QR expiration (same end-of-day rule applies to manual entry)
+  if (order.pickupQRCode && order.pickupQRCode.expireAt < new Date()) {
+    throw new AppError("Mã QR đã hết hạn sử dụng", 400);
+  }
+
+  return await completeOrder(
+    order._id.toString(),
+    staffId,
+    userRole,
+    staffCanteenId,
+  );
+};
+
+/**
+ * Auto-cancel expired ready orders for canteens past closing time
+ * Called by cron job
+ * @returns {Promise<Object>} Summary of cancelled orders
+ */
+export const autoCancelExpiredOrders = async () => {
+  const now = new Date();
+
+  // Find canteens whose closingTime + 15 min has passed
+  const canteens = await Canteen.find({ status: "active" });
+
+  let totalCancelled = 0;
+
+  for (const canteen of canteens) {
+    // Parse closingTime "HH:mm" and add 15 minutes
+    const [closeHour, closeMin] = canteen.closingTime.split(":").map(Number);
+    const closingPlus15 = closeHour * 60 + closeMin + 15;
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    if (currentMinutes >= closingPlus15) {
+      // Find all ready orders for this canteen TODAY
+      const readyOrders = await Order.find({
+        canteenId: canteen._id,
+        status: "ready",
+      });
+
+      for (const order of readyOrders) {
+        order.status = "cancelled";
+        order.cancelReason =
+          "Tự động hủy: Quá giờ đóng cửa, khách không đến nhận";
+        await order.save();
+
+        // Notify canteen staff
+        try {
+          notifyCanteen(canteen._id.toString(), {
+            type: "order:statusChanged",
+            order: {
+              _id: order._id,
+              orderNumber: order.orderNumber,
+              status: "cancelled",
+              previousStatus: "ready",
+              cancelReason: order.cancelReason,
+            },
+          });
+        } catch (error) {
+          console.error(
+            "WebSocket notification failed in cron:",
+            error.message,
+          );
+        }
+
+        totalCancelled++;
+      }
+    }
+  }
+
+  return { totalCancelled, timestamp: now };
 };

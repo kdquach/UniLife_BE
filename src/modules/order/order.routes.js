@@ -24,6 +24,16 @@ router.get(
   restrictTo("staff", "admin"),
   orderController.getOrderByQRCode,
 );
+router.post(
+  "/scan-complete",
+  restrictTo("staff", "admin"),
+  orderController.scanAndComplete,
+);
+router.post(
+  "/manual-complete",
+  restrictTo("staff", "admin"),
+  orderController.manualComplete,
+);
 router.patch(
   "/:id/status",
   restrictTo("staff", "admin"),

@@ -24,6 +24,14 @@ const canteenSchema = new mongoose.Schema(
       required: [true, "Canteen must belong to a Campus"],
       index: true, // Rất quan trọng để filter canteen theo vùng
     },
+    openingTime: {
+      type: String,
+      default: "07:00", // Format "HH:mm"
+    },
+    closingTime: {
+      type: String,
+      default: "21:00", // Format "HH:mm"
+    },
   },
   {
     timestamps: true,
