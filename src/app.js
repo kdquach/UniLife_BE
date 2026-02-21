@@ -31,7 +31,7 @@ import bannerRoutes from "./modules/banner/banner.routes.js";
 import notificationRoutes from "./modules/notification/notification.routes.js";
 import reportRoutes from "./modules/report/report.routes.js";
 import uploadRoutes from "./modules/upload/upload.routes.js";
-import paymentRoutes from "./modules/payment/momo.routes.js";
+import paymentRoutes from "./modules/payment/payment.routes.js";
 
 // Import error handler
 import errorHandler from "./middlewares/error.middleware.js";
@@ -42,7 +42,12 @@ const app = express();
 // ============ Middlewares ============
 
 // Enable CORS
-app.use(cors());
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+  }),
+);
 
 // Body parser
 app.use(express.json({ limit: "10mb" }));
