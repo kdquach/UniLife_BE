@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import crypto from "crypto";
+import { generateQRToken } from "../../utils/qrToken.js";
 
 // Embedded order item schema
 const orderItemSchema = new mongoose.Schema(
@@ -170,6 +171,7 @@ const orderSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    optimisticConcurrency: true,
   },
 );
 
@@ -192,15 +194,19 @@ orderSchema.pre("save", async function (next) {
     this.orderNumber = `ORD-${dateStr}-${random}`;
   }
 
-  // Generate pickup QR code
+  // Generate pickup QR code as JWT token (expires at end-of-day 23:59:59)
   if (
     this.isNew ||
     (this.isModified("status") && this.status === "confirmed")
   ) {
     if (!this.pickupQRCode || !this.pickupQRCode.code) {
+      // End of day expiration: 23:59:59 today
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999);
+
       this.pickupQRCode = {
-        code: crypto.randomBytes(16).toString("hex"),
-        expireAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        code: generateQRToken(this._id.toString(), this.orderNumber),
+        expireAt: endOfDay,
       };
     }
   }
