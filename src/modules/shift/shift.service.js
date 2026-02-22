@@ -10,6 +10,59 @@ function normalizeDateOnly(value) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
+function timeToMinutes(value) {
+  if (!value || typeof value !== "string") return null;
+  const [hours, minutes] = value.split(":").map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+  return hours * 60 + minutes;
+}
+
+function rangesOverlap(startA, endA, startB, endB) {
+  return startA < endB && startB < endA;
+}
+
+const validateAssignmentOverlap = async ({
+  staffId,
+  canteenId,
+  date,
+  shift,
+  excludeAssignmentId = null,
+}) => {
+  const normalizedDate = normalizeDateOnly(date);
+  const dayStart = new Date(normalizedDate);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(normalizedDate);
+  dayEnd.setHours(23, 59, 59, 999);
+
+  const nextStart = timeToMinutes(shift?.startTime);
+  const nextEnd = timeToMinutes(shift?.endTime);
+  if (nextStart === null || nextEnd === null) {
+    throw new AppError("Shift time is invalid", 400);
+  }
+
+  const existingAssignments = await StaffShift.find({
+    staffId,
+    canteenId,
+    isDeleted: { $ne: true },
+    date: {
+      $gte: dayStart,
+      $lte: dayEnd,
+    },
+    ...(excludeAssignmentId ? { _id: { $ne: excludeAssignmentId } } : {}),
+  }).populate("shiftId", "startTime endTime");
+
+  const hasConflict = existingAssignments.some((assignment) => {
+    const currentStart = timeToMinutes(assignment?.shiftId?.startTime);
+    const currentEnd = timeToMinutes(assignment?.shiftId?.endTime);
+    if (currentStart === null || currentEnd === null) return false;
+    return rangesOverlap(nextStart, nextEnd, currentStart, currentEnd);
+  });
+
+  if (hasConflict) {
+    throw new AppError("Staff has overlapping shift assignment", 400);
+  }
+};
+
 // ============ Shift Services ============
 
 /**
@@ -28,7 +81,7 @@ export const createShift = async (shiftData) => {
  * @returns {Promise<Array>} Array of shifts
  */
 export const getAllShifts = async (query = {}) => {
-  const filter = {};
+  const filter = { isDeleted: { $ne: true } };
 
   if (query.canteenId) {
     filter.canteenId = query.canteenId;
@@ -50,7 +103,10 @@ export const getAllShifts = async (query = {}) => {
  * @returns {Promise<Object>} Shift object
  */
 export const getShiftById = async (id) => {
-  const shift = await Shift.findById(id).populate("canteenId", "name location");
+  const shift = await Shift.findOne({
+    _id: id,
+    isDeleted: { $ne: true },
+  }).populate("canteenId", "name location");
 
   if (!shift) {
     throw new AppError("Shift not found", 404);
@@ -65,7 +121,13 @@ export const getShiftById = async (id) => {
  * @returns {Promise<Object>} Updated shift
  */
 export const updateShift = async (id, updateData) => {
-  const shift = await Shift.findByIdAndUpdate(id, updateData, {
+  const shift = await Shift.findOneAndUpdate({
+    _id: id,
+    isDeleted: { $ne: true },
+  }, {
+    $set: updateData,
+    $inc: { version: 1 },
+  }, {
     new: true,
     runValidators: true,
   });
@@ -82,13 +144,16 @@ export const updateShift = async (id, updateData) => {
  * @param {string} id - Shift ID
  */
 export const deleteShift = async (id) => {
-  const shift = await Shift.findByIdAndDelete(id);
+  const shift = await Shift.findOneAndDelete({
+    _id: id,
+    isDeleted: { $ne: true },
+  });
   if (!shift) {
     throw new AppError("Shift not found", 404);
   }
 
   // Also delete all assignments for this shift
-  await StaffShift.deleteMany({ shiftId: id });
+  await StaffShift.deleteMany({ shiftId: id, isDeleted: { $ne: true } });
 };
 
 // ============ Staff Shift Assignment Services ============
@@ -102,7 +167,7 @@ export const assignUserToShift = async (assignmentData) => {
   const { shiftId, staffId, canteenId, date, assignedBy } = assignmentData;
 
   // Check if shift exists
-  const shift = await Shift.findById(shiftId);
+  const shift = await Shift.findOne({ _id: shiftId, isDeleted: { $ne: true } });
   if (!shift) {
     throw new AppError("Shift not found", 404);
   }
@@ -112,6 +177,7 @@ export const assignUserToShift = async (assignmentData) => {
     shiftId,
     staffId,
     date: new Date(date),
+    isDeleted: { $ne: true },
   });
   if (existingAssignment) {
     throw new AppError(
@@ -119,6 +185,13 @@ export const assignUserToShift = async (assignmentData) => {
       400,
     );
   }
+
+  await validateAssignmentOverlap({
+    staffId,
+    canteenId,
+    date,
+    shift,
+  });
 
   const assignment = await StaffShift.create({
     shiftId,
@@ -137,7 +210,7 @@ export const assignUserToShift = async (assignmentData) => {
  * @returns {Promise<Array>} Array of assignments
  */
 export const getShiftAssignments = async (query = {}) => {
-  const filter = {};
+  const filter = { isDeleted: { $ne: true } };
 
   if (query.shiftId) {
     filter.shiftId = query.shiftId;
@@ -176,7 +249,7 @@ export const getShiftAssignments = async (query = {}) => {
  * @returns {Promise<Array>} Array of assignments
  */
 export const getAssignmentsByStaff = async (staffId, query = {}) => {
-  const filter = { staffId };
+  const filter = { staffId, isDeleted: { $ne: true } };
 
   if (query.status) {
     filter.status = query.status;
@@ -266,7 +339,10 @@ export const checkOut = async (assignmentId, staffId) => {
  * @param {string} assignmentId - Assignment ID
  */
 export const removeStaffFromShift = async (assignmentId) => {
-  const assignment = await StaffShift.findByIdAndDelete(assignmentId);
+  const assignment = await StaffShift.findOneAndDelete({
+    _id: assignmentId,
+    isDeleted: { $ne: true },
+  });
   if (!assignment) {
     throw new AppError("Shift assignment not found", 404);
   }
@@ -279,8 +355,11 @@ export const removeStaffFromShift = async (assignmentId) => {
  * @returns {Promise<Object>} Updated assignment
  */
 export const updateAssignment = async (assignmentId, updateData) => {
-  const assignment = await StaffShift.findByIdAndUpdate(
-    assignmentId,
+  const assignment = await StaffShift.findOneAndUpdate(
+    {
+      _id: assignmentId,
+      isDeleted: { $ne: true },
+    },
     updateData,
     { new: true, runValidators: true },
   );
@@ -302,7 +381,10 @@ export const bulkSaveAssignments = async (assignments = [], currentUser = null) 
   for (const item of assignments) {
     if (!item?.shiftId || !item?.staffId || !item?.date) continue;
 
-    const shift = await Shift.findById(item.shiftId);
+    const shift = await Shift.findOne({
+      _id: item.shiftId,
+      isDeleted: { $ne: true },
+    });
     if (!shift) continue;
 
     if (
@@ -322,11 +404,19 @@ export const bulkSaveAssignments = async (assignments = [], currentUser = null) 
       assignedBy: currentUser?._id || null,
     };
 
+    await validateAssignmentOverlap({
+      staffId: item.staffId,
+      canteenId: shift.canteenId,
+      date: dateOnly,
+      shift,
+    });
+
     const assignment = await StaffShift.findOneAndUpdate(
       {
         shiftId: item.shiftId,
         staffId: item.staffId,
         date: dateOnly,
+        isDeleted: { $ne: true },
       },
       payload,
       {
@@ -343,7 +433,7 @@ export const bulkSaveAssignments = async (assignments = [], currentUser = null) 
 };
 
 export const publishAssignments = async (payload = {}, currentUser = null) => {
-  const filter = {};
+  const filter = { isDeleted: { $ne: true } };
 
   if (currentUser?.canteenId) {
     filter.canteenId = currentUser.canteenId;
@@ -409,7 +499,10 @@ export const publishAssignments = async (payload = {}, currentUser = null) => {
 };
 
 export const createShiftChangeRequest = async (payload = {}, currentUser = null) => {
-  const assignment = await StaffShift.findById(payload.staffShiftId);
+  const assignment = await StaffShift.findOne({
+    _id: payload.staffShiftId,
+    isDeleted: { $ne: true },
+  });
 
   if (!assignment) {
     throw new AppError("Shift assignment not found", 404);
@@ -514,14 +607,26 @@ export const reviewShiftChangeRequest = async (
 
   if (status === "approved") {
     if (request.requestedShiftId) {
-      await StaffShift.findByIdAndUpdate(request.staffShiftId._id, {
-        shiftId: request.requestedShiftId,
-        status: "scheduled",
-      });
+      await StaffShift.findOneAndUpdate(
+        {
+          _id: request.staffShiftId._id,
+          isDeleted: { $ne: true },
+        },
+        {
+          shiftId: request.requestedShiftId,
+          status: "scheduled",
+        },
+      );
     } else {
-      await StaffShift.findByIdAndUpdate(request.staffShiftId._id, {
-        status: "cancelled",
-      });
+      await StaffShift.findOneAndUpdate(
+        {
+          _id: request.staffShiftId._id,
+          isDeleted: { $ne: true },
+        },
+        {
+          status: "cancelled",
+        },
+      );
     }
   }
 
@@ -562,7 +667,7 @@ export const reviewShiftChangeRequest = async (
 };
 
 export const getAvailableShiftsForChangeRequest = async (currentUser = null) => {
-  const filter = { status: "active" };
+  const filter = { status: "active", isDeleted: { $ne: true } };
 
   if (currentUser?.canteenId) {
     filter.canteenId = currentUser.canteenId;

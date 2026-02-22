@@ -12,7 +12,95 @@ import {
   restoreProductInventory,
 } from "../product/inventory/product.inventory.service.js";
 import { verifyQRToken } from "../../utils/qrToken.js";
-import { notifyCanteen } from "../../websocket/notify.js";
+import { createNotification } from "../notification/notification.service.js";
+import { notifyCanteen, notifyUser } from "../../websocket/notify.js";
+
+const ORDER_STATUS_LABELS = {
+  pending: "Chờ xác nhận",
+  confirmed: "Đã xác nhận",
+  preparing: "Đang chuẩn bị",
+  ready: "Sẵn sàng nhận món",
+  completed: "Hoàn thành",
+  cancelled: "Đã hủy",
+};
+
+const buildOrderStatusNotificationContent = (status, orderNumber) => {
+  const normalizedOrderNumber = orderNumber || "---";
+
+  switch (status) {
+    case "confirmed":
+      return {
+        title: "Đơn hàng đã được xác nhận",
+        content: `Đơn #${normalizedOrderNumber} đã được quán xác nhận.`,
+      };
+    case "preparing":
+      return {
+        title: "Đơn hàng đang được chuẩn bị",
+        content: `Đơn #${normalizedOrderNumber} đang được quán chuẩn bị.`,
+      };
+    case "ready":
+      return {
+        title: "Đơn hàng đã sẵn sàng",
+        content: `Đơn #${normalizedOrderNumber} đã sẵn sàng, mời bạn đến nhận món.`,
+      };
+    case "completed":
+      return {
+        title: "Đơn hàng đã hoàn thành",
+        content: `Đơn #${normalizedOrderNumber} đã được hoàn tất. Chúc bạn ngon miệng!`,
+      };
+    case "cancelled":
+      return {
+        title: "Đơn hàng đã bị hủy",
+        content: `Đơn #${normalizedOrderNumber} đã bị hủy. Vui lòng kiểm tra chi tiết đơn hàng.`,
+      };
+    default:
+      return {
+        title: "Đơn hàng đã cập nhật trạng thái",
+        content: `Đơn #${normalizedOrderNumber} đã chuyển sang trạng thái ${ORDER_STATUS_LABELS[status] || status}.`,
+      };
+  }
+};
+
+const notifyOrderStatusChangedToUser = async ({
+  order,
+  previousStatus,
+  reason = null,
+}) => {
+  if (!order?.userId || !order?._id || !order?.status) return;
+  if (previousStatus === order.status) return;
+
+  try {
+    const { title, content } = buildOrderStatusNotificationContent(
+      order.status,
+      order.orderNumber,
+    );
+
+    const notification = await createNotification({
+      userId: order.userId,
+      canteenId: order.canteenId || null,
+      type: "order",
+      title,
+      content,
+      metadata: {
+        kind: "order_status_changed",
+        orderId: order._id,
+        status: order.status,
+        previousStatus,
+        reason,
+      },
+    });
+
+    notifyUser(String(order.userId), {
+      notificationId: String(notification._id),
+      title: notification.title,
+      content: notification.content,
+      type: notification.type,
+      createdAt: notification.createdAt,
+    });
+  } catch (error) {
+    console.error("Failed to notify user order status change:", error.message);
+  }
+};
 
 // Helper: Xử lý inventory khi tạo order
 const handleInventoryForOrder = async (orderItems) => {
@@ -562,6 +650,11 @@ export const updateOrderStatus = async (
 
   await order.save();
 
+  await notifyOrderStatusChangedToUser({
+    order,
+    previousStatus,
+  });
+
   // Emit WebSocket event for real-time sync
   if (order.canteenId) {
     try {
@@ -718,6 +811,11 @@ export const completeOrder = async (
     throw error;
   }
 
+  await notifyOrderStatusChangedToUser({
+    order,
+    previousStatus: "ready",
+  });
+
   // Emit WebSocket event for real-time sync
   if (order.canteenId) {
     try {
@@ -860,10 +958,17 @@ export const autoCancelExpiredOrders = async () => {
       });
 
       for (const order of readyOrders) {
+        const previousStatus = order.status;
         order.status = "cancelled";
         order.cancelReason =
           "Tự động hủy: Quá giờ đóng cửa, khách không đến nhận";
         await order.save();
+
+        await notifyOrderStatusChangedToUser({
+          order,
+          previousStatus,
+          reason: order.cancelReason,
+        });
 
         // Notify canteen staff
         try {

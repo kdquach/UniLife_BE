@@ -9,6 +9,7 @@ router.use(protect);
 
 // User notification routes
 router.get("/my", notificationController.getMyNotifications);
+router.get("/feed", notificationController.getNotificationFeed);
 router.get("/unread-count", notificationController.getUnreadCount);
 router.patch("/:id/read", notificationController.markAsRead);
 router.patch("/read-all", notificationController.markAllAsRead);

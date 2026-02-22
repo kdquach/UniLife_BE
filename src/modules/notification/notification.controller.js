@@ -1,27 +1,48 @@
 import catchAsync from "../../utils/catchAsync.js";
 import * as notificationService from "./notification.service.js";
-import {
-  paginatedQuery,
-  filterPresets,
-  formatPaginatedResponse,
-} from "../../utils/queryHelper.js";
-import { Notification, SystemNotification } from "./notification.model.js";
+import { paginatedQuery, formatPaginatedResponse } from "../../utils/queryHelper.js";
+import { SystemNotification } from "./notification.model.js";
 
 // ============ User Notification Controllers ============
 
 export const getMyNotifications = catchAsync(async (req, res) => {
-  const result = await paginatedQuery(Notification, req.query, {
-    ...filterPresets.notification,
-    baseFilter: { userId: req.user._id },
-    populate: [{ path: "canteenId", select: "name" }],
+  const result = await notificationService.getMyNotifications(
+    req.user._id,
+    req.query,
+    req.user.canteenId,
+  );
+  res.status(200).json({
+    status: "success",
+    data: result.data,
+    pagination: result.pagination,
+    message: "Lấy thông báo thành công",
   });
-  res
-    .status(200)
-    .json(formatPaginatedResponse(result, "Lấy thông báo thành công"));
+});
+
+export const getNotificationFeed = catchAsync(async (req, res) => {
+  const result = await notificationService.getNotificationFeed(
+    {
+      userId: req.user._id,
+      role: req.user.role,
+      canteenId: req.user.canteenId || null,
+    },
+    req.query,
+  );
+
+  res.status(200).json({
+    status: "success",
+    data: result.data,
+    pagination: result.pagination,
+    message: "Lấy notification feed thành công",
+  });
 });
 
 export const getUnreadCount = catchAsync(async (req, res) => {
-  const count = await notificationService.getUnreadCount(req.user._id);
+  const count = await notificationService.getUnreadCount(
+    req.user._id,
+    req.user.canteenId,
+    req.user.role,
+  );
   res.status(200).json({ status: "success", data: { unreadCount: count } });
 });
 
@@ -29,24 +50,29 @@ export const markAsRead = catchAsync(async (req, res) => {
   const notification = await notificationService.markAsRead(
     req.params.id,
     req.user._id,
+    req.user.canteenId,
   );
   res.status(200).json({ status: "success", data: { notification } });
 });
 
 export const markAllAsRead = catchAsync(async (req, res) => {
-  await notificationService.markAllAsRead(req.user._id);
+  await notificationService.markAllAsRead(req.user._id, req.user.canteenId);
   res
     .status(200)
     .json({ status: "success", message: "All notifications marked as read" });
 });
 
 export const deleteNotification = catchAsync(async (req, res) => {
-  await notificationService.deleteNotification(req.params.id, req.user._id);
+  await notificationService.deleteNotification(
+    req.params.id,
+    req.user._id,
+    req.user.canteenId,
+  );
   res.status(204).json({ status: "success", data: null });
 });
 
 export const deleteAllNotifications = catchAsync(async (req, res) => {
-  await notificationService.deleteAllNotifications(req.user._id);
+  await notificationService.deleteAllNotifications(req.user._id, req.user.canteenId);
   res.status(204).json({ status: "success", data: null });
 });
 
@@ -90,6 +116,7 @@ export const getAllSystemNotifications = catchAsync(async (req, res) => {
 export const getSystemNotificationById = catchAsync(async (req, res) => {
   const notification = await notificationService.getSystemNotificationById(
     req.params.id,
+    req.user.canteenId,
   );
   res.status(200).json({ status: "success", data: { notification } });
 });
@@ -98,12 +125,16 @@ export const updateSystemNotification = catchAsync(async (req, res) => {
   const notification = await notificationService.updateSystemNotification(
     req.params.id,
     req.body,
+    req.user.canteenId,
   );
   res.status(200).json({ status: "success", data: { notification } });
 });
 
 export const deleteSystemNotification = catchAsync(async (req, res) => {
-  await notificationService.deleteSystemNotification(req.params.id);
+  await notificationService.deleteSystemNotification(
+    req.params.id,
+    req.user.canteenId,
+  );
   res.status(204).json({ status: "success", data: null });
 });
 
