@@ -120,6 +120,14 @@ const staffShiftSchema = new mongoose.Schema(
       trim: true,
       maxlength: [500, "Early leave reason cannot exceed 500 characters"],
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    version: {
+      type: Number,
+      default: 1,
+    },
   },
   {
     timestamps: true,

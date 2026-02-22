@@ -54,6 +54,14 @@ const shiftSchema = new mongoose.Schema(
       enum: ["active", "inactive"],
       default: "active",
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    version: {
+      type: Number,
+      default: 1,
+    },
   },
   {
     timestamps: true,
