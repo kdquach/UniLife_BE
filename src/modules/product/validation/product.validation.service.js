@@ -46,7 +46,12 @@ const validateUniqueNameInCanteen = async (canteenId, name, excludeId) => {
 };
 
 const validatePriceRule = (price, originalPrice) => {
-  if (originalPrice === null || originalPrice === undefined) {
+  // Nếu không có giá gốc hoặc giá gốc <= 0, bỏ qua validation
+  if (
+    originalPrice === null ||
+    originalPrice === undefined ||
+    originalPrice <= 0
+  ) {
     return;
   }
 
