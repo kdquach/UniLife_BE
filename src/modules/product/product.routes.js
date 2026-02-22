@@ -15,13 +15,22 @@ router.get(
   '/canteen/:canteenId/search',
   productController.searchProductsByCanteen
 );
-router.get('/:id/inventory-check', productController.getProductInventoryCheck);
+
+// Admin routes for deleted products - must be before /:id
 router.get(
   '/deleted',
   protect,
   restrictTo('admin'),
   productController.getDeletedProducts
 );
+
+// Inventory routes - must be before /:id
+router.get('/inventory/out-of-stock', productController.getOutOfStockProducts);
+router.get('/inventory/low-stock', productController.getLowStockProducts);
+router.get('/:id/inventory-check', productController.getProductInventoryCheck);
+router.get('/:id/inventory', productController.getProductInventory);
+
+// Get by ID - must be after specific routes
 router.get('/:id', productController.getProductById);
 
 // Protected routes
@@ -59,11 +68,6 @@ router.delete(
   '/:id/recipe/:ingredientId',
   productController.removeRecipeIngredient
 );
-
-// Inventory management
-router.get('/inventory/out-of-stock', productController.getOutOfStockProducts);
-router.get('/inventory/low-stock', productController.getLowStockProducts);
-router.get('/:id/inventory', productController.getProductInventory);
 
 // Admin only
 router.patch(
