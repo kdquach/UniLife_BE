@@ -90,9 +90,10 @@ export const getAllProducts = async (queryParams) => {
  * @returns {Promise<Object>} Product object
  */
 export const getProductById = async (id) => {
-  const product = await Product.findById(id)
-    .populate('categoryId', 'name')
-    .populate('canteenId', 'name location');
+  const product = await Product.findById(id).populate(
+    'canteenId',
+    'name location'
+  );
 
   if (!product) {
     throw new AppError('Product not found', 404);
@@ -178,43 +179,16 @@ export const updateProduct = async (id, updateData, files) => {
 
   const oldImageUrls = imagePayload ? getProductImageUrls(currentProduct) : [];
 
-  // Xử lý cập nhật ảnh
   if (imagePayload) {
     validatedData.image = imagePayload.image;
     validatedData.images = imagePayload.images;
-  } else if (updateData.keepImageUrls !== undefined) {
-    // Nếu không có ảnh mới nhưng có thông tin ảnh cần giữ lại
-    const keepUrls = Array.isArray(updateData.keepImageUrls)
-      ? updateData.keepImageUrls
-      : JSON.parse(updateData.keepImageUrls || '[]');
-
-    // Lọc ra ảnh cần xóa
-    const currentUrls = getProductImageUrls(currentProduct);
-    const urlsToDelete = currentUrls.filter((url) => !keepUrls.includes(url));
-
-    // Cập nhật danh sách ảnh
-    if (keepUrls.length > 0) {
-      validatedData.image = keepUrls[0];
-      validatedData.images = keepUrls;
-    } else {
-      // Xóa tất cả ảnh nếu không giữ ảnh nào
-      validatedData.image = null;
-      validatedData.images = [];
-    }
-
-    // Xóa ảnh trên Cloudinary
-    if (urlsToDelete.length > 0) {
-      await deleteProductImagesByUrls(urlsToDelete);
-    }
   }
 
   try {
     const product = await Product.findByIdAndUpdate(id, validatedData, {
       new: true,
       runValidators: true,
-    })
-      .populate('categoryId', 'name')
-      .populate('canteenId', 'name location');
+    });
 
     if (imagePayload && oldImageUrls.length > 0) {
       await deleteProductImagesByUrls(oldImageUrls);
@@ -288,10 +262,6 @@ export const restoreProduct = async (id) => {
   product.isDeleted = false;
   product.deletedAt = null;
   await product.save();
-
-  // Populate dữ liệu trước khi trả về
-  await product.populate('categoryId', 'name');
-  await product.populate('canteenId', 'name location');
 
   return product;
 };
