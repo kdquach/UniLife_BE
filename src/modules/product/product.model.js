@@ -180,17 +180,6 @@ productSchema.pre('countDocuments', function (next) {
   return next();
 });
 
-// productSchema.pre("save", function (next) {
-//   if (this.isModified("name") && !this.slug) {
-//     this.slug = this.name
-//       .toLowerCase()
-//       .replace(/[^a-z0-9\s-]/g, "")
-//       .replace(/\s+/g, "-")
-//       .replace(/-+/g, "-");
-//   }
-//   next();
-// });
-
 // Check low stock
 productSchema.methods.isLowStock = function () {
   return this.stockQuantity <= this.lowStockThreshold;
