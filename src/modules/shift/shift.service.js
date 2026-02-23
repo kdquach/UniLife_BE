@@ -26,6 +26,15 @@ function isWeekend(date = new Date()) {
   return day === 0 || day === 6;
 }
 
+function ensureRoleHasCanteen(currentUser = null) {
+  if (
+    (currentUser?.role === "manager" || currentUser?.role === "staff")
+    && !currentUser?.canteenId
+  ) {
+    throw new AppError("Tài khoản chưa được gán canteen", 400);
+  }
+}
+
 const validateAssignmentOverlap = async ({
   staffId,
   canteenId,
@@ -78,28 +87,6 @@ const validateAssignmentOverlap = async ({
 export const createShift = async (shiftData) => {
   const shift = await Shift.create(shiftData);
   return shift;
-};
-
-/**
- * Get all shifts
- * @param {Object} query - Query parameters
- * @returns {Promise<Array>} Array of shifts
- */
-export const getAllShifts = async (query = {}) => {
-  const filter = { isDeleted: { $ne: true } };
-
-  if (query.canteenId) {
-    filter.canteenId = query.canteenId;
-  }
-  if (query.status) {
-    filter.status = query.status;
-  }
-
-  const shifts = await Shift.find(filter)
-    .populate("canteenId", "name location")
-    .sort({ name: 1 });
-
-  return shifts;
 };
 
 /**
@@ -210,72 +197,6 @@ export const assignUserToShift = async (assignmentData) => {
 };
 
 /**
- * Get shift assignments
- * @param {Object} query - Query parameters
- * @returns {Promise<Array>} Array of assignments
- */
-export const getShiftAssignments = async (query = {}) => {
-  const filter = { isDeleted: { $ne: true } };
-
-  if (query.shiftId) {
-    filter.shiftId = query.shiftId;
-  }
-  if (query.staffId) {
-    filter.staffId = query.staffId;
-  }
-  if (query.canteenId) {
-    filter.canteenId = query.canteenId;
-  }
-  if (query.status) {
-    filter.status = query.status;
-  }
-  if (query.date) {
-    const date = new Date(query.date);
-    filter.date = {
-      $gte: new Date(date.setHours(0, 0, 0, 0)),
-      $lte: new Date(date.setHours(23, 59, 59, 999)),
-    };
-  }
-
-  const assignments = await StaffShift.find(filter)
-    .populate("shiftId", "name startTime endTime")
-    .populate("staffId", "fullName email")
-    .populate("canteenId", "name")
-    .populate("assignedBy", "fullName")
-    .sort({ date: -1 });
-
-  return assignments;
-};
-
-/**
- * Get assignments by staff
- * @param {string} staffId - Staff ID
- * @param {Object} query - Additional query parameters
- * @returns {Promise<Array>} Array of assignments
- */
-export const getAssignmentsByStaff = async (staffId, query = {}) => {
-  const filter = { staffId, isDeleted: { $ne: true } };
-
-  if (query.status) {
-    filter.status = query.status;
-  }
-
-  if (query.startDate && query.endDate) {
-    filter.date = {
-      $gte: new Date(query.startDate),
-      $lte: new Date(query.endDate),
-    };
-  }
-
-  const assignments = await StaffShift.find(filter)
-    .populate("shiftId", "name startTime endTime")
-    .populate("canteenId", "name location")
-    .sort({ date: -1 });
-
-  return assignments;
-};
-
-/**
  * Check in to shift
  * @param {string} assignmentId - Assignment ID
  * @param {string} staffId - Staff ID
@@ -383,10 +304,7 @@ export const removeUserFromShift = async (assignmentId) => {
 export const bulkSaveAssignments = async (assignments = [], currentUser = null) => {
   const saved = [];
   let scopedCanteenId = currentUser?.canteenId ? String(currentUser.canteenId) : null;
-
-  if ((currentUser?.role === "manager" || currentUser?.role === "staff") && !scopedCanteenId) {
-    throw new AppError("Tài khoản chưa được gán canteen", 400);
-  }
+  ensureRoleHasCanteen(currentUser);
 
   for (const item of assignments) {
     if (!item?.shiftId || !item?.staffId || !item?.date) continue;
@@ -455,10 +373,7 @@ export const bulkSaveAssignments = async (assignments = [], currentUser = null) 
 
 export const publishAssignments = async (payload = {}, currentUser = null) => {
   const filter = { isDeleted: { $ne: true } };
-
-  if ((currentUser?.role === "manager" || currentUser?.role === "staff") && !currentUser?.canteenId) {
-    throw new AppError("Tài khoản chưa được gán canteen", 400);
-  }
+  ensureRoleHasCanteen(currentUser);
 
   if (currentUser?.canteenId) {
     filter.canteenId = currentUser.canteenId;

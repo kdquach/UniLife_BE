@@ -56,6 +56,23 @@ const buildCursorFilter = (cursor) => {
   };
 };
 
+const buildActiveSystemFilter = (role, canteenId = null, extraFilter = {}) => {
+  const now = new Date();
+  const filter = {
+    isActive: true,
+    activeFrom: { $lte: now },
+    $or: [{ activeTo: null }, { activeTo: { $gte: now } }],
+    targetRole: { $in: ["all", role] },
+    ...extraFilter,
+  };
+
+  if (canteenId) {
+    filter.$and = [{ $or: [{ canteenId }, { canteenId: null }] }];
+  }
+
+  return filter;
+};
+
 // ============ User Notification Services ============
 
 export const createNotification = async (notificationData) => {
@@ -70,17 +87,6 @@ export const createBulkNotifications = async (userIds, notificationData) => {
   }));
   const result = await Notification.insertMany(notifications);
   return result;
-};
-
-export const getNotificationsByUser = async (userId, query = {}) => {
-  const filter = withCanteenScope({ userId }, query.canteenId);
-  if (query.isRead !== undefined) filter.isRead = query.isRead;
-  if (query.type) filter.type = query.type;
-
-  const notifications = await Notification.find(filter)
-    .sort({ createdAt: -1 })
-    .limit(query.limit || 50);
-  return notifications;
 };
 
 export const getMyNotifications = async (userId, query = {}, canteenId = null) => {
@@ -127,17 +133,7 @@ export const getUnreadCount = async (userId, canteenId = null, role = "customer"
     withCanteenScope({ userId, isRead: false }, canteenId),
   );
 
-  const now = new Date();
-  const systemFilter = {
-    isActive: true,
-    activeFrom: { $lte: now },
-    $or: [{ activeTo: null }, { activeTo: { $gte: now } }],
-    targetRole: { $in: ["all", role] },
-  };
-
-  if (canteenId) {
-    systemFilter.$and = [{ $or: [{ canteenId }, { canteenId: null }] }];
-  }
+  const systemFilter = buildActiveSystemFilter(role, canteenId);
 
   const activeSystemIds = await SystemNotification.find(systemFilter).distinct("_id");
   if (!activeSystemIds.length) return personalUnread;
@@ -207,17 +203,7 @@ export const markAllAsRead = async (userId, canteenId = null, role = "customer")
     { isRead: true, readAt: new Date() },
   );
 
-  const now = new Date();
-  const systemFilter = {
-    isActive: true,
-    activeFrom: { $lte: now },
-    $or: [{ activeTo: null }, { activeTo: { $gte: now } }],
-    targetRole: { $in: ["all", role] },
-  };
-
-  if (canteenId) {
-    systemFilter.$and = [{ $or: [{ canteenId }, { canteenId: null }] }];
-  }
+  const systemFilter = buildActiveSystemFilter(role, canteenId);
 
   const activeSystemIds = await SystemNotification.find(systemFilter)
     .select("_id")
@@ -272,17 +258,7 @@ export const createSystemNotification = async (notificationData, createdBy) => {
 };
 
 export const getActiveSystemNotifications = async (role, canteenId = null) => {
-  const now = new Date();
-  const filter = {
-    isActive: true,
-    activeFrom: { $lte: now },
-    $or: [{ activeTo: null }, { activeTo: { $gte: now } }],
-    targetRole: { $in: ["all", role] },
-  };
-
-  if (canteenId) {
-    filter.$and = [{ $or: [{ canteenId }, { canteenId: null }] }];
-  }
+  const filter = buildActiveSystemFilter(role, canteenId);
 
   const notifications = await SystemNotification.find(filter).sort({
     createdAt: -1,
@@ -307,17 +283,7 @@ export const getNotificationFeed = async (context = {}, query = {}) => {
     personalFilter.type = query.type;
   }
 
-  const now = new Date();
-  const systemFilter = {
-    isActive: true,
-    activeFrom: { $lte: now },
-    $or: [{ activeTo: null }, { activeTo: { $gte: now } }],
-    targetRole: { $in: ["all", role] },
-    ...cursorFilter,
-  };
-  if (canteenId) {
-    systemFilter.$and = [{ $or: [{ canteenId }, { canteenId: null }] }];
-  }
+  const systemFilter = buildActiveSystemFilter(role, canteenId, cursorFilter);
 
   const [personalRows, systemRows] = await Promise.all([
     Notification.find(personalFilter)
