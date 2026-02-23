@@ -9,7 +9,11 @@ import Product from './product.model.js';
  * @access Private (Staff, Admin)
  */
 export const createProduct = catchAsync(async (req, res) => {
-  const product = await productService.createProduct(req.body, req.files);
+  const product = await productService.createProduct(
+    req.body,
+    req.files,
+    req.user
+  );
 
   res.status(201).json({
     status: 'success',
@@ -39,26 +43,12 @@ export const createProduct = catchAsync(async (req, res) => {
  */
 
 export const getAllProducts = catchAsync(async (req, res) => {
-  const result = await productService.getAllProducts(req.query);
+  const result = await productService.getAllProducts(req.query, req.user);
 
   res
     .status(200)
     .json(formatPaginatedResponse(result, 'Lấy danh sách sản phẩm thành công'));
 });
-
-// export const getAllProducts = catchAsync(async (req, res) => {
-//   const result = await paginatedQuery(Product, req.query, {
-//     ...filterPresets.product,
-//     populate: [
-//       { path: "categoryId", select: "name" },
-//       { path: "canteenId", select: "name location" },
-//     ],
-//   });
-
-//   res
-//     .status(200)
-//     .json(formatPaginatedResponse(result, "Lấy danh sách sản phẩm thành công"));
-// });
 
 /**
  * Get product by ID
@@ -66,7 +56,7 @@ export const getAllProducts = catchAsync(async (req, res) => {
  * @access Public
  */
 export const getProductById = catchAsync(async (req, res) => {
-  const product = await productService.getProductById(req.params.id);
+  const product = await productService.getProductById(req.params.id, req.user);
 
   res.status(200).json({
     status: 'success',
@@ -85,7 +75,8 @@ export const getProductById = catchAsync(async (req, res) => {
 export const getProductsByCanteen = catchAsync(async (req, res) => {
   const result = await productService.getProductsByCanteen(
     req.params.canteenId,
-    req.query
+    req.query,
+    req.user
   );
 
   res
@@ -98,28 +89,6 @@ export const getProductsByCanteen = catchAsync(async (req, res) => {
     );
 });
 
-// export const getProductsByCanteen = catchAsync(async (req, res) => {
-//   const { canteenId } = req.params;
-
-//   const result = await paginatedQuery(Product, req.query, {
-//     ...filterPresets.product,
-//     baseFilter: {
-//       canteenId,
-//       status: 'available',
-//     },
-//     populate: [{ path: 'categoryId', select: 'name' }],
-//   });
-
-//   res
-//     .status(200)
-//     .json(
-//       formatPaginatedResponse(
-//         result,
-//         'Lấy danh sách sản phẩm theo căng tin thành công'
-//       )
-//     );
-// });
-
 /**
  * Update product
  * @route PATCH /api/products/:id
@@ -129,7 +98,8 @@ export const updateProduct = catchAsync(async (req, res) => {
   const product = await productService.updateProduct(
     req.params.id,
     req.body,
-    req.files
+    req.files,
+    req.user
   );
 
   res.status(200).json({
@@ -173,7 +143,11 @@ export const searchProductsByCanteen = catchAsync(async (req, res) => {
     limit: Number(limit),
   };
 
-  const result = await productService.searchProductsByCanteen(canteenId, query);
+  const result = await productService.searchProductsByCanteen(
+    canteenId,
+    query,
+    req.user
+  );
 
   return res
     .status(200)
@@ -191,7 +165,7 @@ export const searchProductsByCanteen = catchAsync(async (req, res) => {
  * @access Private (Admin)
  */
 export const deleteProduct = catchAsync(async (req, res) => {
-  await productService.deleteProduct(req.params.id);
+  await productService.deleteProduct(req.params.id, req.user);
 
   res.status(204).send();
 });
@@ -202,7 +176,7 @@ export const deleteProduct = catchAsync(async (req, res) => {
  * @access Private (Admin)
  */
 export const getDeletedProducts = catchAsync(async (req, res) => {
-  const result = await productService.getDeletedProducts(req.query);
+  const result = await productService.getDeletedProducts(req.query, req.user);
 
   res
     .status(200)
@@ -215,7 +189,7 @@ export const getDeletedProducts = catchAsync(async (req, res) => {
  * @access Private (Admin)
  */
 export const restoreProduct = catchAsync(async (req, res) => {
-  const product = await productService.restoreProduct(req.params.id);
+  const product = await productService.restoreProduct(req.params.id, req.user);
 
   res.status(200).json({
     status: 'success',
@@ -233,7 +207,8 @@ export const restoreProduct = catchAsync(async (req, res) => {
 export const addRecipeIngredient = catchAsync(async (req, res) => {
   const product = await productService.addRecipeIngredient(
     req.params.id,
-    req.body
+    req.body,
+    req.user
   );
 
   res.status(200).json({
@@ -252,7 +227,8 @@ export const addRecipeIngredient = catchAsync(async (req, res) => {
 export const removeRecipeIngredient = catchAsync(async (req, res) => {
   const product = await productService.removeRecipeIngredient(
     req.params.id,
-    req.params.ingredientId
+    req.params.ingredientId,
+    req.user
   );
 
   res.status(200).json({
@@ -272,10 +248,14 @@ export const getOutOfStockProducts = catchAsync(async (req, res) => {
   const { page = 1, limit = 20 } = req.query;
   const canteenId = req.user?.canteenId; // Lấy từ auth user
 
-  const result = await productService.getOutOfStockListByCanteen(canteenId, {
-    page: Number(page),
-    limit: Number(limit),
-  });
+  const result = await productService.getOutOfStockListByCanteen(
+    canteenId,
+    {
+      page: Number(page),
+      limit: Number(limit),
+    },
+    req.user
+  );
 
   res
     .status(200)
@@ -296,10 +276,14 @@ export const getLowStockProducts = catchAsync(async (req, res) => {
   const { page = 1, limit = 20 } = req.query;
   const canteenId = req.user?.canteenId; // Lấy từ auth user
 
-  const result = await productService.getLowStockListByCanteen(canteenId, {
-    page: Number(page),
-    limit: Number(limit),
-  });
+  const result = await productService.getLowStockListByCanteen(
+    canteenId,
+    {
+      page: Number(page),
+      limit: Number(limit),
+    },
+    req.user
+  );
 
   res
     .status(200)

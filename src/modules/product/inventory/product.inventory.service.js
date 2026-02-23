@@ -221,10 +221,12 @@ export const getOutOfStockProducts = async (canteenId, options = {}) => {
 
   return {
     data: products,
-    total,
-    page,
-    limit,
-    pages: Math.ceil(total / limit),
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
   };
 };
 
@@ -258,10 +260,12 @@ export const getLowStockProducts = async (canteenId, options = {}) => {
 
   return {
     data: products,
-    total,
-    page,
-    limit,
-    pages: Math.ceil(total / limit),
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
   };
 };
 
