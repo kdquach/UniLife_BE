@@ -8,6 +8,40 @@ import {
 import { Shift, StaffShift } from "./shift.model.js";
 import User from "../user/user.model.js";
 import { ShiftChangeRequest } from "./shiftChangeRequest.model.js";
+import Canteen from "../canteen/canteen.model.js";
+
+const buildShiftScopeFilter = async (req, options = {}) => {
+  const { field = "canteenId" } = options;
+  const baseFilter = {};
+
+  if (req.user?.role === "admin") {
+    if (req.query?.canteenId) {
+      baseFilter[field] = req.query.canteenId;
+      return baseFilter;
+    }
+
+    if (req.query?.campusId) {
+      const canteenIds = await Canteen.find({ campusId: req.query.campusId }).distinct("_id");
+      baseFilter[field] = { $in: canteenIds };
+    }
+
+    return baseFilter;
+  }
+
+  if (req.user?.canteenId) {
+    baseFilter[field] = req.user.canteenId;
+    return baseFilter;
+  }
+
+  if (req.user?.campusId) {
+    const canteenIds = await Canteen.find({ campusId: req.user.campusId }).distinct("_id");
+    if (canteenIds.length) {
+      baseFilter[field] = { $in: canteenIds };
+    }
+  }
+
+  return baseFilter;
+};
 
 // ============ Shift Controllers ============
 
@@ -33,8 +67,11 @@ export const createShift = catchAsync(async (req, res) => {
  * @access Private (Staff, Admin)
  */
 export const getAllShifts = catchAsync(async (req, res) => {
+  const baseFilter = await buildShiftScopeFilter(req, { field: "canteenId" });
+
   const result = await paginatedQuery(Shift, req.query, {
     ...filterPresets.shift,
+    baseFilter,
     populate: [{ path: "canteenId", select: "name location" }],
   });
 
@@ -115,7 +152,25 @@ export const assignUserToShift = catchAsync(async (req, res) => {
  * @access Private (Staff, Admin)
  */
 export const getShiftAssignments = catchAsync(async (req, res) => {
+  const baseFilter = await buildShiftScopeFilter(req, { field: "canteenId" });
+
+  if (req.query?.startDate || req.query?.endDate) {
+    baseFilter.date = {};
+    if (req.query.startDate) {
+      const start = new Date(req.query.startDate);
+      start.setHours(0, 0, 0, 0);
+      baseFilter.date.$gte = start;
+    }
+    if (req.query.endDate) {
+      const end = new Date(req.query.endDate);
+      end.setHours(23, 59, 59, 999);
+      baseFilter.date.$lte = end;
+    }
+  }
+
   const result = await paginatedQuery(StaffShift, req.query, {
+    baseFilter,
+    maxLimit: 1000,
     allowedFilters: ["shiftId", "staffId", "canteenId", "status", "date"],
     allowedSortFields: ["date", "createdAt"],
     defaultSort: "-date",
@@ -143,8 +198,16 @@ export const getShiftAssignments = catchAsync(async (req, res) => {
  * @access Private (Staff)
  */
 export const getMyAssignments = catchAsync(async (req, res) => {
+  const scopeFilter = await buildShiftScopeFilter(req, { field: "canteenId" });
+  const baseFilter = {
+    staffId: req.user._id,
+    status: { $in: ["scheduled", "active"] },
+    ...scopeFilter,
+  };
+
   const result = await paginatedQuery(StaffShift, req.query, {
-    baseFilter: { staffId: req.user._id },
+    baseFilter,
+    maxLimit: 1000,
     allowedFilters: ["status", "date"],
     allowedSortFields: ["date", "createdAt"],
     defaultSort: "-date",
@@ -255,6 +318,8 @@ export const getShiftManagerStaffList = catchAsync(async (req, res) => {
 
   if (req.user?.canteenId) {
     filter.canteenId = req.user.canteenId;
+  } else if (req.user?.campusId) {
+    filter.campusId = req.user.campusId;
   }
 
   if (req.query?.search) {
@@ -292,9 +357,17 @@ export const getMyShiftChangeRequests = catchAsync(async (req, res) => {
     .sort({ createdAt: -1 })
     .limit(200);
 
+  const scoped = req.user?.canteenId
+    ? requests.filter(
+      (item) =>
+        String(item?.staffShiftId?.canteenId || "") ===
+          String(req.user.canteenId),
+    )
+    : requests;
+
   res.status(200).json({
     success: true,
-    data: requests,
+    data: scoped,
   });
 });
 

@@ -6,6 +6,7 @@ dotenv.config();
 import app from "./app.js";
 import connectDB from "./config/db.js";
 import { registerOrderCronJobs } from "./jobs/orderCron.js";
+import { registerScheduleReminderCronJobs } from "./jobs/scheduleReminderCron.js";
 import { initSocket } from "./websocket/index.js";
 
 const PORT = process.env.PORT || 5000;
@@ -22,6 +23,7 @@ connectDB();
 
 // Register cron jobs
 registerOrderCronJobs();
+registerScheduleReminderCronJobs();
 
 // Start server
 const server = app.listen(PORT, () => {

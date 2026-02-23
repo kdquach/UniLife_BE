@@ -154,29 +154,96 @@ export const getUnreadCount = async (userId, canteenId = null, role = "customer"
 export const markAsRead = async (notificationId, userId, canteenId = null) => {
   const filter = withCanteenScope({ _id: notificationId, userId }, canteenId);
   const existing = await Notification.findOne(filter);
-  if (!existing) {
+  if (existing) {
+    if (existing.isRead) {
+      return existing;
+    }
+
+    const notification = await Notification.findOneAndUpdate(
+      filter,
+      { isRead: true, readAt: new Date() },
+      { new: true },
+    );
+    if (!notification) {
+      throw new AppError("Notification not found", 404);
+    }
+    return notification;
+  }
+
+  const systemFilter = withCanteenScope({ _id: notificationId }, canteenId);
+  const systemNotification = await SystemNotification.findOne(systemFilter).lean();
+  if (!systemNotification) {
     throw new AppError("Notification not found", 404);
   }
 
-  if (existing.isRead) {
-    return existing;
-  }
-
-  const notification = await Notification.findOneAndUpdate(
-    filter,
-    { isRead: true, readAt: new Date() },
-    { new: true },
+  await SystemNotificationRead.updateOne(
+    {
+      userId,
+      systemNotificationId: systemNotification._id,
+    },
+    {
+      $set: {
+        canteenId: canteenId || null,
+        readAt: new Date(),
+      },
+    },
+    { upsert: true },
   );
-  if (!notification) {
-    throw new AppError("Notification not found", 404);
-  }
-  return notification;
+
+  return {
+    _id: systemNotification._id,
+    type: "system",
+    title: systemNotification.title,
+    content: systemNotification.content,
+    isRead: true,
+    metadata: null,
+    createdAt: systemNotification.createdAt,
+  };
 };
 
-export const markAllAsRead = async (userId, canteenId = null) => {
+export const markAllAsRead = async (userId, canteenId = null, role = "customer") => {
   await Notification.updateMany(
     withCanteenScope({ userId, isRead: false }, canteenId),
     { isRead: true, readAt: new Date() },
+  );
+
+  const now = new Date();
+  const systemFilter = {
+    isActive: true,
+    activeFrom: { $lte: now },
+    $or: [{ activeTo: null }, { activeTo: { $gte: now } }],
+    targetRole: { $in: ["all", role] },
+  };
+
+  if (canteenId) {
+    systemFilter.$and = [{ $or: [{ canteenId }, { canteenId: null }] }];
+  }
+
+  const activeSystemIds = await SystemNotification.find(systemFilter)
+    .select("_id")
+    .lean();
+
+  if (!activeSystemIds.length) {
+    return;
+  }
+
+  const readAt = new Date();
+  await SystemNotificationRead.bulkWrite(
+    activeSystemIds.map((item) => ({
+      updateOne: {
+        filter: {
+          userId,
+          systemNotificationId: item._id,
+        },
+        update: {
+          $set: {
+            canteenId: canteenId || null,
+            readAt,
+          },
+        },
+        upsert: true,
+      },
+    })),
   );
 };
 
