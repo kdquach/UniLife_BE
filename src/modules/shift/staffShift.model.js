@@ -23,7 +23,15 @@ const staffShiftSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["draft", "assigned", "checked_in", "checked_out", "absent"],
+      enum: [
+        "draft",
+        "assigned",
+        "scheduled",
+        "checked_in",
+        "checked_out",
+        "absent",
+        "cancelled",
+      ],
       default: "assigned",
     },
     publishedAt: {

@@ -21,6 +21,11 @@ function rangesOverlap(startA, endA, startB, endB) {
   return startA < endB && startB < endA;
 }
 
+function isWeekend(date = new Date()) {
+  const day = new Date(date).getDay();
+  return day === 0 || day === 6;
+}
+
 const validateAssignmentOverlap = async ({
   staffId,
   canteenId,
@@ -377,6 +382,11 @@ export const removeUserFromShift = async (assignmentId) => {
 
 export const bulkSaveAssignments = async (assignments = [], currentUser = null) => {
   const saved = [];
+  let scopedCanteenId = currentUser?.canteenId ? String(currentUser.canteenId) : null;
+
+  if ((currentUser?.role === "manager" || currentUser?.role === "staff") && !scopedCanteenId) {
+    throw new AppError("Tài khoản chưa được gán canteen", 400);
+  }
 
   for (const item of assignments) {
     if (!item?.shiftId || !item?.staffId || !item?.date) continue;
@@ -387,20 +397,30 @@ export const bulkSaveAssignments = async (assignments = [], currentUser = null) 
     });
     if (!shift) continue;
 
-    if (
-      currentUser?.canteenId &&
-      String(currentUser.canteenId) !== String(shift.canteenId)
-    ) {
-      continue;
+    const shiftCanteenId = String(shift.canteenId);
+
+    if (scopedCanteenId && scopedCanteenId !== shiftCanteenId) {
+      throw new AppError("Shift không thuộc canteen hiện tại", 400);
+    }
+
+    if (!scopedCanteenId) {
+      scopedCanteenId = shiftCanteenId;
     }
 
     const dateOnly = normalizeDateOnly(item.date);
+    const existingAssignment = await StaffShift.findOne({
+      shiftId: item.shiftId,
+      staffId: item.staffId,
+      date: dateOnly,
+      isDeleted: { $ne: true },
+    }).select("_id");
+
     const payload = {
       shiftId: item.shiftId,
       staffId: item.staffId,
       canteenId: shift.canteenId,
       date: dateOnly,
-      status: "scheduled",
+      status: item?.status || "draft",
       assignedBy: currentUser?._id || null,
     };
 
@@ -409,6 +429,7 @@ export const bulkSaveAssignments = async (assignments = [], currentUser = null) 
       canteenId: shift.canteenId,
       date: dateOnly,
       shift,
+      excludeAssignmentId: existingAssignment?._id || null,
     });
 
     const assignment = await StaffShift.findOneAndUpdate(
@@ -435,6 +456,10 @@ export const bulkSaveAssignments = async (assignments = [], currentUser = null) 
 export const publishAssignments = async (payload = {}, currentUser = null) => {
   const filter = { isDeleted: { $ne: true } };
 
+  if ((currentUser?.role === "manager" || currentUser?.role === "staff") && !currentUser?.canteenId) {
+    throw new AppError("Tài khoản chưa được gán canteen", 400);
+  }
+
   if (currentUser?.canteenId) {
     filter.canteenId = currentUser.canteenId;
   }
@@ -449,13 +474,21 @@ export const publishAssignments = async (payload = {}, currentUser = null) => {
     }
   }
 
-  const result = await StaffShift.updateMany(filter, {
-    status: "scheduled",
+  const draftFilter = {
+    ...filter,
+    status: "draft",
+  };
+
+  const result = await StaffShift.updateMany(draftFilter, {
+    $set: {
+      status: "scheduled",
+      publishedAt: new Date(),
+    },
   });
 
   const targetAssignments = await StaffShift.find(filter)
     .populate("shiftId", "name startTime endTime")
-    .select("staffId shiftId date canteenId");
+    .select("staffId shiftId date canteenId status");
 
   const notifiedStaffIds = new Set();
 
@@ -499,6 +532,13 @@ export const publishAssignments = async (payload = {}, currentUser = null) => {
 };
 
 export const createShiftChangeRequest = async (payload = {}, currentUser = null) => {
+  if (currentUser?.role === "staff" && !isWeekend()) {
+    throw new AppError(
+      "Staff chỉ có thể gửi yêu cầu đổi ca vào Thứ 7 hoặc Chủ nhật",
+      400,
+    );
+  }
+
   const assignment = await StaffShift.findOne({
     _id: payload.staffShiftId,
     isDeleted: { $ne: true },

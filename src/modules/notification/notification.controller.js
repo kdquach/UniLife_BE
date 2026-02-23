@@ -56,7 +56,11 @@ export const markAsRead = catchAsync(async (req, res) => {
 });
 
 export const markAllAsRead = catchAsync(async (req, res) => {
-  await notificationService.markAllAsRead(req.user._id, req.user.canteenId);
+  await notificationService.markAllAsRead(
+    req.user._id,
+    req.user.canteenId,
+    req.user.role,
+  );
   res
     .status(200)
     .json({ status: "success", message: "All notifications marked as read" });
