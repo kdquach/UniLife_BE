@@ -6,16 +6,15 @@ import { SystemNotification } from "./notification.model.js";
 // ============ User Notification Controllers ============
 
 export const getMyNotifications = catchAsync(async (req, res) => {
-  const result = await notificationService.getMyNotifications(
+  const notifications = await notificationService.getMyNotifications(
     req.user._id,
     req.query,
     req.user.canteenId,
+    req.user.role,
   );
   res.status(200).json({
     status: "success",
-    data: result.data,
-    pagination: result.pagination,
-    message: "Lấy thông báo thành công",
+    data: notifications,
   });
 });
 
