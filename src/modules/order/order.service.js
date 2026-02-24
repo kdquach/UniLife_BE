@@ -91,11 +91,16 @@ const notifyOrderStatusChangedToUser = async ({
     });
 
     notifyUser(String(order.userId), {
-      notificationId: String(notification._id),
+      id: String(notification._id),
       title: notification.title,
       content: notification.content,
-      type: notification.type,
+      type: "order",
+      isRead: false,
       createdAt: notification.createdAt,
+      meta: {
+        ...(notification.metadata || {}),
+        notificationId: String(notification._id),
+      },
     });
   } catch (error) {
     console.error("Failed to notify user order status change:", error.message);
@@ -662,9 +667,14 @@ export const updateOrderStatus = async (
         ? order.canteenId._id.toString()
         : order.canteenId.toString();
       notifyCanteen(canteenId, {
-        type: "order:statusChanged",
-        order: {
-          _id: order._id,
+        id: `order-${order._id}-${Date.now()}`,
+        type: "order",
+        title: `Đơn #${order.orderNumber || "---"} cập nhật trạng thái`,
+        content: `Đơn hàng chuyển từ ${ORDER_STATUS_LABELS[previousStatus] || previousStatus} sang ${ORDER_STATUS_LABELS[order.status] || order.status}.`,
+        isRead: false,
+        createdAt: new Date().toISOString(),
+        meta: {
+          orderId: String(order._id),
           orderNumber: order.orderNumber,
           status: order.status,
           previousStatus,
@@ -823,9 +833,14 @@ export const completeOrder = async (
         ? order.canteenId._id.toString()
         : order.canteenId.toString();
       notifyCanteen(canteenId, {
-        type: "order:statusChanged",
-        order: {
-          _id: order._id,
+        id: `order-${order._id}-${Date.now()}`,
+        type: "order",
+        title: `Đơn #${order.orderNumber || "---"} đã hoàn thành`,
+        content: "Đơn hàng đã được nhân viên xác nhận trả món.",
+        isRead: false,
+        createdAt: new Date().toISOString(),
+        meta: {
+          orderId: String(order._id),
           orderNumber: order.orderNumber,
           status: "completed",
           previousStatus: "ready",
@@ -973,9 +988,14 @@ export const autoCancelExpiredOrders = async () => {
         // Notify canteen staff
         try {
           notifyCanteen(canteen._id.toString(), {
-            type: "order:statusChanged",
-            order: {
-              _id: order._id,
+            id: `order-${order._id}-${Date.now()}`,
+            type: "order",
+            title: `Đơn #${order.orderNumber || "---"} đã bị hủy`,
+            content: "Đơn tự động hủy do quá giờ đóng cửa.",
+            isRead: false,
+            createdAt: new Date().toISOString(),
+            meta: {
+              orderId: String(order._id),
               orderNumber: order.orderNumber,
               status: "cancelled",
               previousStatus: "ready",

@@ -113,11 +113,16 @@ async function sendReminderToManagers(reminderType) {
 
       try {
         notifyUser(String(manager._id), {
-          notificationId: String(notification._id),
+          id: String(notification._id),
           title: notification.title,
           content: notification.content,
-          type: notification.type,
+          type: "shift",
+          isRead: false,
           createdAt: notification.createdAt,
+          meta: {
+            ...(notification.metadata || {}),
+            notificationId: String(notification._id),
+          },
         });
       } catch {
         // Ignore websocket failures
