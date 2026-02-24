@@ -428,11 +428,16 @@ export const publishAssignments = async (payload = {}, currentUser = null) => {
 
     try {
       notifyUser(String(assignment.staffId), {
-        notificationId: String(notification._id),
+        id: String(notification._id),
         title: notification.title,
         content: notification.content,
-        type: notification.type,
+        type: "shift",
+        isRead: false,
         createdAt: notification.createdAt,
+        meta: {
+          ...(notification.metadata || {}),
+          notificationId: String(notification._id),
+        },
       });
     } catch {
       // Ignore websocket failures
@@ -515,11 +520,16 @@ export const createShiftChangeRequest = async (payload = {}, currentUser = null)
 
     try {
       notifyUser(String(manager._id), {
-        notificationId: String(notification._id),
+        id: String(notification._id),
         title: notification.title,
         content: notification.content,
-        type: notification.type,
+        type: "shift",
+        isRead: false,
         createdAt: notification.createdAt,
+        meta: {
+          ...(notification.metadata || {}),
+          notificationId: String(notification._id),
+        },
       });
     } catch {
       // Ignore websocket failures
@@ -608,11 +618,16 @@ export const reviewShiftChangeRequest = async (
 
   try {
     notifyUser(String(request.staffId), {
-      notificationId: String(staffNotification._id),
+      id: String(staffNotification._id),
       title: staffNotification.title,
       content: staffNotification.content,
-      type: staffNotification.type,
+      type: "shift",
+      isRead: false,
       createdAt: staffNotification.createdAt,
+      meta: {
+        ...(staffNotification.metadata || {}),
+        notificationId: String(staffNotification._id),
+      },
     });
   } catch {
     // Ignore websocket failures
