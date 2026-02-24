@@ -3,6 +3,11 @@ import { Notification, SystemNotification } from "./notification.model.js";
 import { SystemNotificationRead } from "./systemNotificationRead.model.js";
 import AppError from "../../utils/AppError.js";
 
+export const NOTIFICATION_TYPES = {
+  dashboard: ["order", "promotion", "system", "feedback", "shift", "salary"],
+  client: ["order", "promotion", "system", "feedback"],
+};
+
 const toObjectIdString = (value) => {
   if (!value) return null;
   if (typeof value === "string") return value;
@@ -16,6 +21,21 @@ const withCanteenScope = (filter = {}, canteenId = null) => {
     ...filter,
     $or: [{ canteenId }, { canteenId: null }],
   };
+};
+
+const resolveAllowedTypesByRole = (role = "customer") => {
+  const normalized = String(role || "").toLowerCase();
+  if (normalized === "admin" || normalized === "staff") {
+    return NOTIFICATION_TYPES.dashboard;
+  }
+  return NOTIFICATION_TYPES.client;
+};
+
+const parseIsRead = (value) => {
+  if (value === undefined) return undefined;
+  if (value === true || value === "true") return true;
+  if (value === false || value === "false") return false;
+  throw new AppError("Invalid isRead value. Expected true or false", 400);
 };
 
 const decodeCursor = (cursor) => {
@@ -89,43 +109,35 @@ export const createBulkNotifications = async (userIds, notificationData) => {
   return result;
 };
 
-export const getMyNotifications = async (userId, query = {}, canteenId = null) => {
-  const limit = Math.min(Math.max(Number(query.limit) || 20, 1), 100);
-  const cursor = decodeCursor(query.cursor);
-  const filter = withCanteenScope(
-    {
-      userId,
-      ...buildCursorFilter(cursor),
-    },
-    canteenId,
-  );
+export const getMyNotifications = async (
+  userId,
+  query = {},
+  canteenId = null,
+  role = "customer",
+) => {
+  const { type, isRead } = query;
+  const allowedTypes = resolveAllowedTypesByRole(role);
 
-  if (query.type) {
-    filter.type = query.type;
+  if (type && !allowedTypes.includes(type)) {
+    throw new AppError("Invalid notification type for current role", 400);
   }
-  if (query.isRead !== undefined) {
-    filter.isRead = query.isRead === "true" || query.isRead === true;
-  }
+
+  const parsedIsRead = parseIsRead(isRead);
+
+  const baseFilter = {
+    userId,
+    ...(type && { type }),
+    ...(parsedIsRead !== undefined && { isRead: parsedIsRead }),
+  };
+
+  const filter = withCanteenScope(baseFilter, canteenId);
 
   const rows = await Notification.find(filter)
     .select("_id canteenId userId type title content isRead metadata createdAt")
-    .sort({ createdAt: -1, _id: -1 })
-    .limit(limit + 1)
+    .sort({ createdAt: -1 })
     .lean();
 
-  const hasNextPage = rows.length > limit;
-  const data = hasNextPage ? rows.slice(0, limit) : rows;
-  const last = data[data.length - 1];
-  const nextCursor = hasNextPage ? encodeCursor(last?.createdAt, last?._id) : null;
-
-  return {
-    data,
-    pagination: {
-      hasNextPage,
-      nextCursor,
-      limit,
-    },
-  };
+  return rows;
 };
 
 export const getUnreadCount = async (userId, canteenId = null, role = "customer") => {
