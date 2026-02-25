@@ -362,6 +362,12 @@ export const filterPresets = {
   },
   // Product Catefory filters
 
+  // Menu filters
+  menu: {
+    allowedFilters: ["status"],
+    searchFields: ["name", "startAt"],
+    allowedSortFields: ["createdAt", "name"],
+  },
   ProductCategory: {},
 };
 

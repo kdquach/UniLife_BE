@@ -29,13 +29,14 @@ export const createMenu = catchAsync(async (req, res) => {
  * @access Public
  */
 export const getAllMenus = catchAsync(async (req, res) => {
-  const menus = await menuService.getAllMenus(req.query);
+  const result = await menuService.getAllMenus(req.query);
 
   res.status(200).json({
     status: "success",
-    results: menus.length,
+    results: result.pagination.total,
     data: {
-      menus,
+      menus: result.data,
+      pagination: result.pagination,
     },
   });
 });
