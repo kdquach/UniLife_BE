@@ -148,14 +148,25 @@ export const updateMenu = async (id, updateData) => {
  * @param {string} id - Menu ID
  */
 export const deleteMenu = async (id) => {
-  const menu = await Menu.findByIdAndDelete(id);
+  const menu = await Menu.findById(id);
+
   if (!menu) {
     throw new AppError("Menu not found", 404);
   }
-  if (menu.status !== 'active') {
-    // Also delete associated schedules
-    await Menu.findByIdAndDelete(id)
+
+  // Comment: Không cho phép xóa thực đơn đang hoạt động
+  if (menu.status === "active") {
+    throw new AppError(
+      "Không thể xóa thực đơn đang hoạt động",
+      400,
+    );
   }
+
+  // Comment: Xóa toàn bộ lịch áp dụng liên quan đến thực đơn này
+  await MenuSchedule.deleteMany({ menuId: id });
+
+  // Comment: Sau khi xóa lịch, xóa luôn bản thân thực đơn
+  await menu.deleteOne();
 };
 
 /**
@@ -511,7 +522,14 @@ export const deleteMenuSchedule = async (id) => {
     );
   }
 
-  await schedule.deleteOne();
+  // Comment: Khi xóa một lịch, xóa thêm các lịch khác trùng khoảng thời gian
+  // cùng căng tin và cùng thực đơn, tránh phải xóa nhiều lần cho cùng 1 menu
+  await MenuSchedule.deleteMany({
+    canteenId: schedule.canteenId,
+    menuId: schedule.menuId,
+    startAt: { $lt: schedule.endAt },
+    endAt: { $gt: schedule.startAt },
+  });
 
   return true;
 };
