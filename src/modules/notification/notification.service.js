@@ -3,7 +3,7 @@ import { Notification, SystemNotification } from "./notification.model.js";
 import { SystemNotificationRead } from "./systemNotificationRead.model.js";
 import AppError from "../../utils/AppError.js";
 
-export const NOTIFICATION_TYPES = {
+const NOTIFICATION_TYPES = {
   dashboard: ["order", "promotion", "system", "feedback", "shift", "salary"],
   client: ["order", "promotion", "system", "feedback"],
 };
@@ -116,6 +116,7 @@ export const getMyNotifications = async (
   role = "customer",
 ) => {
   const { type, isRead } = query;
+  const limit = Math.min(Math.max(Number(query.limit) || 50, 1), 200);
   const allowedTypes = resolveAllowedTypesByRole(role);
 
   if (type && !allowedTypes.includes(type)) {
@@ -135,6 +136,7 @@ export const getMyNotifications = async (
   const rows = await Notification.find(filter)
     .select("_id canteenId userId type title content isRead metadata createdAt")
     .sort({ createdAt: -1 })
+    .limit(limit)
     .lean();
 
   return rows;
@@ -167,15 +169,11 @@ export const markAsRead = async (notificationId, userId, canteenId = null) => {
       return existing;
     }
 
-    const notification = await Notification.findOneAndUpdate(
+    return Notification.findOneAndUpdate(
       filter,
       { isRead: true, readAt: new Date() },
       { new: true },
     );
-    if (!notification) {
-      throw new AppError("Notification not found", 404);
-    }
-    return notification;
   }
 
   const systemFilter = withCanteenScope({ _id: notificationId }, canteenId);
@@ -280,6 +278,14 @@ export const getActiveSystemNotifications = async (role, canteenId = null) => {
 
 export const getNotificationFeed = async (context = {}, query = {}) => {
   const { userId, role, canteenId } = context;
+  const { type, isRead } = query;
+  const allowedTypes = resolveAllowedTypesByRole(role);
+
+  if (type && !allowedTypes.includes(type)) {
+    throw new AppError("Invalid notification type for current role", 400);
+  }
+
+  const parsedIsRead = parseIsRead(isRead);
   const limit = Math.min(Math.max(Number(query.limit) || 20, 1), 100);
   const cursor = decodeCursor(query.cursor);
   const cursorFilter = buildCursorFilter(cursor);
@@ -291,11 +297,17 @@ export const getNotificationFeed = async (context = {}, query = {}) => {
     },
     canteenId,
   );
-  if (query.type) {
-    personalFilter.type = query.type;
+  if (type) {
+    personalFilter.type = type;
+  }
+  if (parsedIsRead !== undefined) {
+    personalFilter.isRead = parsedIsRead;
   }
 
-  const systemFilter = buildActiveSystemFilter(role, canteenId, cursorFilter);
+  const includeSystemNotifications = !type || type === "system";
+  const systemFilter = includeSystemNotifications
+    ? buildActiveSystemFilter(role, canteenId, cursorFilter)
+    : null;
 
   const [personalRows, systemRows] = await Promise.all([
     Notification.find(personalFilter)
@@ -303,11 +315,13 @@ export const getNotificationFeed = async (context = {}, query = {}) => {
       .sort({ createdAt: -1, _id: -1 })
       .limit(limit + 1)
       .lean(),
-    SystemNotification.find(systemFilter)
-      .select("_id canteenId title content createdAt")
-      .sort({ createdAt: -1, _id: -1 })
-      .limit(limit + 1)
-      .lean(),
+    includeSystemNotifications
+      ? SystemNotification.find(systemFilter)
+        .select("_id canteenId title content createdAt")
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(limit + 1)
+        .lean()
+      : Promise.resolve([]),
   ]);
 
   const systemIds = systemRows.map((item) => item._id);
@@ -334,7 +348,7 @@ export const getNotificationFeed = async (context = {}, query = {}) => {
     createdAt: item.createdAt,
   }));
 
-  const normalizedSystem = systemRows.map((item) => ({
+  const normalizedSystemBase = systemRows.map((item) => ({
     _id: item._id,
     source: "system",
     canteenId: item.canteenId || null,
@@ -345,6 +359,10 @@ export const getNotificationFeed = async (context = {}, query = {}) => {
     metadata: null,
     createdAt: item.createdAt,
   }));
+
+  const normalizedSystem = parsedIsRead === undefined
+    ? normalizedSystemBase
+    : normalizedSystemBase.filter((item) => item.isRead === parsedIsRead);
 
   const merged = [...normalizedPersonal, ...normalizedSystem].sort((a, b) => {
     const timeDiff = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
