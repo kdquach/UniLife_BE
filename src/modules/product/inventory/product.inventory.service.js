@@ -108,7 +108,10 @@ export const deductProductInventory = async (
     } else {
       // Dùng stockQuantity
       if (product.stockQuantity < orderQuantity) {
-        throw new AppError('Hết hàng', 400);
+        throw new AppError(
+          `Không đủ hàng. Chỉ còn ${product.stockQuantity} sản phẩm, bạn đang đặt ${orderQuantity}`,
+          400
+        );
       }
 
       product.stockQuantity -= orderQuantity;

@@ -72,7 +72,8 @@ export const buildProductImagePayload = async (files) => {
   const uploadedImages = await uploadProductImages(normalizedFiles);
 
   return {
-    image: uploadedImages[0].thumbnailUrl,
+    // Sửa: Dùng displayUrl thay vì thumbnailUrl để tránh trùng lặp với images[0]
+    image: uploadedImages[0].displayUrl,
     images: uploadedImages.map((item) => item.displayUrl),
     publicIds: uploadedImages.map((item) => item.publicId),
   };
