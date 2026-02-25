@@ -9,7 +9,6 @@ import { filterPresets, paginatedQuery } from "../../utils/queryHelper.js";
  * @returns {Promise<Object>} Created menu
  */
 export const createMenu = async (menuData) => {
-
   const menu = await Menu.create(menuData)
   return menu;
 };
