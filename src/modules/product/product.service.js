@@ -21,11 +21,77 @@ import {
 } from './inventory/product.inventory.service.js';
 
 /**
+ * Kiểm tra user có quyền CRUD product không
+ * Admin không được CRUD, Staff/Manager phải có canteenId
+ */
+const checkUserCanCRUD = (user) => {
+  if (!user) {
+    throw new AppError('Vui lòng đăng nhập', 401);
+  }
+
+  // Admin không được CRUD product
+  if (user.role === 'admin') {
+    throw new AppError('Admin không có quyền thao tác với sản phẩm', 403);
+  }
+
+  // Staff/Manager phải có canteenId
+  if (!user.canteenId) {
+    throw new AppError('Bạn chưa được phân quyền canteen', 403);
+  }
+};
+
+/**
+ * Kiểm tra product có thuộc canteen của user không
+ */
+const checkProductAccess = (user, product) => {
+  if (!user.canteenId) {
+    throw new AppError('Bạn chưa được phân quyền canteen', 403);
+  }
+
+  // Xử lý canteenId đã được populate hoặc chưa
+  const productCanteenId = product.canteenId._id || product.canteenId;
+
+  if (productCanteenId.toString() !== user.canteenId.toString()) {
+    throw new AppError('Bạn không có quyền thao tác với sản phẩm này', 403);
+  }
+};
+
+/**
+ * Tạo filter lọc product theo canteen của user
+ */
+const getCanteenFilterByUser = (user) => {
+  // Nếu không có user hoặc user là customer, không lọc (public route)
+  if (!user || user.role === 'customer') {
+    return {};
+  }
+
+  // Admin xem được tất cả (read-only)
+  if (user.role === 'admin') {
+    return {};
+  }
+
+  // Staff/Manager chỉ xem product của canteen mình
+  if (user.canteenId) {
+    return { canteenId: user.canteenId };
+  }
+
+  // User chưa được phân quyền
+  throw new AppError('Bạn chưa được phân quyền canteen', 403);
+};
+
+/**
  * Create a new product
  * @param {Object} productData - Product data
+ * @param {Object} files - Upload files
+ * @param {Object} user - Current user
  * @returns {Promise<Object>} Created product
  */
-export const createProduct = async (productData, files) => {
+export const createProduct = async (productData, files, user) => {
+  // Kiểm tra quyền CRUD
+  checkUserCanCRUD(user);
+
+  // Tự động gắn canteenId từ user (bỏ qua canteenId từ request)
+  productData.canteenId = user.canteenId;
   const validatedData = await validateCreateProduct(productData);
   const imagePayload = await buildProductImagePayload(files);
 
@@ -46,50 +112,32 @@ export const createProduct = async (productData, files) => {
 };
 
 /**
- * Get all products
- * @param {Object} query - Query parameters for filtering
+ * Get all products (với phân quyền theo canteen)
+ * @param {Object} queryParams - Query parameters for filtering
+ * @param {Object} user - Current user (optional)
  * @returns {Promise<Array>} Array of products
  */
-export const getAllProducts = async (queryParams) => {
+export const getAllProducts = async (queryParams, user = null) => {
+  // Lọc theo canteen nếu user là staff/manager
+  const baseFilter = user ? getCanteenFilterByUser(user) : {};
+
   return paginatedQuery(Product, queryParams, {
     ...filterPresets.product,
+    baseFilter,
     populate: [
       { path: 'categoryId', select: 'name' },
       { path: 'canteenId', select: 'name location' },
     ],
   });
 };
-// export const getAllProducts = async (query = {}) => {
-//   const filter = {};
-
-//   if (query.canteenId) {
-//     filter.canteenId = query.canteenId;
-//   }
-//   if (query.categoryId) {
-//     filter.categoryId = query.categoryId;
-//   }
-//   if (query.status) {
-//     filter.status = query.status;
-//   }
-
-//   // Text search
-//   if (query.search) {
-//     filter.$text = { $search: query.search };
-//   }
-
-//   const products = await Product.find(filter)
-//     .populate('canteenId', 'name location')
-//     .sort({ createdAt: -1 });
-
-//   return products;
-// };
 
 /**
  * Get product by ID
  * @param {string} id - Product ID
+ * @param {Object} user - Current user (optional)
  * @returns {Promise<Object>} Product object
  */
-export const getProductById = async (id) => {
+export const getProductById = async (id, user = null) => {
   const product = await Product.findById(id)
     .populate('categoryId', 'name')
     .populate('canteenId', 'name location');
@@ -97,15 +145,34 @@ export const getProductById = async (id) => {
   if (!product) {
     throw new AppError('Product not found', 404);
   }
+
+  // Nếu user là staff/manager đang thao tác CRUD, kiểm tra quyền
+  if (user && (user.role === 'staff' || user.role === 'manager')) {
+    checkProductAccess(user, product);
+  }
+
   return product;
 };
 
 /**
  * Get products by canteen
  * @param {string} canteenId - Canteen ID
+ * @param {Object} queryParams - Query parameters
+ * @param {Object} user - Current user (optional)
  * @returns {Promise<Array>} Array of products
  */
-export const getProductsByCanteen = async (canteenId, queryParams) => {
+export const getProductsByCanteen = async (
+  canteenId,
+  queryParams,
+  user = null
+) => {
+  // Nếu user là staff/manager đang thao tác, kiểm tra quyền
+  if (user && (user.role === 'staff' || user.role === 'manager')) {
+    if (!user.canteenId || user.canteenId.toString() !== canteenId.toString()) {
+      throw new AppError('Bạn không có quyền truy cập canteen này', 403);
+    }
+  }
+
   return paginatedQuery(Product, queryParams, {
     ...filterPresets.product,
     baseFilter: {
@@ -115,20 +182,27 @@ export const getProductsByCanteen = async (canteenId, queryParams) => {
     populate: [{ path: 'categoryId', select: 'name' }],
   });
 };
-// export const getProductsByCanteen = async (canteenId) => {
-//   const products = await Product.find({ canteenId, status: 'available' }).sort({
-//     name: 1,
-//   });
-//   return products;
-// };
+
 /**
  * Search products by canteen
  * @param {string} canteenId
  * @param {Object} queryParams
+ * @param {Object} user - Current user (optional)
  */
-export const searchProductsByCanteen = async (canteenId, queryParams) => {
+export const searchProductsByCanteen = async (
+  canteenId,
+  queryParams,
+  user = null
+) => {
   if (!canteenId) {
     throw new AppError('CanteenId is required to search products', 400);
+  }
+
+  // Nếu user là staff/manager đang thao tác, kiểm tra quyền
+  if (user && (user.role === 'staff' || user.role === 'manager')) {
+    if (!user.canteenId || user.canteenId.toString() !== canteenId.toString()) {
+      throw new AppError('Bạn không có quyền truy cập canteen này', 403);
+    }
   }
 
   const { sort, ...restQuery } = queryParams;
@@ -165,13 +239,22 @@ export const searchProductsByCanteen = async (canteenId, queryParams) => {
  * Update product
  * @param {string} id - Product ID
  * @param {Object} updateData - Data to update
+ * @param {Object} files - Upload files
+ * @param {Object} user - Current user
  * @returns {Promise<Object>} Updated product
  */
-export const updateProduct = async (id, updateData, files) => {
+export const updateProduct = async (id, updateData, files, user) => {
   const currentProduct = await Product.findById(id);
   if (!currentProduct) {
     throw new AppError('Product not found', 404);
   }
+
+  // Kiểm tra quyền
+  checkUserCanCRUD(user);
+  checkProductAccess(user, currentProduct);
+
+  // Không cho phép thay đổi canteenId
+  delete updateData.canteenId;
 
   const validatedData = await validateUpdateProduct(currentProduct, updateData);
   const imagePayload = await buildProductImagePayload(files);
@@ -230,10 +313,11 @@ export const updateProduct = async (id, updateData, files) => {
 };
 
 /**
- * Delete product
+ * Delete product (soft delete)
  * @param {string} id - Product ID
+ * @param {Object} user - Current user
  */
-export const deleteProduct = async (id) => {
+export const deleteProduct = async (id, user) => {
   const product = await Product.findOne({ _id: id }).setOptions({
     includeDeleted: true,
   });
@@ -245,20 +329,31 @@ export const deleteProduct = async (id) => {
     throw new AppError('Sản phẩm đã bị xóa', 400);
   }
 
+  // Kiểm tra quyền (chỉ admin hoặc staff/manager của canteen đó)
+  if (user.role !== 'admin') {
+    checkUserCanCRUD(user);
+    checkProductAccess(user, product);
+  }
+
   product.isDeleted = true;
   product.deletedAt = new Date();
   await product.save();
 };
 
 /**
- * Lấy danh sách sản phẩm đã xóa (Admin)
+ * Lấy danh sách sản phẩm đã xóa (Admin/Manager)
  * @param {Object} queryParams - Tham số truy vấn
+ * @param {Object} user - Current user
  * @returns {Promise<Object>} Danh sách sản phẩm đã xóa phân trang
  */
-export const getDeletedProducts = async (queryParams) => {
+export const getDeletedProducts = async (queryParams, user) => {
+  // Lọc theo canteen nếu user là staff/manager
+  const canteenFilter =
+    user.role === 'admin' ? {} : { canteenId: user.canteenId };
+
   return paginatedQuery(Product, queryParams, {
     ...filterPresets.product,
-    baseFilter: { isDeleted: true },
+    baseFilter: { ...canteenFilter, isDeleted: true },
     mongooseOptions: { includeDeleted: true },
     populate: [
       { path: 'categoryId', select: 'name' },
@@ -268,11 +363,12 @@ export const getDeletedProducts = async (queryParams) => {
 };
 
 /**
- * Khôi phục sản phẩm đã xóa (Admin)
+ * Khôi phục sản phẩm đã xóa (Admin/Manager)
  * @param {string} id - Product ID
+ * @param {Object} user - Current user
  * @returns {Promise<Object>} Sản phẩm sau khi khôi phục
  */
-export const restoreProduct = async (id) => {
+export const restoreProduct = async (id, user) => {
   const product = await Product.findOne({ _id: id }).setOptions({
     includeDeleted: true,
   });
@@ -283,6 +379,11 @@ export const restoreProduct = async (id) => {
 
   if (!product.isDeleted) {
     throw new AppError('Sản phẩm chưa bị xóa', 400);
+  }
+
+  // Kiểm tra quyền (chỉ admin hoặc staff/manager của canteen đó)
+  if (user.role !== 'admin') {
+    checkProductAccess(user, product);
   }
 
   product.isDeleted = false;
@@ -300,14 +401,18 @@ export const restoreProduct = async (id) => {
  * Add ingredient to product recipe
  * @param {string} productId - Product ID
  * @param {Object} ingredient - Ingredient data
+ * @param {Object} user - Current user
  * @returns {Promise<Object>} Updated product
  */
-
-export const addRecipeIngredient = async (productId, ingredient) => {
+export const addRecipeIngredient = async (productId, ingredient, user) => {
   const product = await Product.findById(productId);
   if (!product) {
     throw new AppError('Product not found', 404);
   }
+
+  // Kiểm tra quyền
+  checkUserCanCRUD(user);
+  checkProductAccess(user, product);
 
   const exists = product.recipe.some(
     (item) => item.ingredientId.toString() === ingredient.ingredientId
@@ -323,31 +428,22 @@ export const addRecipeIngredient = async (productId, ingredient) => {
   return product;
 };
 
-// export const addRecipeIngredient = async (productId, ingredient) => {
-//   const product = await Product.findByIdAndUpdate(
-//     productId,
-//     { $push: { recipe: ingredient } },
-//     { new: true, runValidators: true }
-//   );
-
-//   if (!product) {
-//     throw new AppError('Product not found', 404);
-//   }
-
-//   return product;
-// };
-
 /**
  * Remove ingredient from product recipe
  * @param {string} productId - Product ID
  * @param {string} ingredientId - Ingredient ID to remove
+ * @param {Object} user - Current user
  * @returns {Promise<Object>} Updated product
  */
-export const removeRecipeIngredient = async (productId, ingredientId) => {
+export const removeRecipeIngredient = async (productId, ingredientId, user) => {
   const product = await Product.findById(productId);
   if (!product) {
     throw new AppError('Product not found', 404);
   }
+
+  // Kiểm tra quyền
+  checkUserCanCRUD(user);
+  checkProductAccess(user, product);
 
   const before = product.recipe.length;
 
@@ -363,29 +459,31 @@ export const removeRecipeIngredient = async (productId, ingredientId) => {
   return product;
 };
 
-// export const removeRecipeIngredient = async (productId, ingredientId) => {
-//   const product = await Product.findByIdAndUpdate(
-//     productId,
-//     { $pull: { recipe: { ingredientId } } },
-//     { new: true }
-//   );
-
-//   if (!product) {
-//     throw new AppError('Product not found', 404);
-//   }
-
-//   return product;
-// };
-
 /**
  * Inventory Management
  */
 
-export const getOutOfStockListByCanteen = async (canteenId, options) => {
+export const getOutOfStockListByCanteen = async (canteenId, options, user) => {
+  // Kiểm tra quyền (chỉ staff/manager của canteen đó)
+  if (
+    user &&
+    user.canteenId &&
+    user.canteenId.toString() !== canteenId.toString()
+  ) {
+    throw new AppError('Bạn không có quyền truy cập canteen này', 403);
+  }
   return getOutOfStockProducts(canteenId, options);
 };
 
-export const getLowStockListByCanteen = async (canteenId, options) => {
+export const getLowStockListByCanteen = async (canteenId, options, user) => {
+  // Kiểm tra quyền (chỉ staff/manager của canteen đó)
+  if (
+    user &&
+    user.canteenId &&
+    user.canteenId.toString() !== canteenId.toString()
+  ) {
+    throw new AppError('Bạn không có quyền truy cập canteen này', 403);
+  }
   return getLowStockProducts(canteenId, options);
 };
 

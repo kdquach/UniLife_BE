@@ -1,4 +1,5 @@
 import User from "../user/user.model.js";
+import { Notification as NotificationModel } from "../notification/notification.model.js";
 import { generateToken } from "../../utils/jwt.js";
 import AppError from "../../utils/AppError.js";
 import { OAuth2Client } from "google-auth-library";
@@ -12,6 +13,21 @@ import { sendOTPEmail, sendPasswordResetOTP } from "../../config/email.js";
 
 // Initialize Google OAuth client
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+const createWelcomePromotionNotification = async (userId) => {
+  await NotificationModel.create({
+    userId,
+    type: "promotion",
+    title: "Chào mừng bạn đến với UniLife 🎉",
+    content: "Tặng bạn mã giảm giá WELCOME10 cho đơn hàng đầu tiên!",
+    metadata: {
+      voucherCode: "WELCOME10",
+      discountType: "percentage",
+      value: 10,
+    },
+    isRead: false,
+  });
+};
 
 /**
  * Send OTP for registration
@@ -99,6 +115,8 @@ export const verifyRegisterOTP = async (data) => {
     emailVerified: true,
     emailVerifiedAt: new Date(),
   });
+
+  await createWelcomePromotionNotification(user._id);
 
   // Generate token
   const token = generateToken({ id: user._id });
@@ -294,6 +312,8 @@ export const register = async (userData) => {
     role: role || "customer",
   });
 
+  await createWelcomePromotionNotification(user._id);
+
   // Generate token
   const token = generateToken({ id: user._id });
 
@@ -449,6 +469,8 @@ export const googleAuth = async (idToken) => {
       lastLoginAt: new Date(),
       role: "customer",
     });
+
+    await createWelcomePromotionNotification(user._id);
   }
 
   // Generate JWT token

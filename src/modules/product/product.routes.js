@@ -1,6 +1,10 @@
 import express from 'express';
 import * as productController from './product.controller.js';
-import { protect, restrictTo } from '../../middlewares/auth.middleware.js';
+import {
+  protect,
+  restrictTo,
+  optionalProtect,
+} from '../../middlewares/auth.middleware.js';
 import {
   uploadFields,
   handleUploadError,
@@ -8,34 +12,66 @@ import {
 
 const router = express.Router();
 
-// Public routes
-router.get('/', productController.getAllProducts);
-router.get('/canteen/:canteenId', productController.getProductsByCanteen);
+// Public routes - Customer xem sản phẩm (có optionalProtect để lọc nếu staff/manager đăng nhập)
+router.get('/', optionalProtect, productController.getAllProducts);
+router.get(
+  '/canteen/:canteenId',
+  optionalProtect,
+  productController.getProductsByCanteen
+);
 router.get(
   '/canteen/:canteenId/search',
+  optionalProtect,
   productController.searchProductsByCanteen
 );
 
-// Admin routes for deleted products - must be before /:id
+// Protected routes cho Staff/Manager quản lý sản phẩm
+router.get(
+  '/manage',
+  protect,
+  restrictTo('staff', 'manager'),
+  productController.getAllProducts
+);
+
+// Admin/Manager routes for deleted products - must be before /:id
 router.get(
   '/deleted',
   protect,
-  restrictTo('admin'),
+  restrictTo('staff', 'manager', 'admin'),
   productController.getDeletedProducts
 );
 
-// Inventory routes - must be before /:id
-router.get('/inventory/out-of-stock', productController.getOutOfStockProducts);
-router.get('/inventory/low-stock', productController.getLowStockProducts);
+// Inventory routes - must be before /:id (chỉ staff/manager)
+router.get(
+  '/inventory/out-of-stock',
+  protect,
+  restrictTo('staff', 'manager'),
+  productController.getOutOfStockProducts
+);
+router.get(
+  '/inventory/low-stock',
+  protect,
+  restrictTo('staff', 'manager'),
+  productController.getLowStockProducts
+);
+
+// Public route kiểm tra tồn kho
 router.get('/:id/inventory-check', productController.getProductInventoryCheck);
-router.get('/:id/inventory', productController.getProductInventory);
 
-// Get by ID - must be after specific routes
-router.get('/:id', productController.getProductById);
+// Protected route xem chi tiết inventory
+router.get(
+  '/:id/inventory',
+  protect,
+  restrictTo('staff', 'manager'),
+  productController.getProductInventory
+);
 
-// Protected routes
+// Get by ID - public route
+router.get('/:id', optionalProtect, productController.getProductById);
+
+// Protected routes - Staff và Manager only (Admin KHÔNG có quyền CRUD)
 router.use(protect);
-router.use(restrictTo('staff', 'admin'));
+router.use(restrictTo('staff', 'manager'));
 
 router.post(
   '/',
@@ -69,12 +105,8 @@ router.delete(
   productController.removeRecipeIngredient
 );
 
-// Admin only
-router.patch(
-  '/:id/restore',
-  restrictTo('admin'),
-  productController.restoreProduct
-);
-router.delete('/:id', restrictTo('admin'), productController.deleteProduct);
+// Restore và delete (cho cả staff/manager/admin)
+router.patch('/:id/restore', productController.restoreProduct);
+router.delete('/:id', productController.deleteProduct);
 
 export default router;
