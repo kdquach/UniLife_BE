@@ -1,6 +1,7 @@
 import Menu from "./menu.model.js";
 import MenuSchedule from "./menuSchedule.model.js";
 import AppError from "../../utils/AppError.js";
+import { filterPresets, paginatedQuery } from "../../utils/queryHelper.js";
 
 /**
  * Create a new menu
@@ -14,9 +15,9 @@ export const createMenu = async (menuData) => {
 };
 
 /**
- * Get all menus
+ * Get all menus (with pagination)
  * @param {Object} query - Query parameters
- * @returns {Promise<Array>} Array of menus
+ * @returns {Promise<Object>} Paginated menus result
  */
 export const getAllMenus = async (query = {}) => {
   const filter = {};
@@ -28,11 +29,22 @@ export const getAllMenus = async (query = {}) => {
     filter.status = query.status;
   }
 
-  const menus = await Menu.find(filter)
-    .populate("canteenId", "name location")
-    .populate("items.productId", "name price image")
-    .sort({ createdAt: -1 });
-  return menus;
+  // Sử dụng helper phân trang chung, áp dụng filter theo canteenId/status
+  return paginatedQuery(Menu, query, {
+    baseFilter: filter,
+    ...filterPresets.menu,
+    // Comment: Luôn populate thông tin món trong thực đơn để FE hiển thị tên, giá, danh mục
+    populate: [
+      {
+        path: "items.productId",
+        select: "name price image categoryId",
+        populate: {
+          path: "categoryId",
+          select: "name",
+        },
+      },
+    ],
+  });
 };
 
 /**
@@ -114,7 +126,16 @@ export const updateMenu = async (id, updateData) => {
   const menu = await Menu.findByIdAndUpdate(id, updateData, {
     new: true,
     runValidators: true,
-  });
+  })
+    // Comment: Populate lại danh sách món sau khi cập nhật để FE có đủ name/price/category
+    .populate({
+      path: "items.productId",
+      select: "name price image categoryId",
+      populate: {
+        path: "categoryId",
+        select: "name",
+      },
+    });
 
   if (!menu) {
     throw new AppError("Menu not found", 404);
@@ -132,7 +153,7 @@ export const deleteMenu = async (id) => {
   if (!menu) {
     throw new AppError("Menu not found", 404);
   }
-  if (menu.status === 'draft') {
+  if (menu.status !== 'active') {
     // Also delete associated schedules
     await Menu.findByIdAndDelete(id)
   }
@@ -186,24 +207,45 @@ export const removeMenuItem = async (menuId, productId) => {
  * @returns {Promise<Object>} Created schedule
  */
 export const createMenuSchedule = async (scheduleData) => {
-  const { menuId, canteenId, startAt, endAt } = scheduleData
+  const { menuId, canteenId, startAt, endAt } = scheduleData;
 
   if (new Date(startAt) >= new Date(endAt)) {
-    throw new AppError("Invalid time range")
+    throw new AppError("Invalid time range", 400);
+  }
+
+  // Chỉ cho phép áp dụng lịch từ hôm nay đến tối đa 7 ngày tới
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const maxDate = new Date(today);
+  maxDate.setDate(maxDate.getDate() + 7);
+  maxDate.setHours(23, 59, 59, 999);
+
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+
+  if (start < today || end > maxDate) {
+    // Comment: Chỉ cho phép tạo lịch trong vòng 7 ngày kể từ hôm nay
+    throw new AppError(
+      "Chỉ được tạo lịch áp dụng trong vòng 7 ngày tới kể từ hôm nay",
+      400,
+    );
   }
 
   //check overlapping
-  const overlap = await MenuSchedule.findOne(
-    {
-      canteenId,
-      status: 'enabled',
-      startAt: { $lt: startAt },
-      endAt: { $gt: endAt },
-    }
-  )
+  const overlap = await MenuSchedule.findOne({
+    canteenId,
+    status: "enabled",
+    startAt: { $lt: endAt },
+    endAt: { $gt: start },
+  });
 
   if (overlap) {
-    throw new AppError("Invalid time range")
+    // Comment: Khoảng thời gian tạo lịch bị trùng với một lịch khác
+    throw new AppError(
+      "Khoảng thời gian này bị trùng với một lịch áp dụng khác",
+      400,
+    );
   }
 
   const schedule = await MenuSchedule.create({
@@ -211,7 +253,7 @@ export const createMenuSchedule = async (scheduleData) => {
     canteenId,
     startAt,
     endAt,
-  })
+  });
   return schedule;
 };
 
@@ -251,7 +293,7 @@ export const getMenuScheduleById = async (id) => {
     });
 
   if (!schedule) {
-    throw new Error("Schedule not found");
+    throw new AppError("Không tìm thấy lịch thực đơn", 404);
   }
 
   return schedule;
@@ -267,7 +309,7 @@ export const updateMenuSchedule = async (id, updateData) => {
   const schedule = await MenuSchedule.findById(id);
 
   if (!schedule) {
-    throw new AppError("Menu schedule not found", 404);
+    throw new AppError("Không tìm thấy lịch thực đơn", 404);
   }
 
   const now = new Date();
@@ -276,9 +318,10 @@ export const updateMenuSchedule = async (id, updateData) => {
 
   // Không cho update nếu đang chạy
   if (isRunning) {
+    // Comment: Không cho phép chỉnh sửa lịch đang trong thời gian hoạt động
     throw new AppError(
-      "Cannot update a running schedule",
-      400
+      "Không thể chỉnh sửa lịch đang trong thời gian hoạt động",
+      400,
     );
   }
 
@@ -292,8 +335,8 @@ export const updateMenuSchedule = async (id, updateData) => {
 
   if (newStart >= newEnd) {
     throw new AppError(
-      "Start time must be before end time",
-      400
+      "Thời gian bắt đầu phải trước thời gian kết thúc",
+      400,
     );
   }
 
@@ -307,9 +350,10 @@ export const updateMenuSchedule = async (id, updateData) => {
   });
 
   if (overlap) {
+    // Comment: Khoảng thời gian mới bị trùng với một lịch đang hoạt động khác
     throw new AppError(
-      "Schedule overlaps with existing active schedule",
-      400
+      "Khoảng thời gian mới bị trùng với một lịch đang hoạt động khác",
+      400,
     );
   }
 
@@ -325,7 +369,7 @@ export const toggleScheduleStatus = async (scheduleId) => {
   const schedule = await MenuSchedule.findById(scheduleId);
 
   if (!schedule) {
-    throw new Error("Schedule not found");
+    throw new AppError("Không tìm thấy lịch thực đơn", 404);
   }
 
   const now = new Date();
@@ -338,11 +382,28 @@ export const toggleScheduleStatus = async (scheduleId) => {
   if (schedule.status === "enabled") {
     // Không cho tắt nếu đang chạy
     if (isRunning) {
-      throw new Error("Cannot disable a running schedule");
+      throw new AppError(
+        "Không thể tắt lịch đang trong thời gian hoạt động",
+        400,
+      );
     }
 
     schedule.status = "disabled";
     await schedule.save();
+
+    // Sau khi tắt, nếu không còn lịch nào enabled (chưa hết hạn) cho menu này thì chuyển menu sang inactive
+    const hasOtherEnabled = await MenuSchedule.exists({
+      _id: { $ne: scheduleId },
+      menuId: schedule.menuId,
+      canteenId: schedule.canteenId,
+      status: "enabled",
+      endAt: { $gte: now },
+    });
+
+    if (!hasOtherEnabled) {
+      await Menu.findByIdAndUpdate(schedule.menuId, { status: "inactive" });
+    }
+
     return schedule;
   }
 
@@ -352,7 +413,10 @@ export const toggleScheduleStatus = async (scheduleId) => {
   if (schedule.status === "disabled") {
     // Không cho bật nếu đã hết hạn
     if (schedule.endAt < now) {
-      throw new Error("Cannot enable expired schedule");
+      throw new AppError(
+        "Không thể bật lịch đã hết thời gian áp dụng",
+        400,
+      );
     }
 
     // Check overlap với schedule khác
@@ -365,13 +429,18 @@ export const toggleScheduleStatus = async (scheduleId) => {
     });
 
     if (overlap) {
-      throw new Error(
-        "Schedule overlaps with existing active schedule"
+      throw new AppError(
+        "Khoảng thời gian này bị trùng với một lịch đang hoạt động khác",
+        400,
       );
     }
 
     schedule.status = "enabled";
     await schedule.save();
+
+    // Khi bật một lịch hợp lệ, đảm bảo menu ở trạng thái active
+    await Menu.findByIdAndUpdate(schedule.menuId, { status: "active" });
+
     return schedule;
   }
 
@@ -382,7 +451,18 @@ export const duplicateSchedule = async (scheduleId, newStart, newEnd) => {
   const oldSchedule = await MenuSchedule.findById(scheduleId);
 
   if (!oldSchedule) {
-    throw new Error("Schedule not found");
+    throw new AppError("Không tìm thấy lịch thực đơn để nhân bản", 404);
+  }
+
+  const now = new Date();
+  const start = new Date(newStart);
+
+  // Không cho nhân bản lịch về thời điểm trong quá khứ
+  if (start < now) {
+    throw new AppError(
+      "Không thể nhân bản lịch về thời điểm trong quá khứ",
+      400,
+    );
   }
 
   return await createMenuSchedule({
@@ -417,7 +497,7 @@ export const deleteMenuSchedule = async (id) => {
   const schedule = await MenuSchedule.findById(id);
 
   if (!schedule) {
-    throw new AppError("Menu schedule not found", 404);
+    throw new AppError("Không tìm thấy lịch thực đơn", 404);
   }
 
   const now = new Date();
@@ -425,7 +505,11 @@ export const deleteMenuSchedule = async (id) => {
     now >= schedule.startAt && now <= schedule.endAt;
 
   if (schedule.status === "enabled" && isRunning) {
-    throw new AppError("Cannot delete a running schedule", 400);
+    // Comment: Không cho phép xóa lịch đang trong thời gian hoạt động
+    throw new AppError(
+      "Không thể xóa lịch đang trong thời gian hoạt động",
+      400,
+    );
   }
 
   await schedule.deleteOne();

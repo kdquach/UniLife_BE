@@ -130,11 +130,13 @@ export const requirePermission = (...requiredPermissions) => {
     const userPermissionCodes = rolePermissions.map(
       (rp) => rp.permissionId.code
     );
+    console.log("🚀 ~ requirePermission ~ userPermissionCodes:", userPermissionCodes)
 
     // Kiểm tra xem user có ít nhất 1 permission trong danh sách yêu cầu không
     const hasPermission = requiredPermissions.some((permission) =>
       userPermissionCodes.includes(permission)
     );
+    console.log("🚀 ~ requirePermission ~ hasPermission:", hasPermission)
 
     if (!hasPermission) {
       return next(
