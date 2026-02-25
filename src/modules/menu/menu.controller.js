@@ -9,11 +9,11 @@ import * as menuService from "./menu.service.js";
  * @access Private (Staff, Admin)
  */
 export const createMenu = catchAsync(async (req, res) => {
-  const { canteenId } = req.body
+  const canteenId = req.user?.canteenId
   if (!canteenId) {
     return res.status(400).json({ message: "canteenId is required" });
   }
-  const menu = await menuService.createMenu(req.body);
+  const menu = await menuService.createMenu({ ...req.body, canteenId });
 
   res.status(201).json({
     status: "success",
