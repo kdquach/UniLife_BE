@@ -10,6 +10,7 @@ import {
   deleteProductImagesByUrls,
   deleteProductImagesByPublicIds,
   getProductImageUrls,
+  mergeProductImages,
 } from './media/product.media.service.js';
 import {
   getOutOfStockProducts,
@@ -259,36 +260,17 @@ export const updateProduct = async (id, updateData, files, user) => {
   const validatedData = await validateUpdateProduct(currentProduct, updateData);
   const imagePayload = await buildProductImagePayload(files);
 
-  const oldImageUrls = imagePayload ? getProductImageUrls(currentProduct) : [];
+  // Xử lý merge ảnh mới + ảnh cũ
+  const imageUpdate = mergeProductImages(
+    currentProduct,
+    imagePayload,
+    updateData.keepImageUrls
+  );
 
-  // Xử lý cập nhật ảnh
-  if (imagePayload) {
-    validatedData.image = imagePayload.image;
-    validatedData.images = imagePayload.images;
-  } else if (updateData.keepImageUrls !== undefined) {
-    // Nếu không có ảnh mới nhưng có thông tin ảnh cần giữ lại
-    const keepUrls = Array.isArray(updateData.keepImageUrls)
-      ? updateData.keepImageUrls
-      : JSON.parse(updateData.keepImageUrls || '[]');
-
-    // Lọc ra ảnh cần xóa
-    const currentUrls = getProductImageUrls(currentProduct);
-    const urlsToDelete = currentUrls.filter((url) => !keepUrls.includes(url));
-
-    // Cập nhật danh sách ảnh
-    if (keepUrls.length > 0) {
-      validatedData.image = keepUrls[0];
-      validatedData.images = keepUrls;
-    } else {
-      // Xóa tất cả ảnh nếu không giữ ảnh nào
-      validatedData.image = null;
-      validatedData.images = [];
-    }
-
-    // Xóa ảnh trên Cloudinary
-    if (urlsToDelete.length > 0) {
-      await deleteProductImagesByUrls(urlsToDelete);
-    }
+  // Cập nhật ảnh nếu có thay đổi
+  if (imageUpdate.finalImageUrls !== null) {
+    validatedData.image = imageUpdate.image;
+    validatedData.images = imageUpdate.finalImageUrls;
   }
 
   try {
@@ -299,12 +281,14 @@ export const updateProduct = async (id, updateData, files, user) => {
       .populate('categoryId', 'name')
       .populate('canteenId', 'name location');
 
-    if (imagePayload && oldImageUrls.length > 0) {
-      await deleteProductImagesByUrls(oldImageUrls);
+    //  Xóa ảnh cũ SAU KHI cập nhật DB thành công
+    if (imageUpdate.urlsToDelete.length > 0) {
+      await deleteProductImagesByUrls(imageUpdate.urlsToDelete);
     }
 
     return product;
   } catch (error) {
+    // Rollback: Xóa ảnh mới nếu cập nhật DB thất bại
     if (imagePayload?.publicIds?.length) {
       await deleteProductImagesByPublicIds(imagePayload.publicIds);
     }
