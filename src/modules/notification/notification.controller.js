@@ -39,6 +39,7 @@ export const markAsRead = catchAsync(async (req, res) => {
     req.params.id,
     req.user._id,
     req.user.canteenId,
+    req.user.role,
   );
   res.status(200).json({ status: "success", data: { notification } });
 });
@@ -59,12 +60,17 @@ export const deleteNotification = catchAsync(async (req, res) => {
     req.params.id,
     req.user._id,
     req.user.canteenId,
+    req.user.role,
   );
   res.status(204).json({ status: "success", data: null });
 });
 
 export const deleteAllNotifications = catchAsync(async (req, res) => {
-  await notificationService.deleteAllNotifications(req.user._id, req.user.canteenId);
+  await notificationService.deleteAllNotifications(
+    req.user._id,
+    req.user.canteenId,
+    req.user.role,
+  );
   res.status(204).json({ status: "success", data: null });
 });
 

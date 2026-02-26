@@ -31,6 +31,18 @@ const resolveAllowedTypesByRole = (role = "customer") => {
   return NOTIFICATION_TYPES.client;
 };
 
+const shouldScopePersonalByCanteen = (role = "customer") => {
+  const normalized = String(role || "").toLowerCase();
+  return ["admin", "staff", "manager"].includes(normalized);
+};
+
+const withPersonalScope = (filter = {}, canteenId = null, role = "customer") => {
+  if (!shouldScopePersonalByCanteen(role)) {
+    return filter;
+  }
+  return withCanteenScope(filter, canteenId);
+};
+
 const parseIsRead = (value) => {
   if (value === undefined) return undefined;
   if (value === true || value === "true") return true;
@@ -131,7 +143,7 @@ export const getMyNotifications = async (
     ...(parsedIsRead !== undefined && { isRead: parsedIsRead }),
   };
 
-  const filter = withCanteenScope(baseFilter, canteenId);
+  const filter = withPersonalScope(baseFilter, canteenId, role);
 
   const rows = await Notification.find(filter)
     .select("_id canteenId userId type title content isRead metadata createdAt")
@@ -144,7 +156,7 @@ export const getMyNotifications = async (
 
 export const getUnreadCount = async (userId, canteenId = null, role = "customer") => {
   const personalUnread = await Notification.countDocuments(
-    withCanteenScope({ userId, isRead: false }, canteenId),
+    withPersonalScope({ userId, isRead: false }, canteenId, role),
   );
 
   const systemFilter = buildActiveSystemFilter(role, canteenId);
@@ -161,8 +173,13 @@ export const getUnreadCount = async (userId, canteenId = null, role = "customer"
   return personalUnread + systemUnread;
 };
 
-export const markAsRead = async (notificationId, userId, canteenId = null) => {
-  const filter = withCanteenScope({ _id: notificationId, userId }, canteenId);
+export const markAsRead = async (
+  notificationId,
+  userId,
+  canteenId = null,
+  role = "customer",
+) => {
+  const filter = withPersonalScope({ _id: notificationId, userId }, canteenId, role);
   const existing = await Notification.findOne(filter);
   if (existing) {
     if (existing.isRead) {
@@ -209,7 +226,7 @@ export const markAsRead = async (notificationId, userId, canteenId = null) => {
 
 export const markAllAsRead = async (userId, canteenId = null, role = "customer") => {
   await Notification.updateMany(
-    withCanteenScope({ userId, isRead: false }, canteenId),
+    withPersonalScope({ userId, isRead: false }, canteenId, role),
     { isRead: true, readAt: new Date() },
   );
 
@@ -243,18 +260,23 @@ export const markAllAsRead = async (userId, canteenId = null, role = "customer")
   );
 };
 
-export const deleteNotification = async (notificationId, userId, canteenId = null) => {
-  const notification = await Notification.findOneAndDelete(withCanteenScope({
+export const deleteNotification = async (
+  notificationId,
+  userId,
+  canteenId = null,
+  role = "customer",
+) => {
+  const notification = await Notification.findOneAndDelete(withPersonalScope({
     _id: notificationId,
     userId,
-  }, canteenId));
+  }, canteenId, role));
   if (!notification) {
     throw new AppError("Notification not found", 404);
   }
 };
 
-export const deleteAllNotifications = async (userId, canteenId = null) => {
-  await Notification.deleteMany(withCanteenScope({ userId }, canteenId));
+export const deleteAllNotifications = async (userId, canteenId = null, role = "customer") => {
+  await Notification.deleteMany(withPersonalScope({ userId }, canteenId, role));
 };
 
 // ============ System Notification Services ============
@@ -286,16 +308,16 @@ export const getNotificationFeed = async (context = {}, query = {}) => {
   }
 
   const parsedIsRead = parseIsRead(isRead);
-  const limit = Math.min(Math.max(Number(query.limit) || 20, 1), 100);
+  const limit = Math.min(Math.max(Number(query.limit) || 20, 1), 200);
   const cursor = decodeCursor(query.cursor);
   const cursorFilter = buildCursorFilter(cursor);
-
-  const personalFilter = withCanteenScope(
+  const personalFilter = withPersonalScope(
     {
       userId,
       ...cursorFilter,
     },
     canteenId,
+    role,
   );
   if (type) {
     personalFilter.type = type;
