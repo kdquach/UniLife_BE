@@ -107,6 +107,40 @@ const notifyOrderStatusChangedToUser = async ({
   }
 };
 
+const notifyOrderCreatedToUser = async ({ order }) => {
+  if (!order?.userId || !order?._id) return;
+
+  try {
+    const notification = await createNotification({
+      userId: order.userId,
+      canteenId: order.canteenId || null,
+      type: "order",
+      title: "Đặt hàng thành công",
+      content: `Đơn #${order.orderNumber || "---"} đã được tạo thành công.`,
+      metadata: {
+        kind: "order_created",
+        orderId: order._id,
+        status: order.status,
+      },
+    });
+
+    notifyUser(String(order.userId), {
+      id: String(notification._id),
+      title: notification.title,
+      content: notification.content,
+      type: "order",
+      isRead: false,
+      createdAt: notification.createdAt,
+      meta: {
+        ...(notification.metadata || {}),
+        notificationId: String(notification._id),
+      },
+    });
+  } catch (error) {
+    console.error("Failed to notify user order created:", error.message);
+  }
+};
+
 // Helper: Xử lý inventory khi tạo order
 const handleInventoryForOrder = async (orderItems) => {
   const inventoryResults = [];
@@ -313,6 +347,8 @@ export const createOrder = async (orderData, userId) => {
       await session.commitTransaction();
       session.endSession();
 
+      await notifyOrderCreatedToUser({ order });
+
       return order;
     } catch (error) {
       await session.abortTransaction();
@@ -336,6 +372,8 @@ export const createOrder = async (orderData, userId) => {
       payment: payment || { method: "cash", status: "pending" },
       note,
     });
+
+    await notifyOrderCreatedToUser({ order });
 
     return order;
   } catch (error) {
