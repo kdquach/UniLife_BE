@@ -102,3 +102,65 @@ export const deleteProductImagesByPublicIds = async (publicIds = []) => {
 export const getProductImageUrls = (product) => {
   return collectProductImageUrls(product);
 };
+
+/**
+ * Xử lý merge ảnh mới + ảnh cũ
+ * @param {Object} currentProduct - Sản phẩm hiện tại
+ * @param {Object} imagePayload - Payload ảnh mới (từ buildProductImagePayload)
+ * @param {Array|String} keepImageUrls - Danh sách URL ảnh cũ cần giữ lại
+ * @returns {Object} { finalImageUrls, urlsToDelete, image }
+ */
+export const mergeProductImages = (
+  currentProduct,
+  imagePayload,
+  keepImageUrls
+) => {
+  const oldImageUrls = getProductImageUrls(currentProduct);
+  const newImageUrls = imagePayload
+    ? imagePayload.images || [imagePayload.image]
+    : [];
+
+  let finalImageUrls = [];
+  let urlsToDelete = [];
+
+  if (imagePayload && keepImageUrls !== undefined) {
+    // Trường hợp 1: Vừa upload ảnh mới + vừa giữ ảnh cũ
+    const keepUrls = Array.isArray(keepImageUrls)
+      ? keepImageUrls
+      : JSON.parse(keepImageUrls || '[]');
+
+    // Lọc ảnh cũ cần giữ lại
+    const keptOldUrls = oldImageUrls.filter((url) => keepUrls.includes(url));
+
+    // Merge: Ảnh cũ được giữ + Ảnh mới
+    finalImageUrls = [...keptOldUrls, ...newImageUrls];
+
+    // Ảnh cần xóa = Ảnh cũ KHÔNG nằm trong keepUrls
+    urlsToDelete = oldImageUrls.filter((url) => !keepUrls.includes(url));
+  } else if (imagePayload) {
+    // Trường hợp 2: Chỉ upload ảnh mới, thay thế toàn bộ ảnh cũ
+    finalImageUrls = newImageUrls;
+    urlsToDelete = oldImageUrls;
+  } else if (keepImageUrls !== undefined) {
+    // Trường hợp 3: Không upload ảnh mới, chỉ giữ/xóa ảnh cũ
+    const keepUrls = Array.isArray(keepImageUrls)
+      ? keepImageUrls
+      : JSON.parse(keepImageUrls || '[]');
+
+    finalImageUrls = keepUrls.length > 0 ? keepUrls : [];
+    urlsToDelete = oldImageUrls.filter((url) => !keepUrls.includes(url));
+  } else {
+    // Trường hợp 4: Không thay đổi ảnh
+    return {
+      finalImageUrls: null,
+      urlsToDelete: [],
+      image: null,
+    };
+  }
+
+  return {
+    finalImageUrls,
+    urlsToDelete,
+    image: finalImageUrls[0] || null, // Ảnh chính = ảnh đầu tiên
+  };
+};

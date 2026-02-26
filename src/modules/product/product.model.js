@@ -158,6 +158,7 @@ productSchema.pre('save', function (next) {
   next();
 });
 
+// Tự động lọc bỏ product đã xóa khi query
 productSchema.pre(/^find/, function (next) {
   const options = this.getOptions ? this.getOptions() : {};
 
