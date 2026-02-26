@@ -144,7 +144,7 @@ export const getMyShifts = async (staffId, date) => {
     const graceBefore = shift.gracePeriodBefore || 15;
 
     // Determine can_checkin and can_checkout based on current state
-    const isAssigned = assignment.status === "assigned";
+    const isAssigned = ["assigned", "scheduled"].includes(assignment.status);
     const isCheckedIn = assignment.status === "checked_in";
     const isCheckedOut = assignment.status === "checked_out";
 
@@ -208,8 +208,12 @@ export const getMyShifts = async (staffId, date) => {
     };
   });
 
+  const yyyy = startOfDay.getFullYear();
+  const mm = String(startOfDay.getMonth() + 1).padStart(2, "0");
+  const dd = String(startOfDay.getDate()).padStart(2, "0");
+
   return {
-    date: startOfDay.toISOString().split("T")[0],
+    date: `${yyyy}-${mm}-${dd}`,
     shifts: shifts.filter(Boolean),
   };
 };
@@ -263,8 +267,8 @@ export const checkIn = async (staffId, shiftId, req) => {
     throw new AppError(`Bạn đã check-in ca này lúc ${checkedInTime} rồi`, 400);
   }
 
-  // 3. Only allow check-in for "assigned" status
-  if (assignment.status !== "assigned") {
+  // 3. Only allow check-in for "assigned" or "scheduled" status
+  if (!["assigned", "scheduled"].includes(assignment.status)) {
     throw new AppError("Không thể check-in với trạng thái hiện tại", 400);
   }
 
@@ -331,12 +335,12 @@ export const checkIn = async (staffId, shiftId, req) => {
     lateMinutes = Math.round(diffMinutes);
   }
 
-  // 7. ATOMIC update: findOneAndUpdate with status:"assigned" as filter
+  // 7. ATOMIC update: findOneAndUpdate with status $in ["assigned", "scheduled"] as filter
   //    This prevents race conditions — only 1 concurrent request can win
   const updated = await StaffShift.findOneAndUpdate(
     {
       _id: assignment._id,
-      status: "assigned", // KEY: atomic guard — only matches if still "assigned"
+      status: { $in: ["assigned", "scheduled"] }, // KEY: atomic guard — only matches if still valid for checkin
     },
     {
       $set: {
