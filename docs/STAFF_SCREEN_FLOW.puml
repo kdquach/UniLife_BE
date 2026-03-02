@@ -1,0 +1,158 @@
+@startuml Staff_Screen_Flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+
+' Định nghĩa màu sắc
+skinparam rectangle {
+    BackgroundColor<<screen>> #E3F2FD
+    BorderColor<<screen>> #1976D2
+    BorderThickness<<screen>> 2
+}
+
+skinparam storage {
+    BackgroundColor<<modal>> #FFF9C4
+    BorderColor<<modal>> #F57C00
+    BorderThickness<<modal>> 2
+}
+
+title Sơ đồ Screen Flow - Nhân viên (Staff)
+
+' Màn hình chính (hình chữ nhật)
+rectangle "Đăng nhập\nLogin" as Login <<screen>>
+
+' Màn hình Lịch làm việc (trung tâm)
+rectangle "Lịch làm việc\nStaff Schedule" as Schedule <<screen>> #FFECB3
+
+' Nhóm màn hình Chấm công
+rectangle "Chấm công hôm nay\nStaff Attendance" as Attendance <<screen>>
+rectangle "Lịch sử chấm công\nAttendance History" as AttendanceHistory <<screen>>
+
+' Nhóm màn hình Quản lý sản phẩm
+rectangle "Danh sách sản phẩm\nProduct Management" as Products <<screen>>
+rectangle "Điều khiển tồn kho\nInventory Dashboard" as Inventory <<screen>>
+rectangle "Phân bổ vào thực đơn\nAssign Food to Menu" as AssignFood <<screen>>
+
+' Nhóm màn hình Danh mục
+rectangle "Danh mục sản phẩm\nProduct Categories" as ProductCat <<screen>>
+rectangle "Danh mục nguyên liệu\nIngredient Categories" as IngredientCat <<screen>>
+
+' Nhóm màn hình Đơn hàng
+rectangle "Đơn chờ nhận\nPending Pickup Orders" as Orders <<screen>>
+rectangle "Quét QR trả hàng\nQR Scan Screen" as QRScan <<screen>>
+
+' Màn hình Profile
+rectangle "Hồ sơ cá nhân\nProfile" as Profile <<screen>>
+
+' Màn hình Thông báo
+rectangle "Thông báo\nNotifications" as Notifications <<screen>>
+
+' Modal/Popup (hình dạng viên thuốc)
+storage "Chi tiết ca làm việc\nShift Detail Modal" as ShiftDetail <<modal>>
+storage "Yêu cầu đổi ca\nRequest Shift Change" as RequestChange <<modal>>
+storage "Xác nhận check-in\nCheck-in Confirm" as CheckInModal <<modal>>
+storage "Xác nhận check-out\nCheck-out Confirm" as CheckOutModal <<modal>>
+storage "Lý do về sớm\nEarly Leave Reason" as EarlyLeaveModal <<modal>>
+storage "Chi tiết đơn hàng\nOrder Detail Modal" as OrderDetail <<modal>>
+storage "Kết quả quét QR\nQR Scan Result" as QRResult <<modal>>
+storage "Nhập mã thủ công\nManual Code Input" as ManualCode <<modal>>
+storage "Chi tiết thông báo\nNotification Detail" as NotificationDetail <<modal>>
+storage "Đổi mật khẩu\nChange Password" as ChangePassword <<modal>>
+storage "Cập nhật avatar\nUpdate Avatar" as UpdateAvatar <<modal>>
+
+' ====== Luồng chính ======
+
+Login -down-> Schedule : Click "Login" button\nSuccessfully authenticated
+
+' Từ Lịch làm việc đến các màn hình khác
+Schedule -right-> Attendance : Click "Attendance"\nmenu item
+Schedule -right-> Products : Click "Product Management"\nmenu item
+Schedule -down-> Orders : Click "Orders"\nmenu item
+Schedule -left-> Profile : Click "Profile"\nmenu item
+
+' ====== Nhóm Chấm công ======
+Attendance -right-> AttendanceHistory : Click "View History"\nlink
+
+' Modals từ Chấm công
+Attendance ..> CheckInModal : Click\n"Check-in" button
+CheckInModal ..> Attendance : Click "Confirm"\nbutton
+Attendance ..> CheckOutModal : Click\n"Check-out" button
+CheckOutModal ..> EarlyLeaveModal : Early leave\ndetected
+EarlyLeaveModal ..> Attendance : Click "Submit"\nbutton
+CheckOutModal ..> Attendance : Click "Confirm"\nbutton
+
+' ====== Nhóm Lịch làm việc ======
+Schedule ..> ShiftDetail : Click on\nshift card
+ShiftDetail ..> RequestChange : Click "Request\nChange" button
+RequestChange ..> Schedule : Click "Submit\nRequest" button
+
+' ====== Nhóm Sản phẩm ======
+Products -down-> Inventory : Click "Inventory\nDashboard" link
+Products -down-> AssignFood : Click "Assign to\nMenu" button
+Products -down-> ProductCat : Click "Product\nCategories" menu
+Products -down-> IngredientCat : Click "Ingredient\nCategories" menu
+
+' ====== Nhóm Đơn hàng ======
+Orders -down-> QRScan : Click "QR Scan"\nmenu item
+
+' Modals từ Đơn hàng
+Orders ..> OrderDetail : Click on\norder card
+OrderDetail ..> Orders : Click "Close"\nbutton
+
+QRScan ..> QRResult : QR code scanned\nsuccessfully
+QRResult ..> QRScan : Click "Continue"\nbutton
+QRScan ..> ManualCode : Click "Manual\nInput" button
+ManualCode ..> QRResult : Click "Submit"\nbutton
+
+' ====== Profile ======
+Profile ..> ChangePassword : Click "Change\nPassword" button
+ChangePassword ..> Profile : Click "Save"\nbutton
+Profile ..> UpdateAvatar : Click "Upload\nAvatar" button
+UpdateAvatar ..> Profile : Click "Save"\nbutton
+
+' ====== Thông báo (truy cập từ Header) ======
+Schedule ..> Notifications : Click notification\nbell icon
+Notifications ..> NotificationDetail : Click on\nnotification item
+NotificationDetail ..> Notifications : Click "Close"\nbutton
+
+' ====== Chú thích ======
+legend right
+  |= Ký hiệu |= Mô tả |
+  | <size:14><&arrow-thick-right></size> | Điều hướng giữa các màn hình |
+  | <size:14>- - - ></size> | Mở Modal/Popup |
+  | <back:#E3F2FD>    </back> | Màn hình (Screen) |
+  | <back:#FFF9C4>    </back> | Modal/Popup |
+  | <back:#FFECB3>    </back> | Màn hình chính sau đăng nhập |
+endlegend
+
+note right of Schedule
+  **Màn hình mặc định sau đăng nhập**
+  - Hiển thị lịch làm việc theo tuần
+  - Xem chi tiết ca làm việc
+  - Gửi yêu cầu đổi ca
+end note
+
+note right of Attendance
+  **Chấm công hôm nay**
+  - Hiển thị các ca trong ngày
+  - Check-in khi bắt đầu ca
+  - Check-out khi kết thúc ca
+  - Cảnh báo về sớm/muộn
+end note
+
+note bottom of Orders
+  **Quản lý đơn hàng**
+  - Tab: Chờ nhận, Đã xong, Đã hủy
+  - Xem QR code đơn hàng
+  - Cập nhật trạng thái
+end note
+
+note bottom of QRScan
+  **Quét QR nhận hàng**
+  - Quét camera hoặc nhập thủ công
+  - Xác nhận hoàn thành đơn
+  - Hiển thị kết quả
+end note
+
+@enduml
