@@ -109,6 +109,14 @@ export const generatePayroll = async (
   session.startTransaction();
 
   try {
+    console.log("Generate Payroll - Input:", {
+      canteenId,
+      periodStart,
+      periodEnd,
+      hourlyRate,
+      createdBy,
+    });
+
     // 1. Kiểm tra payroll đã tồn tại chưa
     const existingPayroll = await Payroll.findOne({
       canteenId,
@@ -155,14 +163,20 @@ export const generatePayroll = async (
       },
     ]);
 
+    console.log("Staff Shifts found:", staffShifts.length);
+
     // 4. Lấy tất cả salary rates của canteen này
     const salaryRates = await SalaryRate.find({ canteenId })
       .select("userId hourlyRate")
       .lean();
 
+    console.log("Salary Rates found:", salaryRates.length);
+
     const salaryRateMap = {};
     salaryRates.forEach((rate) => {
-      salaryRateMap[rate.userId.toString()] = rate.hourlyRate;
+      if (rate.userId) {
+        salaryRateMap[rate.userId.toString()] = rate.hourlyRate;
+      }
     });
 
     // 5. Tạo salary records cho từng nhân viên
@@ -172,6 +186,8 @@ export const generatePayroll = async (
     let totalAmount = 0;
 
     for (const shift of staffShifts) {
+      if (!shift._id) continue; // Bỏ qua nếu userId null
+
       const userId = shift._id.toString();
       const hours = shift.totalHours || 0;
 

@@ -1,5 +1,6 @@
 import * as payrollService from "./payroll.service.js";
 import catchAsync from "../../utils/catchAsync.js";
+import AppError from "../../utils/AppError.js";
 
 /**
  * Tạo kỳ lương mới
@@ -57,6 +58,17 @@ export const generatePayroll = catchAsync(async (req, res) => {
   const { canteenId, periodStart, periodEnd, hourlyRate, description } =
     req.body;
   const createdBy = req.user._id;
+
+  // Validation
+  if (!canteenId) {
+    throw new AppError("Canteen ID is required", 400);
+  }
+  if (!periodStart || !periodEnd) {
+    throw new AppError("Period start and end dates are required", 400);
+  }
+  if (!hourlyRate || hourlyRate <= 0) {
+    throw new AppError("Valid hourly rate is required", 400);
+  }
 
   const result = await payrollService.generatePayroll(
     canteenId,
