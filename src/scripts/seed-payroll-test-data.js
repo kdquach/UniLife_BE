@@ -512,7 +512,127 @@ const seedPayrollTestData = async () => {
     await StaffShift.insertMany(staffShiftsFeb);
     console.log(`✅ Tạo ${staffShiftsFeb.length} ca làm việc tháng 02/2026`);
 
-    // =============== 6. THỐNG KÊ ===============
+    // =============== 6. TẠO STAFF SHIFTS - THÁNG 3/2026 (Tháng hiện tại) ===============
+    console.log(
+      "\n📅 Tạo dữ liệu chấm công tháng 03/2026 (chỉ đến ngày hôm nay)...",
+    );
+
+    const mar2026Start = new Date("2026-03-01");
+    const mar2026End = new Date(); // Ngày hôm nay
+    mar2026End.setHours(23, 59, 59, 999);
+
+    await StaffShift.deleteMany({
+      canteenId: canteen._id,
+      date: { $gte: mar2026Start, $lte: mar2026End },
+    });
+
+    const staffShiftsMar = [];
+    currentDate = new Date(mar2026Start);
+
+    while (currentDate <= mar2026End) {
+      const dayOfWeek = currentDate.getDay();
+
+      const selectedStaffs = staffs
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 3 + Math.floor(Math.random() * 2));
+
+      for (const staff of selectedStaffs) {
+        const numShifts = 1 + Math.floor(Math.random() * 2);
+        const selectedShifts = shifts
+          .filter((s) => s.dayOfWeek.includes(dayOfWeek))
+          .sort(() => Math.random() - 0.5)
+          .slice(0, numShifts);
+
+        for (const shift of selectedShifts) {
+          const shiftDate = new Date(currentDate);
+
+          const [startHour, startMin] = shift.startTime.split(":").map(Number);
+          const [endHour, endMin] = shift.endTime.split(":").map(Number);
+
+          const shiftStart = new Date(shiftDate);
+          shiftStart.setHours(startHour, startMin, 0, 0);
+
+          const shiftEnd = new Date(shiftDate);
+          shiftEnd.setHours(endHour, endMin, 0, 0);
+
+          const rand = Math.random();
+          let status, attendanceStatus, checkInTime, checkOutTime;
+          let lateMinutes = 0;
+          let overtimeMinutes = 0;
+
+          if (rand < 0.02) {
+            status = "absent";
+            attendanceStatus = null;
+            checkInTime = null;
+            checkOutTime = null;
+          } else if (rand < 0.1) {
+            status = "checked_out";
+            attendanceStatus = "late";
+            lateMinutes = 15 + Math.floor(Math.random() * 45);
+            checkInTime = new Date(shiftStart.getTime() + lateMinutes * 60000);
+            checkOutTime = new Date(
+              shiftEnd.getTime() + Math.random() * 20 * 60000,
+            );
+          } else if (rand < 0.15) {
+            status = "checked_out";
+            attendanceStatus = "early_leave";
+            checkInTime = new Date(
+              shiftStart.getTime() - Math.random() * 15 * 60000,
+            );
+            const earlyLeaveMin = 30 + Math.floor(Math.random() * 60);
+            checkOutTime = new Date(shiftEnd.getTime() - earlyLeaveMin * 60000);
+          } else if (rand < 0.4) {
+            status = "checked_out";
+            attendanceStatus = "overtime";
+            checkInTime = new Date(
+              shiftStart.getTime() - Math.random() * 10 * 60000,
+            );
+            overtimeMinutes = 30 + Math.floor(Math.random() * 90);
+            checkOutTime = new Date(
+              shiftEnd.getTime() + overtimeMinutes * 60000,
+            );
+          } else {
+            status = "checked_out";
+            attendanceStatus = "on_time";
+            checkInTime = new Date(
+              shiftStart.getTime() - Math.random() * 10 * 60000,
+            );
+            checkOutTime = new Date(
+              shiftEnd.getTime() + Math.random() * 10 * 60000,
+            );
+          }
+
+          const actualWorkMinutes =
+            checkInTime && checkOutTime
+              ? getMinutesDiff(checkInTime, checkOutTime)
+              : 0;
+
+          staffShiftsMar.push({
+            shiftId: shift._id,
+            staffId: staff._id,
+            canteenId: canteen._id,
+            date: shiftDate,
+            status,
+            checkInTime,
+            checkOutTime,
+            actualWorkHours: actualWorkMinutes / 60,
+            actualWorkMinutes,
+            attendanceStatus,
+            lateMinutes,
+            overtimeMinutes,
+            overtimeApproved: overtimeMinutes > 0,
+            assignedBy: manager._id,
+          });
+        }
+      }
+
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    await StaffShift.insertMany(staffShiftsMar);
+    console.log(`✅ Tạo ${staffShiftsMar.length} ca làm việc tháng 03/2026`);
+
+    // =============== 7. THỐNG KÊ ===============
     console.log("\n📊 Thống kê dữ liệu đã tạo:");
     console.log("=".repeat(60));
 
@@ -527,6 +647,11 @@ const seedPayrollTestData = async () => {
         date: { $gte: feb2026Start, $lte: feb2026End },
       });
 
+      const mar = await StaffShift.countDocuments({
+        staffId: staff._id,
+        date: { $gte: mar2026Start, $lte: mar2026End },
+      });
+
       const janLate = await StaffShift.countDocuments({
         staffId: staff._id,
         date: { $gte: jan2026Start, $lte: jan2026End },
@@ -536,6 +661,12 @@ const seedPayrollTestData = async () => {
       const febLate = await StaffShift.countDocuments({
         staffId: staff._id,
         date: { $gte: feb2026Start, $lte: feb2026End },
+        attendanceStatus: "late",
+      });
+
+      const marLate = await StaffShift.countDocuments({
+        staffId: staff._id,
+        date: { $gte: mar2026Start, $lte: mar2026End },
         attendanceStatus: "late",
       });
 
@@ -551,6 +682,12 @@ const seedPayrollTestData = async () => {
         status: "absent",
       });
 
+      const marAbsent = await StaffShift.countDocuments({
+        staffId: staff._id,
+        date: { $gte: mar2026Start, $lte: mar2026End },
+        status: "absent",
+      });
+
       const salaryRate = await SalaryRate.findOne({ userId: staff._id });
 
       console.log(`\n👤 ${staff.fullName}`);
@@ -563,6 +700,9 @@ const seedPayrollTestData = async () => {
       console.log(
         `   📅 Tháng 2/2026: ${feb} ca (${febLate} muộn, ${febAbsent} vắng)`,
       );
+      console.log(
+        `   📅 Tháng 3/2026: ${mar} ca (${marLate} muộn, ${marAbsent} vắng)`,
+      );
     }
 
     console.log("\n" + "=".repeat(60));
@@ -570,14 +710,27 @@ const seedPayrollTestData = async () => {
     console.log("\n📝 Hướng dẫn sử dụng:");
     console.log("1. Đăng nhập với: manager@test.com / 123456");
     console.log("2. Vào 'Quản lý lương' > 'Bảng lương'");
-    console.log("3. Click 'Tạo bảng lương mới':");
-    console.log("   - Kỳ: 01/01/2026 - 31/01/2026");
-    console.log("   - Hoặc: 01/02/2026 - 28/02/2026");
-    console.log("4. Hệ thống sẽ tự động tính lương với:");
+    console.log("3. Click 'Tạo bảng lương mới' và chọn một trong các kỳ:");
+    console.log("\n   📊 Kỳ lương cả tháng:");
+    console.log("   - Tháng 1: 01/01/2026 - 31/01/2026");
+    console.log("   - Tháng 2: 01/02/2026 - 28/02/2026");
+    console.log("   - Tháng 3: 01/03/2026 - 04/03/2026 (đến hôm nay)");
+    console.log("\n   📊 Hoặc tạo theo nửa tháng/tuần:");
+    console.log("   - Nửa đầu tháng 2: 01/02/2026 - 15/02/2026");
+    console.log("   - Nửa cuối tháng 2: 16/02/2026 - 28/02/2026");
+    console.log("   - Tuần 1 tháng 2: 01/02/2026 - 07/02/2026");
+    console.log("   - Tuần 2 tháng 2: 08/02/2026 - 14/02/2026");
+    console.log("\n4. Hệ thống sẽ tự động tính lương với:");
     console.log("   ✓ Thưởng chuyên cần (theo % ca)");
     console.log("   ✓ Thưởng overtime");
     console.log("   ✓ Phạt đi muộn, về sớm, nghỉ KP");
     console.log("5. Xem chi tiết từng nhân viên trong payroll");
+    console.log("6. Điều chỉnh lương nếu cần (xem SalaryRate config)");
+    console.log("\n💡 LƯU Ý:");
+    console.log("   - Có thể tạo NHIỀU kỳ lương khác nhau cho cùng 1 tháng");
+    console.log("   - Chỉ cần periodStart/periodEnd khác nhau là được");
+    console.log("   - Ví dụ: Kỳ 1 (01-15/02) + Kỳ 2 (16-28/02) ✅");
+    console.log("   - Không được: 2 kỳ cùng (01-28/02) ❌");
     console.log("\n" + "=".repeat(60));
 
     process.exit(0);
