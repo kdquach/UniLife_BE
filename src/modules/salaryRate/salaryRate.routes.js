@@ -6,7 +6,7 @@ const router = express.Router();
 
 // Áp dụng middleware bảo vệ
 router.use(protect);
-router.use(restrictTo("admin", "manager"));
+router.use(restrictTo("admin", "canteen_owner", "manager"));
 
 // Routes
 router

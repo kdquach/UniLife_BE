@@ -30,6 +30,8 @@ import { Banner } from "../modules/banner/banner.model.js";
 import { Feedback } from "../modules/feedback/feedback.model.js";
 import { FeedbackReply } from "../modules/feedbackReply/feedbackReply.model.js";
 import Salary from "../modules/salary/salary.model.js";
+import Payroll from "../modules/payroll/payroll.model.js";
+import SalaryRate from "../modules/salaryRate/salaryRate.model.js";
 import {
   Notification,
   SystemNotification,
@@ -76,6 +78,8 @@ const seedDatabase = async () => {
     await Feedback.deleteMany({});
     await FeedbackReply.deleteMany({});
     await Salary.deleteMany({});
+    await Payroll.deleteMany({});
+    await SalaryRate.deleteMany({});
     await Notification.deleteMany({});
     await SystemNotification.deleteMany({});
     await ReportSnapshot.deleteMany({});
@@ -166,7 +170,7 @@ const seedDatabase = async () => {
       fullName: "Nguyen Van Manager",
       phone: "0123456788",
       gender: "male",
-      role: "manager",
+      role: "canteen_owner",
       status: "active",
       emailVerified: true,
       campusId: campuses[0]._id,
@@ -1775,8 +1779,38 @@ const seedDatabase = async () => {
     ]);
     console.log(`✅ Da tao ${feedbackReplies.length} phan hoi danh gia\n`);
 
-    // ============ Seed Salaries ============
-    console.log("💰 Tao bang luong...");
+    // ============ Seed SalaryRates ============
+    console.log("💵 Tao muc luong theo gio...");
+    const salaryRates = await SalaryRate.insertMany([
+      {
+        userId: staffUsers[0]._id,
+        canteenId: canteens[0]._id,
+        hourlyRate: 50000,
+        effectiveFrom: new Date("2026-01-01"),
+        note: "Muc luong nhan vien chinh thuc",
+        updatedBy: managerUser._id,
+      },
+      {
+        userId: staffUsers[1]._id,
+        canteenId: canteens[0]._id,
+        hourlyRate: 45000,
+        effectiveFrom: new Date("2026-01-01"),
+        note: "Muc luong nhan vien chinh thuc",
+        updatedBy: managerUser._id,
+      },
+      {
+        userId: staffUsers[2]._id,
+        canteenId: canteens[1]._id,
+        hourlyRate: 48000,
+        effectiveFrom: new Date("2026-01-01"),
+        note: "Muc luong nhan vien chinh thuc",
+        updatedBy: managerUser._id,
+      },
+    ]);
+    console.log(`✅ Da tao ${salaryRates.length} muc luong theo gio\n`);
+
+    // ============ Seed Payrolls ============
+    console.log("💰 Tao ky luong...");
     const lastMonth = new Date();
     lastMonth.setMonth(lastMonth.getMonth() - 1);
     const periodStart = new Date(
@@ -1790,8 +1824,52 @@ const seedDatabase = async () => {
       0,
     );
 
+    const payrolls = await Payroll.insertMany([
+      {
+        canteenId: canteens[0]._id,
+        periodStart: periodStart,
+        periodEnd: periodEnd,
+        description: `Luong thang ${lastMonth.getMonth() + 1}/${lastMonth.getFullYear()}`,
+        totalStaff: 2,
+        totalHours: 312,
+        totalAmount: 15540000,
+        totalBonus: 800000,
+        totalDeduction: 100000,
+        status: "paid",
+        hourlyRate: 50000,
+        isLocked: true,
+        createdBy: managerUser._id,
+        approvedBy: managerUser._id,
+        approvedAt: new Date(periodEnd.getTime() + 2 * 24 * 60 * 60 * 1000),
+        paidBy: managerUser._id,
+        paidAt: new Date(periodEnd.getTime() + 5 * 24 * 60 * 60 * 1000),
+      },
+      {
+        canteenId: canteens[1]._id,
+        periodStart: periodStart,
+        periodEnd: periodEnd,
+        description: `Luong thang ${lastMonth.getMonth() + 1}/${lastMonth.getFullYear()}`,
+        totalStaff: 1,
+        totalHours: 168,
+        totalAmount: 8264000,
+        totalBonus: 200000,
+        totalDeduction: 0,
+        status: "approved",
+        hourlyRate: 48000,
+        isLocked: true,
+        createdBy: managerUser._id,
+        approvedBy: managerUser._id,
+        approvedAt: new Date(periodEnd.getTime() + 2 * 24 * 60 * 60 * 1000),
+      },
+    ]);
+    console.log(`✅ Da tao ${payrolls.length} ky luong\n`);
+
+    // ============ Seed Salaries ============
+    console.log("💰 Tao bang luong chi tiet...");
+
     const salaries = await Salary.insertMany([
       {
+        payrollId: payrolls[0]._id,
         userId: staffUsers[0]._id,
         canteenId: canteens[0]._id,
         periodStart: periodStart,
@@ -1800,50 +1878,46 @@ const seedDatabase = async () => {
         baseSalary: 8000000,
         bonus: 500000,
         deduction: 0,
+        totalSalary: 8500000,
         status: "paid",
-        paidAt: new Date(),
+        calculatedAt: periodEnd,
+        paidAt: new Date(periodEnd.getTime() + 5 * 24 * 60 * 60 * 1000),
         note: "Luong thang " + (lastMonth.getMonth() + 1),
       },
       {
+        payrollId: payrolls[0]._id,
         userId: staffUsers[1]._id,
         canteenId: canteens[0]._id,
         periodStart: periodStart,
         periodEnd: periodEnd,
         totalHours: 152,
-        baseSalary: 7600000,
+        baseSalary: 6840000,
         bonus: 300000,
         deduction: 100000,
+        totalSalary: 7040000,
         status: "paid",
-        paidAt: new Date(),
+        calculatedAt: periodEnd,
+        paidAt: new Date(periodEnd.getTime() + 5 * 24 * 60 * 60 * 1000),
         note: "Luong thang " + (lastMonth.getMonth() + 1),
+        adjustmentReason: "Khau tru do di tre 2 ngay",
       },
       {
+        payrollId: payrolls[1]._id,
         userId: staffUsers[2]._id,
         canteenId: canteens[1]._id,
         periodStart: periodStart,
         periodEnd: periodEnd,
         totalHours: 168,
-        baseSalary: 8400000,
+        baseSalary: 8064000,
         bonus: 200000,
         deduction: 0,
+        totalSalary: 8264000,
         status: "approved",
+        calculatedAt: periodEnd,
         note: "Luong thang " + (lastMonth.getMonth() + 1) + " - cho thanh toan",
       },
-      {
-        userId: managerUser._id,
-        canteenId: canteens[0]._id,
-        periodStart: periodStart,
-        periodEnd: periodEnd,
-        totalHours: 176,
-        baseSalary: 12000000,
-        bonus: 1000000,
-        deduction: 200000,
-        status: "paid",
-        paidAt: new Date(),
-        note: "Luong thang " + (lastMonth.getMonth() + 1),
-      },
     ]);
-    console.log(`✅ Da tao ${salaries.length} bang luong\n`);
+    console.log(`✅ Da tao ${salaries.length} bang luong chi tiet\n`);
 
     // ============ Seed Notifications ============
     console.log("🔔 Tao thong bao...");
@@ -2209,7 +2283,9 @@ const seedDatabase = async () => {
     console.log(`   - Wishlists: ${wishlists.length}`);
     console.log(`   - Feedbacks: ${feedbacks.length}`);
     console.log(`   - Feedback Replies: ${feedbackReplies.length}`);
+    console.log(`   - Payrolls: ${payrolls.length}`);
     console.log(`   - Salaries: ${salaries.length}`);
+    console.log(`   - Salary Rates: ${salaryRates.length}`);
     console.log(`   - Notifications: ${notifications.length}`);
     console.log(`   - System Notifications: ${systemNotifications.length}`);
     console.log(`   - Report Snapshots: ${reportSnapshots.length}`);

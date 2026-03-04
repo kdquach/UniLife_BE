@@ -10,10 +10,15 @@ router.use(protect);
 // Get current user profile
 router.get("/me", userController.getMe);
 
-// Admin only routes
-router.use(restrictTo("admin"));
+// Allow managers and canteen owners to view users list
+router.get(
+  "/",
+  restrictTo("admin", "canteen_owner", "manager"),
+  userController.getAllUsers,
+);
 
-router.route("/").get(userController.getAllUsers);
+// Admin only routes for modify operations
+router.use(restrictTo("admin"));
 
 router
   .route("/:id")

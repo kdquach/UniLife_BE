@@ -10,12 +10,12 @@ router.use(protect);
 // Staff routes - nhân viên xem lương của chính mình
 router.get(
   "/my-salaries",
-  restrictTo("staff", "canteen_owner", "admin"),
+  restrictTo("staff", "canteen_owner", "manager", "admin"),
   salaryController.getMySalaries,
 );
 
 // Manager/Admin routes - quản lý lương của toàn bộ canteen
-router.use(restrictTo("canteen_owner", "admin"));
+router.use(restrictTo("canteen_owner", "manager", "admin"));
 
 router.get("/", salaryController.getAllSalaries);
 router.get("/stats", salaryController.getSalaryStats);

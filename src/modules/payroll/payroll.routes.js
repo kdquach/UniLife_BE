@@ -6,7 +6,7 @@ const router = express.Router();
 
 // Áp dụng middleware bảo vệ cho tất cả routes
 router.use(protect);
-router.use(restrictTo("admin", "canteen_owner"));
+router.use(restrictTo("admin", "canteen_owner", "manager"));
 
 // GET /api/payrolls/stats - Lấy thống kê (phải đặt trước /:id)
 router.get("/stats", payrollController.getPayrollStats);
@@ -23,7 +23,7 @@ router
 router
   .route("/:id")
   .get(payrollController.getPayrollById)
-  .delete(restrictTo("admin"), payrollController.deletePayroll);
+  .delete(restrictTo("admin", "manager"), payrollController.deletePayroll);
 
 // PATCH /api/payrolls/:id/approve - Duyệt kỳ lương
 router.patch("/:id/approve", payrollController.approvePayroll);

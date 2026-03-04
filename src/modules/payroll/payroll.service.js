@@ -4,6 +4,7 @@ import SalaryRate from "../salaryRate/salaryRate.model.js";
 import { StaffShift } from "../shift/staffShift.model.js";
 import AppError from "../../utils/AppError.js";
 import mongoose from "mongoose";
+import { calculateAdjustments } from "./payroll.calculator.js";
 
 /**
  * Tạo kỳ lương mới (draft)
@@ -41,12 +42,18 @@ export const getAllPayrolls = async (query = {}) => {
     filter.status = query.status;
   }
 
-  // Lọc theo thời gian
-  if (query.periodStart) {
-    filter.periodStart = { $gte: new Date(query.periodStart) };
-  }
-  if (query.periodEnd) {
-    filter.periodEnd = { $lte: new Date(query.periodEnd) };
+  // Lọc theo thời gian - Tìm payroll có khoảng thời gian overlap với query
+  if (query.periodStart && query.periodEnd) {
+    // Payroll overlap với khoảng thời gian query nếu:
+    // periodStart <= query.periodEnd VÀ periodEnd >= query.periodStart
+    filter.periodStart = { $lte: new Date(query.periodEnd) };
+    filter.periodEnd = { $gte: new Date(query.periodStart) };
+  } else if (query.periodStart) {
+    // Chỉ có periodStart: lấy payroll kết thúc sau thời điểm này
+    filter.periodEnd = { $gte: new Date(query.periodStart) };
+  } else if (query.periodEnd) {
+    // Chỉ có periodEnd: lấy payroll bắt đầu trước thời điểm này
+    filter.periodStart = { $lte: new Date(query.periodEnd) };
   }
 
   const payrolls = await Payroll.find(filter)
@@ -195,6 +202,15 @@ export const generatePayroll = async (
       const userHourlyRate = salaryRateMap[userId] || hourlyRate;
       const baseSalary = Math.round(hours * userHourlyRate);
 
+      // Tính các khoản thưởng/phạt tự động
+      const adjustments = await calculateAdjustments(
+        shift._id,
+        new Date(periodStart),
+        new Date(periodEnd),
+        canteenId,
+        userHourlyRate,
+      );
+
       const salary = {
         payrollId: payroll[0]._id,
         userId: shift._id,
@@ -203,17 +219,18 @@ export const generatePayroll = async (
         periodEnd: new Date(periodEnd),
         totalHours: hours,
         baseSalary: baseSalary,
-        bonus: 0,
-        deduction: 0,
-        totalSalary: baseSalary,
+        bonus: adjustments.bonus,
+        deduction: adjustments.deduction,
+        totalSalary: baseSalary + adjustments.bonus - adjustments.deduction,
         status: "calculated",
         calculatedAt: new Date(),
+        adjustmentReason: `Thưởng: ${adjustments.bonusDetails}. Khấu trừ: ${adjustments.deductionDetails}`,
       };
 
       salaries.push(salary);
       totalStaff++;
       totalHours += hours;
-      totalAmount += baseSalary;
+      totalAmount += salary.totalSalary;
     }
 
     // 6. Insert tất cả salary records
