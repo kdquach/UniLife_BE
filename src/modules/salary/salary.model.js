@@ -2,6 +2,12 @@ import mongoose from "mongoose";
 
 const salarySchema = new mongoose.Schema(
   {
+    // Liên kết với bảng Payroll (kỳ lương)
+    payrollId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Payroll",
+      required: [true, "Payroll ID is required"],
+    },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -59,6 +65,11 @@ const salarySchema = new mongoose.Schema(
       type: String,
       maxlength: [1000, "Note cannot exceed 1000 characters"],
     },
+    // Lý do điều chỉnh lương (thưởng/khấu trừ)
+    adjustmentReason: {
+      type: String,
+      maxlength: [500, "Adjustment reason cannot exceed 500 characters"],
+    },
   },
   {
     timestamps: true,
@@ -66,10 +77,14 @@ const salarySchema = new mongoose.Schema(
 );
 
 // Indexes
+salarySchema.index({ payrollId: 1 });
 salarySchema.index({ userId: 1, periodStart: 1, periodEnd: 1 });
 salarySchema.index({ canteenId: 1 });
 salarySchema.index({ status: 1 });
 salarySchema.index({ periodStart: 1, periodEnd: 1 });
+
+// Đảm bảo mỗi user chỉ có 1 salary record trong 1 payroll
+salarySchema.index({ payrollId: 1, userId: 1 }, { unique: true });
 
 // Calculate total salary before saving
 salarySchema.pre("save", function (next) {
