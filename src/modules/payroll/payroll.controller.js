@@ -66,15 +66,15 @@ export const generatePayroll = catchAsync(async (req, res) => {
   if (!periodStart || !periodEnd) {
     throw new AppError("Period start and end dates are required", 400);
   }
-  if (!hourlyRate || hourlyRate <= 0) {
-    throw new AppError("Valid hourly rate is required", 400);
-  }
+
+  // hourlyRate không bắt buộc nữa - sẽ lấy từ SalaryRate của từng nhân viên
+  const defaultHourlyRate = hourlyRate || 50000; // Fallback nếu nhân viên không có SalaryRate
 
   const result = await payrollService.generatePayroll(
     canteenId,
     periodStart,
     periodEnd,
-    hourlyRate,
+    defaultHourlyRate,
     createdBy,
     description,
   );

@@ -157,13 +157,15 @@ export const generatePayroll = async (
         $match: {
           canteenId: new mongoose.Types.ObjectId(canteenId),
           status: "checked_out",
-          checkInTime: { $gte: new Date(periodStart) },
-          checkOutTime: { $lte: new Date(periodEnd) },
+          date: {
+            $gte: new Date(periodStart),
+            $lte: new Date(periodEnd),
+          },
         },
       },
       {
         $group: {
-          _id: "$userId",
+          _id: "$staffId", // Sửa từ userId thành staffId
           totalHours: { $sum: "$actualWorkHours" },
           shiftCount: { $sum: 1 },
         },
