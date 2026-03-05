@@ -13,31 +13,31 @@ router.get("/schedules/:id", menuController.getMenuScheduleById);
 router.post(
   "/schedules",
   protect,
-  restrictTo("staff", "admin", "manager"),
+  restrictTo("staff", "manager"),
   menuController.createMenuSchedule,
 );
 router.post(
   "/schedules/:id/duplicate",
   protect,
-  restrictTo("staff", "admin", "manager"),
+  restrictTo("staff", "manager"),
   menuController.duplicateSchedule,
 );
 router.patch(
   "/schedules/:id",
   protect,
-  restrictTo("staff", "admin", "manager"),
+  restrictTo("staff", "manager"),
   menuController.updateMenuSchedule,
 );
 router.patch(
   "/schedules/:id/toggle",
   protect,
-  restrictTo("staff", "admin", "manager"),
+  restrictTo("staff", "manager"),
   menuController.toggleScheduleStatus,
 );
 router.delete(
   "/schedules/:id",
   protect,
-  restrictTo("staff", "admin", "manager"),
+  restrictTo("staff", "manager"),
   menuController.deleteMenuSchedule,
 );
 
@@ -49,7 +49,7 @@ router.get("/:id", menuController.getMenuById);
 
 // Protected routes
 router.use(protect);
-router.use(restrictTo("staff", "admin", "manager"));
+router.use(restrictTo("staff", "manager"));
 
 router.post("/",
   menuController.createMenu);
@@ -60,7 +60,7 @@ router.patch("/:id", menuController.updateMenu);
 router.post("/:id/items", menuController.addMenuItem);
 router.delete("/:id/items/:productId", menuController.removeMenuItem);
 
-// Admin only
-router.delete("/:id", restrictTo("admin", "manager"), menuController.deleteMenu);
+// Manager only
+router.delete("/:id", restrictTo("manager"), menuController.deleteMenu);
 
 export default router;

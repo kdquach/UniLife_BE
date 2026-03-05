@@ -89,6 +89,7 @@ const userSchema = new mongoose.Schema(
     canteenId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Canteen",
+      default: null,
     },
   },
   {
