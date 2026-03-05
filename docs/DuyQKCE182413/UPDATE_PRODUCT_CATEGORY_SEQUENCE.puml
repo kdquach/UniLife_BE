@@ -1,0 +1,155 @@
+@startuml Update Product Category Sequence Diagram
+title UC12 - Update Product Category (Cập nhật danh mục sản phẩm)
+
+actor "Staff/Manager" as User
+participant "Product\nCategories Page" as Frontend
+participant "productRoutes" as Routes
+participant "authMiddleware" as AuthMW
+participant "productController" as Controller
+participant "productService" as Service
+participant "ProductCategory\nModel" as Model
+database "MongoDB" as DB
+
+== User mở form chỉnh sửa ==
+User -> Frontend: 1. Click "Chỉnh sửa"\ntrên một category
+activate Frontend
+
+Frontend -> Frontend: 2. handleEdit(record)\n- formMode = "edit"\n- form.setFieldsValue({\n  name: record.name,\n  description: record.description,\n  isActive: record.isActive\n})\n- selected = record\n- formOpen = true
+
+Frontend --> User: 3. Hiển thị Modal\nvới dữ liệu hiện tại\n(tất cả fields có thể chỉnh sửa)
+deactivate Frontend
+
+== User chỉnh sửa và submit ==
+User -> Frontend: 4. Chỉnh sửa:\n- Tên: "Bún" → "Bún Bò"\n- Mô tả: update\n- isActive: toggle\nClick "Cập nhật"
+activate Frontend
+
+Frontend -> Frontend: 5. form.validateFields()
+
+opt Validation failed
+    Frontend -> Frontend: 6a. Show validation errors
+    Frontend --> User: Hiển thị lỗi validation
+end
+
+Frontend -> Routes: 6. PATCH /api/product-categories/:id\nBody: {\n  name: "Bún Bò",\n  description: "...",\n  isActive: true\n}\n(Bearer Token)
+    activate Routes
+    
+    Routes -> AuthMW: 7. Verify JWT token
+    activate AuthMW
+    
+    AuthMW -> Routes: 8. req.user = decoded
+    deactivate AuthMW
+    
+    Routes -> Controller: 9. updateProductCategory\n(req, res)
+    activate Controller
+    
+    Controller -> Controller: 10. Extract:\n- categoryId từ req.params.id\n- canteenId từ req.user\n- updateData từ req.body
+    
+    Controller -> Service: 11. updateProductCategory\n(categoryId, updateData, canteenId)
+    activate Service
+    
+    Service -> Model: 12. findOne({\n  _id: categoryId,\n  canteenId: canteenId\n})
+    activate Model
+    
+    Model -> DB: 13. Query category\nvới filter canteen
+    activate DB
+    
+    opt Category không tồn tại hoặc không thuộc canteen
+        DB --> Model: 14a. Return null
+        deactivate DB
+        
+        Model --> Service: null
+        deactivate Model
+        
+        Service -> Service: throw AppError(\n"Product category not found",\n404)
+        
+        Service --> Controller: Error: 404
+        deactivate Service
+        
+        Controller --> Routes: HTTP 404 Response:\n{\n  success: false,\n  message: "Not found"\n}
+        deactivate Controller
+        
+        Routes --> Frontend: JSON Error Response
+        deactivate Routes
+        
+        Frontend -> Frontend: Show error message
+        
+        Frontend --> User: Hiển thị:\n"Không tìm thấy\nhoặc không có quyền"
+    end
+    
+    DB --> Model: 14. Return current category
+    deactivate DB
+    
+    Model --> Service: current category
+    deactivate Model
+    
+    opt updateData có thay đổi name
+            Service -> Model: 15a. findOne({\n  _id: {$ne: categoryId},\n  canteenId: canteenId,\n  name: {$regex: /^Bún Bò$/i}\n})
+            activate Model
+            
+            Model -> DB: 16. Check duplicate\n(loại trừ chính nó)
+            activate DB
+            
+            opt Tên mới đã tồn tại
+                DB --> Model: 17a. Return existing
+                deactivate DB
+                
+                Model --> Service: existing category
+                deactivate Model
+                
+                Service -> Service: throw AppError(\n"Danh mục 'Bún Bò'\nđã tồn tại", 400)
+                
+                Service --> Controller: Error: 400
+                deactivate Service
+                
+                Controller --> Routes: HTTP 400 Response
+                deactivate Controller
+                
+                Routes --> Frontend: JSON Error
+                deactivate Routes
+                
+                Frontend -> Frontend: Show error in form
+                
+                Frontend --> User: Hiển thị:\n"Tên đã tồn tại"
+            end
+            
+            DB --> Model: 17. Return null
+                deactivate DB
+                
+                Model --> Service: null (OK)
+                deactivate Model
+                
+                Service -> Model: 18. findByIdAndUpdate(\n  categoryId,\n  updateData,\n  {new: true, runValidators: true}\n)
+                activate Model
+                
+                Model -> DB: 19. Update document:\n- name\n- description\n- isActive\n- updatedAt (auto)
+                activate DB
+                
+                DB --> Model: 20. Return updated category
+                deactivate DB
+                
+                Model --> Service: 21. updated category
+                deactivate Model
+                
+                Service --> Controller: 22. Return category
+                deactivate Service
+                
+                Controller -> Controller: 23. Format response:\n{\n  success: true,\n  message: "Cập nhật\n  danh mục sản phẩm thành công",\n  data: category\n}
+                
+                Controller --> Routes: 24. HTTP 200 Response
+                deactivate Controller
+                
+                Routes --> Frontend: 25. JSON Response
+                deactivate Routes
+                
+                Frontend -> Frontend: 26. setState:\n- formOpen = false\n- form.resetFields()\n- Show success notification
+                
+                Frontend -> Frontend: 27. fetchList(currentPage, pageSize)\n(reload danh sách,\ngiữ nguyên trang hiện tại)
+                
+                Frontend --> User: 28. Hiển thị:\n"Cập nhật thành công"\nModal đóng,\ndanh sách refresh\nvới dữ liệu mới
+    end
+
+note right: Flow tương tự nếu chỉ update\ndescription hoặc isActive
+
+deactivate Frontend
+
+@enduml

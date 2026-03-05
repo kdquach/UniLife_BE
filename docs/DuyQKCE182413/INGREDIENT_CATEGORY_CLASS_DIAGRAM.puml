@@ -1,0 +1,90 @@
+@startuml Ingredient Category Management Class Diagram
+title Class Diagram - Ingredient Category Management Module
+
+skinparam classAttributeIconSize 0
+hide circle
+
+' Routes
+class IngredientCategoryRoutes {
+  -router
+  --
+  +GET /
+  +GET /active
+  +GET /:id
+  +POST /
+  +PATCH /:id
+  +DELETE /:id
+}
+
+' Controller
+class IngredientCategoryController {
+  --
+  +createIngredientCategory(req, res)
+  +getAllIngredientCategories(req, res)
+  +getActiveIngredientCategories(req, res)
+  +getIngredientCategoryById(req, res)
+  +updateIngredientCategory(req, res)
+  +deleteIngredientCategory(req, res)
+}
+
+' Service
+class IngredientCategoryService {
+  --
+  +createIngredientCategory(data)
+  +getAllIngredientCategories(queryParams, canteenId)
+  +getAllIngredientCategoriesNoPagination(filter)
+  +getIngredientCategoryById(id, canteenId)
+  +updateIngredientCategory(id, updateData, canteenId)
+  +deleteIngredientCategory(id, canteenId)
+  +getActiveIngredientCategories(canteenId)
+}
+
+' Model
+class IngredientCategoryModel {
+  -canteenId
+  -name
+  -description
+  -icon
+  -isActive
+  -createdAt
+  -updatedAt
+  --
+  +create(data)
+  +find(filter)
+  +findOne(filter)
+  +findById(id)
+  +findByIdAndUpdate(id, data, options)
+  +findOneAndDelete(filter)
+  +countDocuments(filter)
+}
+
+' Middleware
+class AuthMiddleware {
+  --
+  +protect(req, res, next)
+  +restrictTo(roles)
+}
+
+class PermissionMiddleware {
+  --
+  +requirePermission(permissions)
+}
+
+
+class QueryHelper {
+  --
+  +formatPaginatedResponse(result, message)
+}
+
+
+' Relationships
+IngredientCategoryRoutes --> IngredientCategoryController
+IngredientCategoryRoutes ..> AuthMiddleware
+IngredientCategoryRoutes ..> PermissionMiddleware
+
+IngredientCategoryController --> IngredientCategoryService
+IngredientCategoryController ..> QueryHelper
+
+IngredientCategoryService --> IngredientCategoryModel
+
+@enduml

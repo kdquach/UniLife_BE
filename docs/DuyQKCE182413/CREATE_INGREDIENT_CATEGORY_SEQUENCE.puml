@@ -1,0 +1,136 @@
+@startuml Create Ingredient Category Sequence Diagram
+title UC07 - Create Ingredient Category (Tạo nhóm nguyên liệu)
+
+actor "Staff/Manager" as User
+participant "Ingredient\nCategories Page" as Frontend
+participant "ingredientRoutes" as Routes
+participant "authMiddleware" as AuthMW
+participant "ingredientController" as Controller
+participant "ingredientService" as Service
+participant "IngredientCategory\nModel" as Model
+database "MongoDB" as DB
+
+== User mở form tạo mới ==
+User -> Frontend: 1. Click nút "Tạo mới"
+activate Frontend
+
+Frontend -> Frontend: 2. handleCreate()\n- formMode = "create"\n- form.resetFields()\n- formOpen = true
+
+Frontend --> User: 3. Hiển thị Modal\nvới form trống
+deactivate Frontend
+
+== User nhập thông tin và submit ==
+User -> Frontend: 4. Nhập:\n- Tên nhóm\n- Mô tả (optional)\nClick "Tạo"
+activate Frontend
+
+Frontend -> Frontend: 5. form.validateFields()
+
+opt Validation failed
+    Frontend -> Frontend: 6a. Show validation errors
+    Frontend --> User: Hiển thị lỗi validation
+end
+
+Frontend -> Routes: 6. POST /api/ingredient-categories\nBody: {\n  name: "Gia vị",\n  description: "..."\n}\n(Bearer Token)
+    activate Routes
+    
+    Routes -> AuthMW: 7. Verify JWT token
+    activate AuthMW
+    
+    AuthMW -> AuthMW: 8. Extract user info\nfrom token
+    
+    opt Token không hợp lệ
+        AuthMW --> Routes: 9a. 401 Unauthorized
+        Routes --> Frontend: HTTP 401 Response
+        Frontend --> User: Redirect to Login
+    end
+    
+    AuthMW -> Routes: 9. req.user = decoded\n(userId, canteenId, role)
+    deactivate AuthMW
+        
+        Routes -> Controller: 10. createIngredientCategory\n(req, res)
+        activate Controller
+        
+        Controller -> Controller: 11. Extract canteenId\nfrom req.user
+        
+        opt User không có canteenId
+            Controller -> Controller: 12a. throw AppError(\n"User không được gán\nvào canteen nào", 400)
+            
+            Controller --> Routes: HTTP 400 Response
+            deactivate Controller
+            Routes --> Frontend: JSON Error Response
+            deactivate Routes
+            Frontend --> User: Show error message
+        end
+        
+        Controller -> Controller: 12. Merge data:\n{\n  ...req.body,\n  canteenId: canteenId\n}
+            
+            Controller -> Service: 13. createIngredientCategory(data)
+            activate Service
+            
+            Service -> Model: 14. findOne({\n  canteenId: canteenId,\n  name: {$regex: /^Gia vị$/i}\n})
+            activate Model
+            
+            Model -> DB: 15. Check duplicate name\ntrong cùng canteen
+            activate DB
+            
+            opt Tên đã tồn tại
+                DB --> Model: 16a. Return existing category
+                deactivate DB
+                
+                Model --> Service: existing category
+                deactivate Model
+                
+                Service -> Service: throw AppError(\n"Nhóm nguyên liệu 'Gia vị'\nđã tồn tại trong canteen này",\n400)
+                
+                Service --> Controller: Error: 400 Bad Request
+                deactivate Service
+                
+                Controller --> Routes: HTTP 400 Response:\n{\n  success: false,\n  message: "...đã tồn tại..."\n}
+                deactivate Controller
+                
+                Routes --> Frontend: JSON Error Response
+                deactivate Routes
+                
+                Frontend -> Frontend: Show error message\ntrong form
+                
+                Frontend --> User: Hiển thị:\n"Tên đã tồn tại"
+            end
+            
+            DB --> Model: 16. Return null
+            deactivate DB
+            
+            Model --> Service: null (không trùng)
+            deactivate Model
+            
+            Service -> Model: 17. create({\n  name: "Gia vị",\n  description: "...",\n  canteenId: "xxx",\n  isActive: true\n})
+                activate Model
+                
+                Model -> DB: 18. Insert document
+                activate DB
+                
+                DB --> Model: 19. Return new category\nvới _id, timestamps
+                deactivate DB
+                
+                Model --> Service: 20. Return category object
+                deactivate Model
+                
+                Service --> Controller: 21. Return category
+                deactivate Service
+                
+                Controller -> Controller: 22. Format response:\n{\n  success: true,\n  message: "Tạo nhóm\n  nguyên liệu thành công",\n  data: category\n}
+                
+                Controller --> Routes: 23. HTTP 201 Response
+                deactivate Controller
+                
+                Routes --> Frontend: 24. JSON Response
+                deactivate Routes
+                
+                Frontend -> Frontend: 25. setState:\n- formOpen = false\n- Show success message
+                
+                Frontend -> Frontend: 26. fetchList()\n(reload danh sách)
+                
+                Frontend --> User: 27. Hiển thị:\n"Đã tạo nhóm nguyên liệu"\nModal đóng,\ndanh sách cập nhật
+
+deactivate Frontend
+
+@enduml

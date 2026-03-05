@@ -53,7 +53,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["admin", "manager", "staff", "customer"],
+      enum: ["admin", "canteen_owner", "manager", "staff", "customer"],
       default: "customer",
     },
     status: {
@@ -76,6 +76,10 @@ const userSchema = new mongoose.Schema(
     },
     emailVerifiedAt: {
       type: Date,
+    },
+    forceChangePassword: {
+      type: Boolean,
+      default: false,
     },
     lastLoginAt: {
       type: Date,
