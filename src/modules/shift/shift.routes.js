@@ -87,6 +87,17 @@ router.patch(
   shiftController.reviewShiftChangeRequest,
 );
 
+router.get(
+  "/available",
+  restrictTo("staff", "manager", "admin"),
+  shiftController.getAvailableShifts,
+);
+router.get(
+  "/suggestions",
+  restrictTo("staff", "manager", "admin"),
+  shiftController.getShiftSuggestions,
+);
+
 // ============ Shift Routes ============
 router.get("/", restrictTo("staff", "manager", "admin"), shiftController.getAllShifts);
 router.get("/:id", restrictTo("staff", "manager", "admin"), shiftController.getShiftById);
