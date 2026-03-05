@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 // Danh sach don vi hop le cho nguyen lieu
-const VALID_UNITS = ['kg', 'g', 'lít', 'ml', 'cái', 'gói', 'hộp', 'lon'];
+const VALID_UNITS = ['kg', 'g', 'lit', 'lít', 'ml', 'cái', 'gói', 'hộp', 'lon'];
 
 // Ingredient Schema
 const ingredientSchema = new mongoose.Schema(
@@ -64,6 +64,22 @@ ingredientSchema.index({ stock: 1 }); // Index cho truy van low stock
 ingredientSchema.index({ canteenId: 1, stock: 1 }); // Compound index cho filter canteen + stock
 ingredientSchema.index({ canteenId: 1, isActive: 1 }); // Filter active ingredients
 ingredientSchema.index({ isActive: 1 });
+
+// Pre-save middleware: Normalize unit từ "lit" thành "lít"
+ingredientSchema.pre('save', function (next) {
+  if (this.unit === 'lit') {
+    this.unit = 'lít';
+  }
+  next();
+});
+
+// Pre-update middleware: Normalize unit
+ingredientSchema.pre('findOneAndUpdate', function (next) {
+  if (this._update && this._update.unit === 'lit') {
+    this._update.unit = 'lít';
+  }
+  next();
+});
 
 // Virtual: Kiem tra nguyen lieu sap het
 ingredientSchema.virtual('isLowStock').get(function () {

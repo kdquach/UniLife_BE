@@ -1,6 +1,7 @@
 import express from 'express';
 import * as ingredientController from './ingredient.controller.js';
 import { protect, restrictTo } from '../../middlewares/auth.middleware.js';
+import { auditLogger } from '../auditLog/auditLog.middleware.js';
 
 const router = express.Router();
 
@@ -12,15 +13,25 @@ router.use(restrictTo('admin', 'staff', 'manager'));
 router
   .route('/')
   .get(ingredientController.getAllIngredients)
-  .post(ingredientController.createIngredient);
+  .post(
+    auditLogger('CREATE', 'Ingredient', 'Ingredient'),
+    ingredientController.createIngredient
+  );
 
 router.get('/low-stock', ingredientController.getLowStockIngredients);
 
 router
   .route('/:id')
   .get(ingredientController.getIngredientById)
-  .patch(ingredientController.updateIngredient)
-  .delete(restrictTo('admin', 'staff' ), ingredientController.deleteIngredient);
+  .patch(
+    auditLogger('UPDATE', 'Ingredient', 'Ingredient'),
+    ingredientController.updateIngredient
+  )
+  .delete(
+    restrictTo('admin', 'staff'),
+    auditLogger('DELETE', 'Ingredient', 'Ingredient'),
+    ingredientController.deleteIngredient
+  );
 
 router.patch('/:id/stock', ingredientController.updateStock);
 

@@ -6,6 +6,11 @@ import {
   requestLogger,
   errorLogger,
 } from './middlewares/logging.middleware.js';
+import {
+  captureOldValues,
+  auditLogMiddleware,
+  auditErrorLogging,
+} from './modules/auditLog/auditLog.middleware.js';
 
 // ============ Import Routes ============
 import authRoutes from './modules/auth/auth.routes.js';
@@ -33,6 +38,7 @@ import notificationRoutes from './modules/notification/notification.routes.js';
 import reportRoutes from './modules/report/report.routes.js';
 import uploadRoutes from './modules/upload/upload.routes.js';
 import paymentRoutes from './modules/payment/payment.routes.js';
+import auditLogRoutes from './modules/auditLog/auditLog.routes.js';
 
 // ============ Import Error Handler ============
 import errorHandler from './middlewares/error.middleware.js';
@@ -64,6 +70,10 @@ app.use(getMorganMiddleware(process.env.NODE_ENV));
 if (process.env.ENABLE_REQUEST_LOGGING === 'true') {
   app.use(requestLogger);
 }
+
+// Audit logging middleware
+app.use(captureOldValues);
+app.use(auditLogMiddleware);
 
 // ============ Routes ============
 
@@ -102,10 +112,12 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/audit-logs', auditLogRoutes);
 
 // ============ Error Handling ============
 
 // Error logging
+app.use(auditErrorLogging);
 app.use(errorLogger);
 
 // 404 handler

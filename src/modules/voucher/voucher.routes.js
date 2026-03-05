@@ -1,33 +1,43 @@
-import express from "express";
-import * as voucherController from "./voucher.controller.js";
-import { protect, restrictTo } from "../../middlewares/auth.middleware.js";
+import express from 'express';
+import * as voucherController from './voucher.controller.js';
+import { protect, restrictTo } from '../../middlewares/auth.middleware.js';
+import { auditLogger } from '../auditLog/auditLog.middleware.js';
 
 const router = express.Router();
 
 // Public routes
-router.get("/active", voucherController.getActiveVouchers);
-router.get("/code/:code", voucherController.getVoucherByCode);
+router.get('/active', voucherController.getActiveVouchers);
+router.get('/code/:code', voucherController.getVoucherByCode);
 
 // Protected routes
 router.use(protect);
 
-router.post("/validate", voucherController.validateVoucher);
-router.get("/my-usage", voucherController.getMyVoucherUsage);
+router.post('/validate', voucherController.validateVoucher);
+router.get('/my-usage', voucherController.getMyVoucherUsage);
 
 // Admin routes
-router.use(restrictTo("admin"));
+router.use(restrictTo('admin'));
 
 router
-  .route("/")
+  .route('/')
   .get(voucherController.getAllVouchers)
-  .post(voucherController.createVoucher);
+  .post(
+    auditLogger('CREATE', 'Voucher', 'Voucher'),
+    voucherController.createVoucher
+  );
 
 router
-  .route("/:id")
+  .route('/:id')
   .get(voucherController.getVoucherById)
-  .patch(voucherController.updateVoucher)
-  .delete(voucherController.deleteVoucher);
+  .patch(
+    auditLogger('UPDATE', 'Voucher', 'Voucher'),
+    voucherController.updateVoucher
+  )
+  .delete(
+    auditLogger('DELETE', 'Voucher', 'Voucher'),
+    voucherController.deleteVoucher
+  );
 
-router.get("/:id/stats", voucherController.getVoucherUsageStats);
+router.get('/:id/stats', voucherController.getVoucherUsageStats);
 
 export default router;

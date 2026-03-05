@@ -9,6 +9,7 @@ import {
   uploadFields,
   handleUploadError,
 } from '../../middlewares/upload.middleware.js';
+import { auditLogger } from '../auditLog/auditLog.middleware.js';
 
 const router = express.Router();
 
@@ -75,6 +76,7 @@ router.use(restrictTo('staff', 'manager'));
 
 router.post(
   '/',
+  auditLogger('CREATE', 'Product', 'Product'),
   uploadFields(
     [
       { name: 'image', maxCount: 1 },
@@ -87,6 +89,7 @@ router.post(
 );
 router.patch(
   '/:id',
+  auditLogger('UPDATE', 'Product', 'Product'),
   uploadFields(
     [
       { name: 'image', maxCount: 1 },
@@ -106,7 +109,15 @@ router.delete(
 );
 
 // Restore và delete (cho cả staff/manager/admin)
-router.patch('/:id/restore', productController.restoreProduct);
-router.delete('/:id', productController.deleteProduct);
+router.patch(
+  '/:id/restore',
+  auditLogger('UPDATE', 'Product', 'Product'),
+  productController.restoreProduct
+);
+router.delete(
+  '/:id',
+  auditLogger('DELETE', 'Product', 'Product'),
+  productController.deleteProduct
+);
 
 export default router;
