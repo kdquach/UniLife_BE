@@ -29,6 +29,22 @@ const createWelcomePromotionNotification = async (userId) => {
   });
 };
 
+const ensureUserActiveForLogin = (user) => {
+  if (!user) return;
+
+  if (user.status === "inactive") {
+    throw new AppError("Tài khoản đã bị vô hiệu hóa", 403);
+  }
+
+  if (user.status === "banned") {
+    throw new AppError("Tài khoản đã bị khóa", 403);
+  }
+
+  if (user.status === "pending") {
+    throw new AppError("Tài khoản đang chờ kích hoạt", 403);
+  }
+};
+
 /**
  * Send OTP for registration
  * @param {Object} userData - User registration data
@@ -268,6 +284,7 @@ export const resetPassword = async (data) => {
 
   // Update password
   user.password = newPassword;
+  user.forceChangePassword = false;
   await user.save();
 
   return {
@@ -343,6 +360,8 @@ export const login = async (credentials) => {
   if (!user) {
     throw new AppError("Email hoặc mật khẩu sai", 401);
   }
+
+  ensureUserActiveForLogin(user);
 
   // Kiem tra neu user dang ky qua OAuth (khong co password)
   if (!user.password) {
@@ -441,6 +460,8 @@ export const googleAuth = async (idToken) => {
   let user = await User.findOne({ email });
 
   if (user) {
+    ensureUserActiveForLogin(user);
+
     // User exists - update Google info if needed
     if (user.provider === "local") {
       // User registered with email/password, link Google account
@@ -537,6 +558,7 @@ export const changePassword = async (userId, data) => {
 
   // Update password
   user.password = newPassword;
+  user.forceChangePassword = false;
   await user.save(); // This will trigger the pre-save hook to hash the password
 
   return {

@@ -77,6 +77,10 @@ const userSchema = new mongoose.Schema(
     emailVerifiedAt: {
       type: Date,
     },
+    forceChangePassword: {
+      type: Boolean,
+      default: false,
+    },
     lastLoginAt: {
       type: Date,
     },
