@@ -15,14 +15,19 @@ const canteenSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["active", "inactive", "maintenance"],
-      default: "active",
+      enum: ["pending", "active", "inactive", "maintenance"],
+      default: "pending",
     },
     campusId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Campus",
       required: [true, "Canteen must belong to a Campus"],
       index: true, // Rất quan trọng để filter canteen theo vùng
+    },
+    // Danh sách các ngày nghỉ (off) dạng 'YYYY-MM-DD'
+    offDates: {
+      type: [String],
+      default: [],
     },
     openingTime: {
       type: String,

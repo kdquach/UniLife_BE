@@ -18,28 +18,28 @@ router.get('/schedules/:id', menuController.getMenuScheduleById);
 router.post(
   '/schedules',
   protect,
-  restrictTo('staff', 'admin', 'manager'),
+  restrictTo('staff', 'manager'),
   auditLogger('CREATE', 'MenuSchedule', 'MenuSchedule'),
   menuController.createMenuSchedule
 );
 router.post(
   '/schedules/:id/duplicate',
   protect,
-  restrictTo('staff', 'admin', 'manager'),
+  restrictTo('staff', 'manager'),
   auditLogger('CREATE', 'MenuSchedule', 'MenuSchedule'),
   menuController.duplicateSchedule
 );
 router.patch(
   '/schedules/:id',
   protect,
-  restrictTo('staff', 'admin', 'manager'),
+  restrictTo('staff', 'manager'),
   auditLogger('UPDATE', 'MenuSchedule', 'MenuSchedule'),
   menuController.updateMenuSchedule
 );
 router.patch(
   '/schedules/:id/toggle',
   protect,
-  restrictTo('staff', 'admin', 'manager'),
+  restrictTo('staff', 'manager'),
   auditLogger('UPDATE', 'MenuSchedule', 'MenuSchedule'),
   menuController.toggleScheduleStatus
 );
@@ -62,7 +62,7 @@ router.get('/:id', menuController.getMenuById);
 
 // Protected routes
 router.use(protect);
-router.use(restrictTo('staff', 'admin', 'manager'));
+router.use(restrictTo('staff', 'manager'));
 
 router.post(
   '/',

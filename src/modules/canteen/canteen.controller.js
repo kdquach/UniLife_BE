@@ -1,5 +1,6 @@
 import catchAsync from "../../utils/catchAsync.js";
 import * as canteenService from "./canteen.service.js";
+import AppError from "../../utils/AppError.js";
 
 /**
  * Create a new canteen
@@ -7,7 +8,15 @@ import * as canteenService from "./canteen.service.js";
  * @access Private (Admin)
  */
 export const createCanteen = catchAsync(async (req, res) => {
-  const canteen = await canteenService.createCanteen(req.body);
+  // Không cho tạo thêm nếu user đã có canteen gắn vào tài khoản
+  if (req.user?.canteenId) {
+    throw new AppError(
+      "Tài khoản này đã được gán vào một căng tin. Không thể tạo thêm.",
+      400,
+    );
+  }
+
+  const canteen = await canteenService.createCanteen(req.user._id, req.body);
 
   res.status(201).json({
     status: "success",

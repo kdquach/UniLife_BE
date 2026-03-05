@@ -378,27 +378,38 @@ export const getShiftChangeRequests = catchAsync(async (req, res) => {
     filter.status = req.query.status;
   }
 
+  const scopedCanteenId = req.user?.canteenId || req.query?.canteenId || null;
+
   const requests = await ShiftChangeRequest.find(filter)
-    .populate("staffId", "fullName email")
+    .populate("staffId", "fullName email canteenId")
     .populate({
       path: "staffShiftId",
+      select: "shiftId canteenId",
       populate: { path: "shiftId", select: "name startTime endTime" },
     })
     .populate("requestedShiftId", "name startTime endTime")
     .sort({ createdAt: -1 })
     .limit(200);
 
-  const scoped = req.user?.canteenId
-    ? requests.filter(
-        (item) =>
-          String(item?.staffShiftId?.canteenId || "") ===
-          String(req.user.canteenId),
-      )
+  const scopedRequests = scopedCanteenId
+    ? requests.filter((item) => {
+      const shiftCanteenId = item?.staffShiftId?.canteenId
+        ? String(item.staffShiftId.canteenId)
+        : null;
+      const staffCanteenId = item?.staffId?.canteenId
+        ? String(item.staffId.canteenId)
+        : null;
+
+      return (
+        shiftCanteenId === String(scopedCanteenId)
+        || staffCanteenId === String(scopedCanteenId)
+      );
+    })
     : requests;
 
   res.status(200).json({
     success: true,
-    data: scoped,
+    data: scopedRequests,
   });
 });
 

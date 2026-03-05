@@ -43,6 +43,18 @@ export const protect = catchAsync(async (req, res, next) => {
     );
   }
 
+  if (currentUser.status === 'inactive') {
+    return next(new AppError('Tài khoản đã bị vô hiệu hóa', 403));
+  }
+
+  if (currentUser.status === 'banned') {
+    return next(new AppError('Tài khoản đã bị khóa', 403));
+  }
+
+  if (currentUser.status === 'pending') {
+    return next(new AppError('Tài khoản đang chờ kích hoạt', 403));
+  }
+
   // Grant access to protected route
   req.user = currentUser;
   next();
@@ -79,7 +91,7 @@ export const optionalProtect = catchAsync(async (req, res, next) => {
 
     // Check if user still exists
     const currentUser = await User.findById(decoded.id);
-    if (currentUser) {
+    if (currentUser && currentUser.status === 'active') {
       req.user = currentUser;
     }
   } catch (error) {

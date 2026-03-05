@@ -86,3 +86,61 @@ export const getMe = catchAsync(async (req, res) => {
     },
   });
 });
+
+/**
+ * Manager - Lấy danh sách staff theo canteen
+ * @route GET /api/users/staff
+ * @access Private (Manager)
+ */
+export const getManagerStaffList = catchAsync(async (req, res) => {
+  const result = await userService.getManagerStaffList(req.query, req.user);
+
+  res
+    .status(200)
+    .json(formatPaginatedResponse(result, "Lấy danh sách nhân viên thành công"));
+});
+
+/**
+ * Manager - Lấy chi tiết staff theo canteen
+ * @route GET /api/users/staff/:id
+ * @access Private (Manager)
+ */
+export const getManagerStaffDetail = catchAsync(async (req, res) => {
+  const staff = await userService.getManagerStaffDetail(req.params.id, req.user);
+
+  res.status(200).json({
+    success: true,
+    message: "Lấy chi tiết nhân viên thành công",
+    data: staff,
+  });
+});
+
+/**
+ * Manager - Tạo tài khoản staff
+ * @route POST /api/users/staff
+ * @access Private (Manager)
+ */
+export const createManagerStaff = catchAsync(async (req, res) => {
+  const staff = await userService.createManagerStaff(req.body, req.user);
+
+  res.status(201).json({
+    success: true,
+    message: "Tạo tài khoản nhân viên thành công",
+    data: staff,
+  });
+});
+
+/**
+ * Manager - Cập nhật staff (xóa mềm qua status)
+ * @route PATCH /api/users/staff/:id
+ * @access Private (Manager)
+ */
+export const updateManagerStaff = catchAsync(async (req, res) => {
+  const staff = await userService.updateManagerStaff(req.params.id, req.body, req.user);
+
+  res.status(200).json({
+    success: true,
+    message: "Cập nhật thông tin nhân viên thành công",
+    data: staff,
+  });
+});
