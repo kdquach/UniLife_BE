@@ -341,6 +341,11 @@ export const getShiftManagerStaffList = catchAsync(async (req, res) => {
 });
 
 export const getMyShiftChangeRequests = catchAsync(async (req, res) => {
+  await shiftService.autoRejectExpiredPendingShiftChangeRequests({
+    canteenId: req.user?.canteenId || null,
+    staffId: req.user?._id || null,
+  });
+
   const filter = { staffId: req.user._id };
 
   if (req.query?.status) {
@@ -380,6 +385,10 @@ export const getShiftChangeRequests = catchAsync(async (req, res) => {
 
   const scopedCanteenId = req.user?.canteenId || req.query?.canteenId || null;
 
+  await shiftService.autoRejectExpiredPendingShiftChangeRequests({
+    canteenId: scopedCanteenId,
+  });
+
   const requests = await ShiftChangeRequest.find(filter)
     .populate("staffId", "fullName email canteenId")
     .populate({
@@ -416,6 +425,7 @@ export const getShiftChangeRequests = catchAsync(async (req, res) => {
 export const createShiftChangeRequest = catchAsync(async (req, res) => {
   const payload = {
     staffShiftId: req.body?.staffShiftId,
+    requestedShiftId: req.body?.requestedShiftId || null,
     reason: req.body?.reason,
   };
 
@@ -443,10 +453,43 @@ export const reviewShiftChangeRequest = catchAsync(async (req, res) => {
 });
 
 export const getAvailableShiftsForChangeRequest = catchAsync(async (req, res) => {
-  const shifts = await shiftService.getAvailableShiftsForChangeRequest(req.user);
+  const shifts = await shiftService.getAvailableShiftsForChangeRequest(
+    {
+      date: req.query?.date || null,
+    },
+    req.user,
+  );
 
   res.status(200).json({
     success: true,
     data: shifts,
+  });
+});
+
+export const getAvailableShifts = catchAsync(async (req, res) => {
+  const shifts = await shiftService.getAvailableShiftsWithCapacity(
+    {
+      date: req.query?.date || null,
+    },
+    req.user,
+  );
+
+  res.status(200).json({
+    success: true,
+    data: shifts,
+  });
+});
+
+export const getShiftSuggestions = catchAsync(async (req, res) => {
+  const suggestions = await shiftService.getSuggestedShiftsForChangeRequest(
+    {
+      staffShiftId: req.query?.staffShiftId,
+    },
+    req.user,
+  );
+
+  res.status(200).json({
+    success: true,
+    data: suggestions,
   });
 });
