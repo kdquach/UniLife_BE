@@ -60,6 +60,7 @@ export const getAllCanteens = async (query = {}) => {
   const filter = {};
   if (query.status) filter.status = query.status;
   if (query.location) filter.location = query.location;
+  if (query.campusId) filter.campusId = query.campusId;
 
   return Canteen.find(filter)
     .populate("campusId", "name code")
