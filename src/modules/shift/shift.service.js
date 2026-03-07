@@ -21,9 +21,26 @@ function rangesOverlap(startA, endA, startB, endB) {
   return startA < endB && startB < endA;
 }
 
-function isWeekend(date = new Date()) {
-  const day = new Date(date).getDay();
-  return day === 0 || day === 6;
+function startOfDay(value = new Date()) {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function addDays(value, amount) {
+  const date = new Date(value);
+  date.setDate(date.getDate() + amount);
+  return date;
+}
+
+function buildShiftStartDateTime(assignmentDate, shiftStartTime) {
+  if (!assignmentDate || !shiftStartTime) return null;
+  const [hours, minutes] = String(shiftStartTime).split(":").map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+
+  const dateTime = new Date(assignmentDate);
+  dateTime.setHours(hours, minutes, 0, 0);
+  return dateTime;
 }
 
 function ensureRoleHasCanteen(currentUser = null) {
@@ -75,6 +92,37 @@ const validateAssignmentOverlap = async ({
   if (hasConflict) {
     throw new AppError("Staff has overlapping shift assignment", 400);
   }
+};
+
+const buildShiftCapacityMap = async ({ shiftIds = [], targetDate }) => {
+  if (!shiftIds.length) return new Map();
+
+  const normalizedDate = normalizeDateOnly(targetDate || new Date());
+  const dayStart = new Date(normalizedDate);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(normalizedDate);
+  dayEnd.setHours(23, 59, 59, 999);
+
+  const assignmentCounts = await StaffShift.aggregate([
+    {
+      $match: {
+        shiftId: { $in: shiftIds },
+        isDeleted: { $ne: true },
+        status: { $ne: "cancelled" },
+        date: { $gte: dayStart, $lte: dayEnd },
+      },
+    },
+    {
+      $group: {
+        _id: "$shiftId",
+        assignedCount: { $sum: 1 },
+      },
+    },
+  ]);
+
+  return new Map(
+    assignmentCounts.map((item) => [String(item._id), item.assignedCount]),
+  );
 };
 
 // ============ Shift Services ============
@@ -451,14 +499,71 @@ export const publishAssignments = async (payload = {}, currentUser = null) => {
   };
 };
 
-export const createShiftChangeRequest = async (payload = {}, currentUser = null) => {
-  if (currentUser?.role === "staff" && !isWeekend()) {
-    throw new AppError(
-      "Staff chỉ có thể gửi yêu cầu đổi ca vào Thứ 7 hoặc Chủ nhật",
-      400,
+export const autoRejectExpiredPendingShiftChangeRequests = async (options = {}) => {
+  return expirePendingShiftChangeRequests(options);
+};
+
+export const expirePendingShiftChangeRequests = async (options = {}) => {
+  const { canteenId = null, staffId = null } = options;
+  const now = new Date();
+
+  const pendingRequests = await ShiftChangeRequest.find({ status: "pending" })
+    .select("_id staffShiftId")
+    .populate({
+      path: "staffShiftId",
+      select: "date canteenId staffId shiftId isDeleted",
+      populate: {
+        path: "shiftId",
+        select: "startTime",
+      },
+    })
+    .lean();
+
+  const expiredRequestIds = [];
+
+  for (const request of pendingRequests) {
+    const assignment = request?.staffShiftId;
+    if (!assignment || assignment?.isDeleted) continue;
+
+    if (canteenId && String(assignment.canteenId || "") !== String(canteenId)) {
+      continue;
+    }
+
+    if (staffId && String(assignment.staffId || "") !== String(staffId)) {
+      continue;
+    }
+
+    const shiftStartDateTime = buildShiftStartDateTime(
+      assignment.date,
+      assignment?.shiftId?.startTime,
     );
+
+    if (shiftStartDateTime && shiftStartDateTime <= now) {
+      expiredRequestIds.push(request._id);
+    }
   }
 
+  if (!expiredRequestIds.length) return 0;
+
+  const result = await ShiftChangeRequest.updateMany(
+    {
+      _id: { $in: expiredRequestIds },
+      status: "pending",
+    },
+    {
+      $set: {
+        status: "expired",
+        reviewedAt: now,
+        reviewedBy: null,
+        updatedAt: now,
+      },
+    },
+  );
+
+  return result.modifiedCount || 0;
+};
+
+export const createShiftChangeRequest = async (payload = {}, currentUser = null) => {
   const assignment = await StaffShift.findOne({
     _id: payload.staffShiftId,
     isDeleted: { $ne: true },
@@ -473,6 +578,16 @@ export const createShiftChangeRequest = async (payload = {}, currentUser = null)
     String(assignment.staffId) !== String(currentUser._id)
   ) {
     throw new AppError("You can only request shift change for your own assignment", 403);
+  }
+
+  if (currentUser?.role === "staff") {
+    const todayStart = startOfDay(new Date());
+    const minShiftDate = addDays(todayStart, 2);
+    const assignmentDate = startOfDay(assignment.date);
+
+    if (assignmentDate < minShiftDate) {
+      throw new AppError("Chỉ có thể gửi yêu cầu đổi ca cho ca làm cách hiện tại tối thiểu 2 ngày", 400);
+    }
   }
 
   const existsPending = await ShiftChangeRequest.findOne({
@@ -548,7 +663,10 @@ export const reviewShiftChangeRequest = async (
     throw new AppError("Invalid review status", 400);
   }
 
-  const request = await ShiftChangeRequest.findById(requestId).populate("staffShiftId");
+  const request = await ShiftChangeRequest.findById(requestId).populate({
+    path: "staffShiftId",
+    populate: { path: "shiftId", select: "startTime" },
+  });
 
   if (!request) {
     throw new AppError("Shift change request not found", 404);
@@ -558,11 +676,83 @@ export const reviewShiftChangeRequest = async (
     throw new AppError("Request has already been reviewed", 400);
   }
 
+  const shiftStartDateTime = buildShiftStartDateTime(
+    request?.staffShiftId?.date,
+    request?.staffShiftId?.shiftId?.startTime,
+  );
+
+  if (!shiftStartDateTime || shiftStartDateTime <= new Date()) {
+    request.status = "expired";
+    request.reviewedAt = new Date();
+    request.reviewedBy = null;
+    await request.save();
+    throw new AppError("Yêu cầu đã quá hạn duyệt và được tự động chuyển sang hết hạn", 400);
+  }
+
   if (
     currentUser?.canteenId &&
     String(request?.staffShiftId?.canteenId || "") !== String(currentUser.canteenId)
   ) {
     throw new AppError("You do not have permission to review this request", 403);
+  }
+
+  if (status === "approved" && request.requestedShiftId) {
+    const assignment = await StaffShift.findOne({
+      _id: request.staffShiftId._id,
+      isDeleted: { $ne: true },
+    });
+
+    if (!assignment) {
+      throw new AppError("Shift assignment not found", 404);
+    }
+
+    const requestedShift = await Shift.findOne({
+      _id: request.requestedShiftId,
+      isDeleted: { $ne: true },
+      status: "active",
+    });
+
+    if (!requestedShift) {
+      throw new AppError("Requested shift not found", 404);
+    }
+
+    if (String(requestedShift.canteenId) !== String(assignment.canteenId)) {
+      throw new AppError("Ca được yêu cầu không thuộc cùng canteen", 400);
+    }
+
+    if (String(requestedShift._id) === String(assignment.shiftId)) {
+      throw new AppError("Ca được yêu cầu trùng với ca hiện tại", 400);
+    }
+
+    await validateAssignmentOverlap({
+      staffId: assignment.staffId,
+      canteenId: assignment.canteenId,
+      date: assignment.date,
+      shift: requestedShift,
+      excludeAssignmentId: assignment._id,
+    });
+
+    const assignmentDate = normalizeDateOnly(assignment.date);
+    const dayStart = new Date(assignmentDate);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(assignmentDate);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    const assignedCount = await StaffShift.countDocuments({
+      _id: { $ne: assignment._id },
+      shiftId: requestedShift._id,
+      canteenId: assignment.canteenId,
+      isDeleted: { $ne: true },
+      status: { $ne: "cancelled" },
+      date: {
+        $gte: dayStart,
+        $lte: dayEnd,
+      },
+    });
+
+    if (assignedCount >= requestedShift.maxStaff) {
+      throw new AppError("Ca được yêu cầu đã đủ số lượng nhân sự tối đa", 400);
+    }
   }
 
   request.status = status;
@@ -636,14 +826,156 @@ export const reviewShiftChangeRequest = async (
   return request;
 };
 
-export const getAvailableShiftsForChangeRequest = async (currentUser = null) => {
+export const getAvailableShiftsForChangeRequest = async (
+  options = {},
+  currentUser = null,
+) => {
+  return getAvailableShiftsWithCapacity(options, currentUser);
+};
+
+export const getAvailableShiftsWithCapacity = async (
+  options = {},
+  currentUser = null,
+) => {
+  const { date = null } = options;
   const filter = { status: "active", isDeleted: { $ne: true } };
 
   if (currentUser?.canteenId) {
     filter.canteenId = currentUser.canteenId;
   }
 
-  return Shift.find(filter)
-    .select("_id name startTime endTime canteenId")
+  const shifts = await Shift.find(filter)
+    .select("_id name startTime endTime canteenId maxStaff")
     .sort({ startTime: 1, name: 1 });
+
+  const shiftIds = shifts.map((item) => item._id);
+  const capacityMap = await buildShiftCapacityMap({
+    shiftIds,
+    targetDate: date || new Date(),
+  });
+
+  return shifts.map((item) => {
+    const assignedCount = capacityMap.get(String(item._id)) || 0;
+    const remainingSlots = Math.max((item.maxStaff || 0) - assignedCount, 0);
+
+    return {
+      _id: item._id,
+      shiftId: item._id,
+      name: item.name,
+      startTime: item.startTime,
+      endTime: item.endTime,
+      canteenId: item.canteenId,
+      maxStaff: item.maxStaff || 0,
+      assignedCount,
+      remainingSlots,
+    };
+  });
+};
+
+export const getSuggestedShiftsForChangeRequest = async (
+  options = {},
+  currentUser = null,
+) => {
+  const { staffShiftId } = options;
+  if (!staffShiftId) {
+    throw new AppError("staffShiftId is required", 400);
+  }
+
+  const assignment = await StaffShift.findOne({
+    _id: staffShiftId,
+    isDeleted: { $ne: true },
+  }).populate("shiftId", "startTime endTime");
+
+  if (!assignment) {
+    throw new AppError("Shift assignment not found", 404);
+  }
+
+  if (
+    currentUser?.role === "staff"
+    && String(assignment.staffId) !== String(currentUser._id)
+  ) {
+    throw new AppError("You can only view suggestions for your own assignment", 403);
+  }
+
+  if (
+    currentUser?.canteenId
+    && String(currentUser.canteenId) !== String(assignment.canteenId)
+  ) {
+    throw new AppError("You do not have permission to access this assignment", 403);
+  }
+
+  const shifts = await Shift.find({
+    canteenId: assignment.canteenId,
+    status: "active",
+    isDeleted: { $ne: true },
+    _id: { $ne: assignment.shiftId?._id || assignment.shiftId },
+  }).select("_id name startTime endTime maxStaff");
+
+  if (!shifts.length) return [];
+
+  const shiftIds = shifts.map((item) => item._id);
+  const capacityMap = await buildShiftCapacityMap({
+    shiftIds,
+    targetDate: assignment.date,
+  });
+
+  const existingAssignments = await StaffShift.find({
+    staffId: assignment.staffId,
+    isDeleted: { $ne: true },
+    status: { $ne: "cancelled" },
+    _id: { $ne: assignment._id },
+    date: {
+      $gte: startOfDay(assignment.date),
+      $lte: (() => {
+        const end = startOfDay(assignment.date);
+        end.setHours(23, 59, 59, 999);
+        return end;
+      })(),
+    },
+  }).populate("shiftId", "startTime endTime");
+
+  const suggested = shifts
+    .map((item) => {
+      const assignedCount = capacityMap.get(String(item._id)) || 0;
+      const remainingSlots = Math.max((item.maxStaff || 0) - assignedCount, 0);
+
+      if (remainingSlots <= 0) {
+        return null;
+      }
+
+      const candidateStart = timeToMinutes(item.startTime);
+      const candidateEnd = timeToMinutes(item.endTime);
+      if (candidateStart === null || candidateEnd === null) {
+        return null;
+      }
+
+      const hasOverlap = existingAssignments.some((staffShift) => {
+        const existingStart = timeToMinutes(staffShift?.shiftId?.startTime);
+        const existingEnd = timeToMinutes(staffShift?.shiftId?.endTime);
+        if (existingStart === null || existingEnd === null) return false;
+        return rangesOverlap(candidateStart, candidateEnd, existingStart, existingEnd);
+      });
+
+      if (hasOverlap) {
+        return null;
+      }
+
+      return {
+        shiftId: item._id,
+        name: item.name,
+        startTime: item.startTime,
+        endTime: item.endTime,
+        maxStaff: item.maxStaff || 0,
+        assignedCount,
+        remainingSlots,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const timeDiff = timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
+      if (timeDiff !== 0) return timeDiff;
+      return b.remainingSlots - a.remainingSlots;
+    });
+
+  return suggested;
 };

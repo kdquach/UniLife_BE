@@ -8,9 +8,10 @@ const router = express.Router();
 router.get("/", canteenController.getAllCanteens);
 router.get("/:id", canteenController.getCanteenById);
 
-// Protected routes (Admin only)
+// Protected routes
 router.use(protect);
-router.use(restrictTo("admin"));
+// Admin-only management routes
+router.use(restrictTo("admin", "manager"));
 
 router.post("/", canteenController.createCanteen);
 router.patch("/:id", canteenController.updateCanteen);

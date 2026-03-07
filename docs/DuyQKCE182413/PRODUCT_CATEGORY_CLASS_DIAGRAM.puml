@@ -1,0 +1,90 @@
+@startuml Product Category Management Class Diagram
+title Class Diagram - Product Category Management Module
+
+skinparam classAttributeIconSize 0
+hide circle
+
+' Routes
+class ProductCategoryRoutes {
+  -router
+  --
+  +GET /
+  +GET /active
+  +GET /:id
+  +POST /
+  +PATCH /:id
+  +DELETE /:id
+}
+
+' Controller
+class ProductCategoryController {
+  --
+  +createProductCategory(req, res)
+  +getAllProductCategories(req, res)
+  +getActiveProductCategories(req, res)
+  +getProductCategoryById(req, res)
+  +updateProductCategory(req, res)
+  +deleteProductCategory(req, res)
+}
+
+' Service
+class ProductCategoryService {
+  --
+  +createProductCategory(data)
+  +getAllProductCategories(queryParams, canteenId)
+  +getProductCategoryById(id, canteenId)
+  +updateProductCategory(id, updateData, canteenId)
+  +deleteProductCategory(id, canteenId)
+  +getActiveProductCategories(canteenId)
+}
+
+' Model
+class ProductCategoryModel {
+  -canteenId
+  -name
+  -description
+  -icon
+  -isActive
+  -createdAt
+  -updatedAt
+  --
+  +create(data)
+  +find(filter)
+  +findOne(filter)
+  +findById(id)
+  +findByIdAndUpdate(id, data, options)
+  +findOneAndDelete(filter)
+  +countDocuments(filter)
+}
+
+' Middleware
+class AuthMiddleware {
+  --
+  +protect(req, res, next)
+  +requirePermission(permissions)
+}
+
+
+class PaginatedQuery {
+  --
+  +paginatedQuery(Model, queryParams, options)
+}
+
+class QueryHelper {
+  --
+  +formatPaginatedResponse(result, message)
+}
+
+
+
+' Relationships
+ProductCategoryRoutes --> ProductCategoryController
+ProductCategoryRoutes ..> AuthMiddleware
+
+ProductCategoryController --> ProductCategoryService
+ProductCategoryController ..> QueryHelper
+
+ProductCategoryService --> ProductCategoryModel
+ProductCategoryService ..> PaginatedQuery
+
+@enduml

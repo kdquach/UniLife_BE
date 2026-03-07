@@ -1,12 +1,8 @@
-import {
-  ReportSnapshot,
-  AuditLog,
-  ShiftSummary,
-  PickupLog,
-} from "./report.model.js";
-import Order from "../order/order.model.js";
-import mongoose from "mongoose";
-import AppError from "../../utils/AppError.js";
+import { ReportSnapshot, ShiftSummary, PickupLog } from './report.model.js';
+import AuditLog from '../auditLog/auditLog.model.js';
+import Order from '../order/order.model.js';
+import mongoose from 'mongoose';
+import AppError from '../../utils/AppError.js';
 
 // ============ Report Snapshot Services ============
 
@@ -27,15 +23,15 @@ export const generateDailyReport = async (canteenId, date, generatedBy) => {
       $match: {
         canteenId: new mongoose.Types.ObjectId(canteenId),
         createdAt: { $gte: startOfDay, $lte: endOfDay },
-        status: { $ne: "cancelled" },
+        status: { $ne: 'cancelled' },
       },
     },
     {
       $group: {
         _id: null,
         totalOrders: { $sum: 1 },
-        totalRevenue: { $sum: "$totalPrice" },
-        avgOrderValue: { $avg: "$totalPrice" },
+        totalRevenue: { $sum: '$totalPrice' },
+        avgOrderValue: { $avg: '$totalPrice' },
       },
     },
   ]);
@@ -46,16 +42,16 @@ export const generateDailyReport = async (canteenId, date, generatedBy) => {
       $match: {
         canteenId: new mongoose.Types.ObjectId(canteenId),
         createdAt: { $gte: startOfDay, $lte: endOfDay },
-        status: "completed",
+        status: 'completed',
       },
     },
-    { $unwind: "$items" },
+    { $unwind: '$items' },
     {
       $group: {
-        _id: "$items.productId",
-        productName: { $first: "$items.productName" },
-        quantitySold: { $sum: "$items.quantity" },
-        revenue: { $sum: { $multiply: ["$items.price", "$items.quantity"] } },
+        _id: '$items.productId',
+        productName: { $first: '$items.productName' },
+        quantitySold: { $sum: '$items.quantity' },
+        revenue: { $sum: { $multiply: ['$items.price', '$items.quantity'] } },
       },
     },
     { $sort: { quantitySold: -1 } },
@@ -70,8 +66,8 @@ export const generateDailyReport = async (canteenId, date, generatedBy) => {
 
   const reportData = {
     canteenId,
-    reportType: "daily",
-    reportName: `Daily Report - ${date.toISOString().split("T")[0]}`,
+    reportType: 'daily',
+    reportName: `Daily Report - ${date.toISOString().split('T')[0]}`,
     periodStart: startOfDay,
     periodEnd: endOfDay,
     data: {
@@ -101,18 +97,18 @@ export const getReportSnapshots = async (canteenId, query = {}) => {
   if (query.periodEnd) filter.periodEnd = { $lte: new Date(query.periodEnd) };
 
   const reports = await ReportSnapshot.find(filter)
-    .populate("generatedBy", "fullName")
+    .populate('generatedBy', 'fullName')
     .sort({ createdAt: -1 });
   return reports;
 };
 
 export const getReportSnapshotById = async (id) => {
   const report = await ReportSnapshot.findById(id).populate(
-    "generatedBy",
-    "fullName",
+    'generatedBy',
+    'fullName'
   );
   if (!report) {
-    throw new AppError("Report not found", 404);
+    throw new AppError('Report not found', 404);
   }
   return report;
 };
@@ -120,7 +116,7 @@ export const getReportSnapshotById = async (id) => {
 export const deleteReportSnapshot = async (id) => {
   const report = await ReportSnapshot.findByIdAndDelete(id);
   if (!report) {
-    throw new AppError("Report not found", 404);
+    throw new AppError('Report not found', 404);
   }
 };
 
@@ -151,7 +147,7 @@ export const getAuditLogs = async (query = {}) => {
 
   const [logs, total] = await Promise.all([
     AuditLog.find(filter)
-      .populate("userId", "fullName email")
+      .populate('userId', 'fullName email')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit),
@@ -163,7 +159,7 @@ export const getAuditLogs = async (query = {}) => {
 
 export const getAuditLogsByEntity = async (entity, entityId) => {
   const logs = await AuditLog.find({ entity, entityId })
-    .populate("userId", "fullName email")
+    .populate('userId', 'fullName email')
     .sort({ createdAt: -1 });
   return logs;
 };
@@ -174,7 +170,7 @@ export const createOrUpdateShiftSummary = async (summaryData) => {
   const summary = await ShiftSummary.findOneAndUpdate(
     { shiftId: summaryData.shiftId, date: summaryData.date },
     summaryData,
-    { new: true, upsert: true, runValidators: true },
+    { new: true, upsert: true, runValidators: true }
   );
   return summary;
 };
@@ -191,20 +187,20 @@ export const getShiftSummaries = async (canteenId, query = {}) => {
   if (query.status) filter.status = query.status;
 
   const summaries = await ShiftSummary.find(filter)
-    .populate("shiftId", "name startTime endTime")
-    .populate("staffAssigned", "fullName")
-    .populate("reviewedBy", "fullName")
+    .populate('shiftId', 'name startTime endTime')
+    .populate('staffAssigned', 'fullName')
+    .populate('reviewedBy', 'fullName')
     .sort({ date: -1 });
   return summaries;
 };
 
 export const getShiftSummaryById = async (id) => {
   const summary = await ShiftSummary.findById(id)
-    .populate("shiftId", "name startTime endTime")
-    .populate("staffAssigned", "fullName")
-    .populate("reviewedBy", "fullName");
+    .populate('shiftId', 'name startTime endTime')
+    .populate('staffAssigned', 'fullName')
+    .populate('reviewedBy', 'fullName');
   if (!summary) {
-    throw new AppError("Shift summary not found", 404);
+    throw new AppError('Shift summary not found', 404);
   }
   return summary;
 };
@@ -214,14 +210,14 @@ export const reviewShiftSummary = async (id, reviewData, reviewedBy) => {
     id,
     {
       ...reviewData,
-      status: "reviewed",
+      status: 'reviewed',
       reviewedBy,
       reviewedAt: new Date(),
     },
-    { new: true, runValidators: true },
+    { new: true, runValidators: true }
   );
   if (!summary) {
-    throw new AppError("Shift summary not found", 404);
+    throw new AppError('Shift summary not found', 404);
   }
   return summary;
 };
@@ -235,7 +231,7 @@ export const createPickupLog = async (logData) => {
 
 export const getPickupLogsByOrder = async (orderId) => {
   const logs = await PickupLog.find({ orderId })
-    .populate("staffId", "fullName")
+    .populate('staffId', 'fullName')
     .sort({ createdAt: -1 });
   return logs;
 };
@@ -251,9 +247,9 @@ export const getPickupLogs = async (canteenId, query = {}) => {
   }
 
   const logs = await PickupLog.find(filter)
-    .populate("orderId", "orderNumber")
-    .populate("customerId", "fullName")
-    .populate("staffId", "fullName")
+    .populate('orderId', 'orderNumber')
+    .populate('customerId', 'fullName')
+    .populate('staffId', 'fullName')
     .sort({ createdAt: -1 })
     .limit(query.limit || 100);
   return logs;

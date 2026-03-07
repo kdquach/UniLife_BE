@@ -1,73 +1,108 @@
 import Canteen from "./canteen.model.js";
 import AppError from "../../utils/AppError.js";
+import User from "../user/user.model.js";
 
-/**
- * Create a new canteen
- * @param {Object} canteenData - Canteen data
- * @returns {Promise<Object>} Created canteen
- */
-export const createCanteen = async (canteenData) => {
+// Kiểm tra trường hợp KHÔNG HỢP LỆ:
+// - Hôm nay (today) đang được đánh dấu là ngày nghỉ trong offDates
+// - Nhưng thời điểm hiện tại (now) lại ĐANG NẰM TRONG khung giờ mở cửa
+// Nếu rơi vào trường hợp này -> không cho phép update (bên dưới sẽ throw AppError)
+const isTodayOffDuringOpenTime = (canteen) => {
+  // Nếu không có offDates hoặc mảng rỗng thì chắc chắn không phải trường hợp hôm nay nghỉ
+  if (!Array.isArray(canteen.offDates) || canteen.offDates.length === 0) return false;
+
+  const now = new Date();
+
+  // Chuỗi ngày hôm nay theo định dạng YYYY-MM-DD, ví dụ: 2026-03-05
+  const todayStr = now.toISOString().slice(0, 10);
+
+  // Nếu hôm nay không nằm trong danh sách ngày nghỉ -> không vi phạm
+  if (!canteen.offDates.includes(todayStr)) return false;
+
+  // Tách giờ mở cửa openingTime ("HH:mm") thành số giờ/phút, mặc định 00:00 nếu không có
+  const [openH = 0, openM = 0] = (canteen.openingTime || "00:00")
+    .split(":")
+    .map(Number);
+
+  // Tách giờ đóng cửa closingTime ("HH:mm") thành số giờ/phút, mặc định 23:59 nếu không có
+  const [closeH = 23, closeM = 59] = (canteen.closingTime || "23:59")
+    .split(":")
+    .map(Number);
+
+  // Quy đổi thời gian hiện tại và khung giờ mở cửa về đơn vị phút trong ngày
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const openMinutes = openH * 60 + openM;
+  const closeMinutes = closeH * 60 + closeM;
+
+  // Trả về true nếu "bây giờ" nằm trong khoảng [openMinutes, closeMinutes)
+  // => hôm nay đang được đánh dấu nghỉ nhưng thực tế đang trong giờ hoạt động
+  return nowMinutes >= openMinutes && nowMinutes < closeMinutes;
+};
+
+// Tạo mới canteen và gắn vào tài khoản user (user.canteenId)
+export const createCanteen = async (userId, canteenData) => {
+  const user = await User.findById(userId);
+  if (!user) throw new AppError("User not found", 404);
+
+  // Mỗi user chỉ được gắn với 1 canteen
+  if (user.canteenId) throw new AppError("User already has a canteen", 400);
+
   const canteen = await Canteen.create(canteenData);
+
+  user.canteenId = canteen._id;
+  user.campusId = canteen.campusId;
+  await user.save();
+
   return canteen;
 };
 
-/**
- * Get all canteens
- * @param {Object} query - Query parameters for filtering
- * @returns {Promise<Array>} Array of canteens
- */
+// Lấy tất cả canteen (có filter đơn giản theo status, location)
 export const getAllCanteens = async (query = {}) => {
   const filter = {};
-  if (query.status) {
-    filter.status = query.status;
-  }
-  if (query.location) {
-    filter.location = query.location;
-  }
-  const canteens = await Canteen.find(filter).sort({ createdAt: -1 });
-  return canteens;
+  if (query.status) filter.status = query.status;
+  if (query.location) filter.location = query.location;
+  if (query.campusId) filter.campusId = query.campusId;
+
+  return Canteen.find(filter)
+    .populate("campusId", "name code")
+    .sort({ createdAt: -1 });
 };
 
-/**
- * Get canteen by ID
- * @param {string} id - Canteen ID
- * @returns {Promise<Object>} Canteen object
- */
 export const getCanteenById = async (id) => {
+  const canteen = await Canteen.findById(id).populate("campusId", "name code");
+  if (!canteen) {
+    throw new AppError("Canteen not found", 404);
+  }
+  return canteen;
+};
+
+export const updateCanteen = async (id, updateData) => {
   const canteen = await Canteen.findById(id);
   if (!canteen) {
     throw new AppError("Canteen not found", 404);
   }
-  return canteen;
-};
 
-/**
- * Update canteen
- * @param {string} id - Canteen ID
- * @param {Object} updateData - Data to update
- * @returns {Promise<Object>} Updated canteen
- */
-export const updateCanteen = async (id, updateData) => {
-  const canteen = await Canteen.findByIdAndUpdate(id, updateData, {
-    new: true,
-    runValidators: true,
-  });
+  Object.assign(canteen, updateData);
 
-  if (!canteen) {
-    throw new AppError("Canteen not found", 404);
+  // Không cho bật chế độ nghỉ cho hôm nay nếu đang trong giờ mở cửa
+  if (isTodayOffDuringOpenTime(canteen)) {
+    throw new AppError(
+      "Không thể đặt ngày hôm nay là ngày nghỉ khi đã trong giờ hoạt động",
+      400,
+    );
   }
 
+  await canteen.save({ validateBeforeSave: true });
+
   return canteen;
 };
 
-/**
- * Delete canteen
- * @param {string} id - Canteen ID
- */
 export const deleteCanteen = async (id) => {
   const canteen = await Canteen.findByIdAndDelete(id);
   if (!canteen) {
     throw new AppError("Canteen not found", 404);
   }
+
+  // Xoá liên kết canteenId ở các user nếu có
+  await User.updateMany({ canteenId: id }, { $unset: { canteenId: 1 } });
 };
 

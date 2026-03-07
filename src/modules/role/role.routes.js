@@ -1,50 +1,65 @@
-import express from "express";
-import * as roleController from "./role.controller.js";
-import { protect, restrictTo } from "../../middlewares/auth.middleware.js";
+import express from 'express';
+import * as roleController from './role.controller.js';
+import { protect, restrictTo } from '../../middlewares/auth.middleware.js';
+import { auditLogger } from '../auditLog/auditLog.middleware.js';
 
 const router = express.Router();
 
 // All routes require authentication and admin access
 router.use(protect);
-router.use(restrictTo("admin"));
+router.use(restrictTo('admin'));
 
 // Role routes
 router
-  .route("/")
+  .route('/')
   .get(roleController.getAllRoles)
-  .post(roleController.createRole);
+  .post(auditLogger('CREATE', 'Role', 'Role'), roleController.createRole);
 router
-  .route("/:id")
+  .route('/:id')
   .get(roleController.getRoleById)
-  .patch(roleController.updateRole)
-  .delete(roleController.deleteRole);
+  .patch(auditLogger('UPDATE', 'Role', 'Role'), roleController.updateRole)
+  .delete(auditLogger('DELETE', 'Role', 'Role'), roleController.deleteRole);
 
 // Permission routes
 router
-  .route("/permissions")
+  .route('/permissions')
   .get(roleController.getAllPermissions)
-  .post(roleController.createPermission);
+  .post(
+    auditLogger('CREATE', 'Permission', 'Permission'),
+    roleController.createPermission
+  );
 router
-  .route("/permissions/:id")
+  .route('/permissions/:id')
   .get(roleController.getPermissionById)
-  .patch(roleController.updatePermission)
-  .delete(roleController.deletePermission);
+  .patch(
+    auditLogger('UPDATE', 'Permission', 'Permission'),
+    roleController.updatePermission
+  )
+  .delete(
+    auditLogger('DELETE', 'Permission', 'Permission'),
+    roleController.deletePermission
+  );
 
 // Role-Permission routes
-router.post("/assign-permission", roleController.assignPermissionToRole);
-router.delete(
-  "/remove-permission/:roleId/:permissionId",
-  roleController.removePermissionFromRole,
+router.post(
+  '/assign-permission',
+  auditLogger('UPDATE', 'Role', 'Role'),
+  roleController.assignPermissionToRole
 );
-router.get("/:roleId/permissions", roleController.getPermissionsByRole);
+router.delete(
+  '/remove-permission/:roleId/:permissionId',
+  auditLogger('UPDATE', 'Role', 'Role'),
+  roleController.removePermissionFromRole
+);
+router.get('/:roleId/permissions', roleController.getPermissionsByRole);
 
 // User-Role routes
-router.post("/assign-user", roleController.assignRoleToUser);
+router.post('/assign-user', roleController.assignRoleToUser);
 router.delete(
-  "/remove-user/:userId/:roleId",
-  roleController.removeRoleFromUser,
+  '/remove-user/:userId/:roleId',
+  roleController.removeRoleFromUser
 );
-router.get("/user/:userId/roles", roleController.getRolesByUser);
-router.get("/:roleId/users", roleController.getUsersByRole);
+router.get('/user/:userId/roles', roleController.getRolesByUser);
+router.get('/:roleId/users', roleController.getUsersByRole);
 
 export default router;

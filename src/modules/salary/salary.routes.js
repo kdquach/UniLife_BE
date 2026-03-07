@@ -7,15 +7,15 @@ const router = express.Router();
 // All routes are protected
 router.use(protect);
 
-// Staff routes
+// Staff routes - nhân viên xem lương của chính mình
 router.get(
   "/my-salaries",
-  restrictTo("staff", "admin"),
+  restrictTo("staff", "canteen_owner", "manager", "admin"),
   salaryController.getMySalaries,
 );
 
-// Admin routes
-router.use(restrictTo("admin"));
+// Manager/Admin routes - quản lý lương của toàn bộ canteen
+router.use(restrictTo("canteen_owner", "manager", "admin"));
 
 router.get("/", salaryController.getAllSalaries);
 router.get("/stats", salaryController.getSalaryStats);

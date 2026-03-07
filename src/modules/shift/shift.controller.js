@@ -341,6 +341,11 @@ export const getShiftManagerStaffList = catchAsync(async (req, res) => {
 });
 
 export const getMyShiftChangeRequests = catchAsync(async (req, res) => {
+  await shiftService.autoRejectExpiredPendingShiftChangeRequests({
+    canteenId: req.user?.canteenId || null,
+    staffId: req.user?._id || null,
+  });
+
   const filter = { staffId: req.user._id };
 
   if (req.query?.status) {
@@ -378,33 +383,49 @@ export const getShiftChangeRequests = catchAsync(async (req, res) => {
     filter.status = req.query.status;
   }
 
+  const scopedCanteenId = req.user?.canteenId || req.query?.canteenId || null;
+
+  await shiftService.autoRejectExpiredPendingShiftChangeRequests({
+    canteenId: scopedCanteenId,
+  });
+
   const requests = await ShiftChangeRequest.find(filter)
-    .populate("staffId", "fullName email")
+    .populate("staffId", "fullName email canteenId")
     .populate({
       path: "staffShiftId",
+      select: "shiftId canteenId",
       populate: { path: "shiftId", select: "name startTime endTime" },
     })
     .populate("requestedShiftId", "name startTime endTime")
     .sort({ createdAt: -1 })
     .limit(200);
 
-  const scoped = req.user?.canteenId
-    ? requests.filter(
-        (item) =>
-          String(item?.staffShiftId?.canteenId || "") ===
-          String(req.user.canteenId),
-      )
+  const scopedRequests = scopedCanteenId
+    ? requests.filter((item) => {
+      const shiftCanteenId = item?.staffShiftId?.canteenId
+        ? String(item.staffShiftId.canteenId)
+        : null;
+      const staffCanteenId = item?.staffId?.canteenId
+        ? String(item.staffId.canteenId)
+        : null;
+
+      return (
+        shiftCanteenId === String(scopedCanteenId)
+        || staffCanteenId === String(scopedCanteenId)
+      );
+    })
     : requests;
 
   res.status(200).json({
     success: true,
-    data: scoped,
+    data: scopedRequests,
   });
 });
 
 export const createShiftChangeRequest = catchAsync(async (req, res) => {
   const payload = {
     staffShiftId: req.body?.staffShiftId,
+    requestedShiftId: req.body?.requestedShiftId || null,
     reason: req.body?.reason,
   };
 
@@ -432,10 +453,43 @@ export const reviewShiftChangeRequest = catchAsync(async (req, res) => {
 });
 
 export const getAvailableShiftsForChangeRequest = catchAsync(async (req, res) => {
-  const shifts = await shiftService.getAvailableShiftsForChangeRequest(req.user);
+  const shifts = await shiftService.getAvailableShiftsForChangeRequest(
+    {
+      date: req.query?.date || null,
+    },
+    req.user,
+  );
 
   res.status(200).json({
     success: true,
     data: shifts,
+  });
+});
+
+export const getAvailableShifts = catchAsync(async (req, res) => {
+  const shifts = await shiftService.getAvailableShiftsWithCapacity(
+    {
+      date: req.query?.date || null,
+    },
+    req.user,
+  );
+
+  res.status(200).json({
+    success: true,
+    data: shifts,
+  });
+});
+
+export const getShiftSuggestions = catchAsync(async (req, res) => {
+  const suggestions = await shiftService.getSuggestedShiftsForChangeRequest(
+    {
+      staffShiftId: req.query?.staffShiftId,
+    },
+    req.user,
+  );
+
+  res.status(200).json({
+    success: true,
+    data: suggestions,
   });
 });
