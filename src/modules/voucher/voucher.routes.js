@@ -9,14 +9,14 @@ const router = express.Router();
 router.get('/active', voucherController.getActiveVouchers);
 router.get('/code/:code', voucherController.getVoucherByCode);
 
-// Protected routes
+// Protected routes (all authenticated users)
 router.use(protect);
 
 router.post('/validate', voucherController.validateVoucher);
 router.get('/my-usage', voucherController.getMyVoucherUsage);
 
-// Admin routes
-router.use(restrictTo('admin'));
+// Admin & Manager routes
+router.use(restrictTo("admin", "manager"));
 
 router
   .route('/')
@@ -26,9 +26,26 @@ router
     voucherController.createVoucher
   );
 
+// Utility endpoints
+router.get("/generate-code", voucherController.generateCode);
+router.get("/export", voucherController.exportUsageReport);
+
 router
   .route('/:id')
   .get(voucherController.getVoucherById)
+  .patch(voucherController.updateVoucher)
+  .delete(voucherController.deleteVoucher);
+
+// State management actions
+router.post("/:id/clone", voucherController.cloneVoucher);
+router.patch("/:id/publish", voucherController.publishVoucher);
+router.patch("/:id/deactivate", voucherController.deactivateVoucher);
+router.patch("/:id/reactivate", voucherController.reactivateVoucher);
+router.patch("/:id/archive", voucherController.archiveVoucher);
+
+// Usage history & stats
+router.get("/:id/stats", voucherController.getVoucherUsageStats);
+router.get("/:id/usage-history", voucherController.getVoucherUsageHistory);
   .patch(
     auditLogger('UPDATE', 'Voucher', 'Voucher'),
     voucherController.updateVoucher

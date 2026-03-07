@@ -7,6 +7,7 @@ import app from "./app.js";
 import connectDB from "./config/db.js";
 import { registerOrderCronJobs } from "./jobs/orderCron.js";
 import { registerScheduleReminderCronJobs } from "./jobs/scheduleReminderCron.js";
+import { registerVoucherCronJobs } from "./jobs/voucherStatus.job.js";
 import { registerExpireShiftChangeRequestCron } from "./cron/expireShiftRequests.job.js";
 import { initSocket } from "./websocket/index.js";
 
@@ -25,6 +26,7 @@ connectDB();
 // Register cron jobs
 registerOrderCronJobs();
 registerScheduleReminderCronJobs();
+registerVoucherCronJobs();
 registerExpireShiftChangeRequestCron();
 
 // Start server

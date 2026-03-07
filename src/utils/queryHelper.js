@@ -328,9 +328,22 @@ export const filterPresets = {
 
   // Voucher filters
   voucher: {
-    allowedFilters: ["isActive", "discountType"],
-    searchFields: ["code", "description"],
-    allowedSortFields: ["createdAt", "code", "value", "startDate", "endDate"],
+    allowedFilters: [
+      "state",
+      "scope",
+      "discountType",
+      "canteen_ids",
+      "createdBy",
+    ],
+    searchFields: ["code", "name", "internalDescription"],
+    allowedSortFields: [
+      "createdAt",
+      "code",
+      "discountValue",
+      "startDatetime",
+      "endDatetime",
+      "usedCount",
+    ],
   },
 
   // Shift filters
