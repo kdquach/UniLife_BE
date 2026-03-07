@@ -1,6 +1,17 @@
 import mongoose from "mongoose";
 
-// Voucher Schema
+const voucherChangeLogSchema = new mongoose.Schema(
+  {
+    field: { type: String },
+    oldValue: { type: mongoose.Schema.Types.Mixed },
+    newValue: { type: mongoose.Schema.Types.Mixed },
+    changedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    changedAt: { type: Date, default: Date.now },
+    reason: { type: String },
+  },
+  { _id: false },
+);
+
 const voucherSchema = new mongoose.Schema(
   {
     code: {
@@ -9,28 +20,92 @@ const voucherSchema = new mongoose.Schema(
       unique: true,
       uppercase: true,
       trim: true,
-      maxlength: [20, "Voucher code cannot exceed 20 characters"],
+      match: [
+        /^[A-Z0-9_-]{4,20}$/,
+        "Code must be 4-20 alphanumeric characters, dashes or underscores",
+      ],
     },
+    name: {
+      type: String,
+      required: [true, "Program name is required"],
+      trim: true,
+      maxlength: [100, "Name cannot exceed 100 characters"],
+    },
+    internalDescription: {
+      type: String,
+      trim: true,
+      maxlength: [500, "Internal description cannot exceed 500 characters"],
+    },
+    displayDescription: {
+      type: String,
+      trim: true,
+      maxlength: [100, "Display description cannot exceed 100 characters"],
+    },
+    scope: {
+      type: String,
+      enum: ["Global", "Branch"],
+      required: [true, "Scope is required"],
+    },
+    canteen_ids: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Canteen",
+      },
+    ],
+    applyTo: {
+      type: String,
+      enum: ["All items", "Category", "Specific items", "Combo only"],
+      required: [true, "Apply to is required"],
+    },
+    categoryIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "ProductCategory",
+      },
+    ],
+    productIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product",
+      },
+    ],
     discountType: {
       type: String,
-      enum: ["percentage", "fixed"],
+      enum: ["Percentage", "Fixed Amount"],
       required: [true, "Discount type is required"],
     },
-    value: {
+    discountValue: {
       type: Number,
       required: [true, "Discount value is required"],
       min: [0, "Discount value cannot be negative"],
     },
-    minOrderAmount: {
+    maxDiscountCap: {
+      type: Number,
+      min: [0, "Maximum discount cap cannot be negative"],
+    },
+    minOrderValue: {
       type: Number,
       default: 0,
       min: [0, "Minimum order amount cannot be negative"],
     },
-    maxDiscount: {
+    minItemQuantity: {
       type: Number,
-      min: [0, "Maximum discount cannot be negative"],
+      default: 0,
+      min: [0, "Minimum item quantity cannot be negative"],
     },
-    maxUsage: {
+    timeRestriction: {
+      fromTime: { type: String }, // Format HH:mm
+      toTime: { type: String }, // Format HH:mm
+    },
+    startDatetime: {
+      type: Date,
+      required: [true, "Start datetime is required"],
+    },
+    endDatetime: {
+      type: Date,
+      required: [true, "End datetime is required"],
+    },
+    totalLimit: {
       type: Number,
       default: null, // null means unlimited
     },
@@ -38,48 +113,37 @@ const voucherSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-    startDate: {
-      type: Date,
-      required: [true, "Start date is required"],
-    },
-    endDate: {
-      type: Date,
-      required: [true, "End date is required"],
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-    // Campus scope: null = Global (all campuses), ObjectId = specific campus only
-    campusId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Campus",
-      default: null,
-    },
-    // Per-user usage limit (default: 1 time per user)
-    userUsageLimit: {
+    usagePerUser: {
       type: Number,
       default: 1,
-      min: [1, "User usage limit must be at least 1"],
+      min: [1, "Usage per user must be at least 1"],
     },
-    // Apply to: all products or specific products only
-    applyTo: {
+    allowStackWithCombo: {
+      type: Boolean,
+      default: false,
+    },
+    state: {
       type: String,
-      enum: ["all", "specific_products"],
-      default: "all",
+      enum: [
+        "Draft",
+        "Upcoming",
+        "Active",
+        "Inactive",
+        "Expired",
+        "OutOfQuota",
+        "Archived",
+      ],
+      default: "Draft",
     },
-    // Product IDs (only used when applyTo = "specific_products")
-    productIds: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Product",
-      },
-    ],
-    description: {
-      type: String,
-      trim: true,
-      maxlength: [500, "Description cannot exceed 500 characters"],
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
     },
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    changeLog: [voucherChangeLogSchema],
   },
   {
     timestamps: true,
@@ -87,66 +151,35 @@ const voucherSchema = new mongoose.Schema(
 );
 
 voucherSchema.index({ code: 1 });
-voucherSchema.index({ startDate: 1, endDate: 1 });
-voucherSchema.index({ isActive: 1 });
+voucherSchema.index({ startDatetime: 1, endDatetime: 1 });
+voucherSchema.index({ state: 1 });
 
-// Check if voucher is valid
+// Check if voucher is valid (Used by old methods; updated conceptually but relies on Validator pattern in service now)
 voucherSchema.methods.isValid = function () {
   const now = new Date();
-  if (!this.isActive) return false;
-  if (now < this.startDate || now > this.endDate) return false;
-  if (this.maxUsage !== null && this.usedCount >= this.maxUsage) return false;
+  if (this.state !== "Active") return false;
+  if (now < this.startDatetime || now > this.endDatetime) return false;
+  if (this.totalLimit !== null && this.usedCount >= this.totalLimit)
+    return false;
   return true;
 };
 
-// Calculate discount
+// Calculate discount (Migrated to use current fields)
 voucherSchema.methods.calculateDiscount = function (orderAmount) {
   if (!this.isValid()) return 0;
-  if (orderAmount < this.minOrderAmount) return 0;
+  if (orderAmount < this.minOrderValue) return 0;
 
   let discount = 0;
-  if (this.discountType === "percentage") {
-    discount = (orderAmount * this.value) / 100;
-    if (this.maxDiscount) {
-      discount = Math.min(discount, this.maxDiscount);
+  if (this.discountType === "Percentage") {
+    discount = (orderAmount * this.discountValue) / 100;
+    if (this.maxDiscountCap) {
+      discount = Math.min(discount, this.maxDiscountCap);
     }
   } else {
-    discount = this.value;
+    discount = this.discountValue;
   }
 
   return Math.min(discount, orderAmount);
 };
 
-// Voucher Usage Schema
-const voucherUsageSchema = new mongoose.Schema(
-  {
-    voucherId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Voucher",
-      required: [true, "Voucher ID is required"],
-    },
-    orderId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Order",
-      required: [true, "Order ID is required"],
-    },
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: [true, "User ID is required"],
-    },
-    discountAmount: {
-      type: Number,
-      required: [true, "Discount amount is required"],
-    },
-  },
-  {
-    timestamps: true,
-  },
-);
-
-voucherUsageSchema.index({ voucherId: 1, userId: 1 });
-voucherUsageSchema.index({ orderId: 1 });
-
 export const Voucher = mongoose.model("Voucher", voucherSchema);
-export const VoucherUsage = mongoose.model("VoucherUsage", voucherUsageSchema);

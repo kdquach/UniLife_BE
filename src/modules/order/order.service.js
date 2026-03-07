@@ -252,8 +252,7 @@ export const getMyOrders = async (userId, queryParams) => {
  * @returns {Promise<Object>} Created order
  */
 export const createOrder = async (orderData, userId) => {
-  const { canteenId, items, payment, note, summary, voucherCode, campusId } =
-    orderData;
+  const { canteenId, items, payment, note, summary, voucherCode } = orderData;
 
   // Validate and get product prices
   const orderItems = [];
@@ -291,7 +290,7 @@ export const createOrder = async (orderData, userId) => {
       voucherCode,
       finalSubTotal,
       orderItems,
-      campusId,
+      canteenId,
       userId,
     );
     discount = voucherResult.discountAmount;
@@ -335,12 +334,15 @@ export const createOrder = async (orderData, userId) => {
         { session },
       );
 
-      // Commit voucher usage atomically
+      // Commit voucher usage atomically (BR14 - atomic decrement)
       await voucherService.commitVoucher(
         voucherId,
         order._id,
         userId,
-        discount,
+        canteenId,
+        finalSubTotal, // originalAmount
+        discount, // discountAmount
+        totalAmount, // finalAmount
         session,
       );
 
@@ -780,6 +782,37 @@ export const cancelOrder = async (id, userId) => {
 
   // Hoàn lại tồn kho
   await handleInventoryRestoreForOrder(order.items);
+
+  // BR10: Hoàn voucher khi cancel trước khi hoàn thành thanh toán
+  if (order.voucherId) {
+    const isPaid = order.payment && order.payment.status === "paid";
+    if (!isPaid) {
+      // Refund: giảm usedCount và cập nhật VoucherUsageHistory
+      const { Voucher } = await import("../voucher/voucher.model.js");
+      const { VoucherUsageHistory } =
+        await import("../voucher/voucherHistory.model.js");
+
+      await Voucher.findByIdAndUpdate(order.voucherId, {
+        $inc: { usedCount: -1 },
+      });
+
+      await VoucherUsageHistory.findOneAndUpdate(
+        { orderId: order._id, voucherId: order.voucherId },
+        {
+          orderStatus: "Cancelled",
+          voucherStatus: "Refunded",
+        },
+      );
+    } else {
+      // Đã thanh toán: voucher không hoàn lại, chỉ cập nhật orderStatus
+      const { VoucherUsageHistory } =
+        await import("../voucher/voucherHistory.model.js");
+      await VoucherUsageHistory.findOneAndUpdate(
+        { orderId: order._id, voucherId: order.voucherId },
+        { orderStatus: "Cancelled" },
+      );
+    }
+  }
 
   order.status = "cancelled";
   await order.save();

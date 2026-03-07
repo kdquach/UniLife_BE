@@ -18,7 +18,7 @@ class DiscountStrategy {
 export class FixedDiscountStrategy extends DiscountStrategy {
   calculate(voucher, orderTotal, items) {
     // Fixed discount cannot exceed order total
-    return Math.min(voucher.value, orderTotal);
+    return Math.min(voucher.discountValue, orderTotal);
   }
 }
 
@@ -27,11 +27,11 @@ export class FixedDiscountStrategy extends DiscountStrategy {
  */
 export class PercentageDiscountStrategy extends DiscountStrategy {
   calculate(voucher, orderTotal, items) {
-    let discount = (orderTotal * voucher.value) / 100;
+    let discount = (orderTotal * voucher.discountValue) / 100;
 
     // Apply maxDiscount cap if set
-    if (voucher.maxDiscount) {
-      discount = Math.min(discount, voucher.maxDiscount);
+    if (voucher.maxDiscountCap) {
+      discount = Math.min(discount, voucher.maxDiscountCap);
     }
 
     // Cannot exceed order total
@@ -45,8 +45,8 @@ export class PercentageDiscountStrategy extends DiscountStrategy {
 export class DiscountCalculator {
   constructor() {
     this.strategies = {
-      fixed: new FixedDiscountStrategy(),
-      percentage: new PercentageDiscountStrategy(),
+      "Fixed Amount": new FixedDiscountStrategy(),
+      Percentage: new PercentageDiscountStrategy(),
     };
   }
 
@@ -54,7 +54,7 @@ export class DiscountCalculator {
    * Calculate discount amount
    * @param {Object} voucher - The voucher document
    * @param {number} orderTotal - Total order amount
-   * @param {Array} items - Cart items (for specific_products calculation)
+   * @param {Array} items - Cart items (for specific calculation)
    * @returns {number} Discount amount
    */
   calculate(voucher, orderTotal, items = []) {
@@ -65,9 +65,9 @@ export class DiscountCalculator {
       return 0;
     }
 
-    // If applyTo is specific_products, calculate based on matching items only
+    // If applyTo is Specific items, calculate based on matching items only
     if (
-      voucher.applyTo === "specific_products" &&
+      voucher.applyTo === "Specific items" &&
       voucher.productIds?.length > 0
     ) {
       const productIdStrings = voucher.productIds.map((id) => id.toString());
@@ -84,7 +84,26 @@ export class DiscountCalculator {
       return strategy.calculate(voucher, applicableTotal, items);
     }
 
-    // Default: apply to full order
+    // If applyTo is Category, calculate based on matching categories only
+    if (voucher.applyTo === "Category" && voucher.categoryIds?.length > 0) {
+      const categoryIdStrings = voucher.categoryIds.map((id) => id.toString());
+
+      // Calculate subtotal of applicable items
+      const applicableTotal = items.reduce((sum, item) => {
+        if (
+          item.categoryId &&
+          categoryIdStrings.includes(item.categoryId.toString())
+        ) {
+          return sum + item.price * item.quantity;
+        }
+        return sum;
+      }, 0);
+
+      // Apply discount only to applicable items
+      return strategy.calculate(voucher, applicableTotal, items);
+    }
+
+    // Default (All items, Combo only): apply to full order
     return strategy.calculate(voucher, orderTotal, items);
   }
 }

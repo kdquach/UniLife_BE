@@ -1,17 +1,25 @@
 import mongoose from "mongoose";
-import { Voucher, VoucherUsage } from "./voucher.model.js";
+import { Voucher } from "./voucher.model.js";
+import { VoucherUsageHistory } from "./voucherHistory.model.js";
 import AppError from "../../utils/AppError.js";
 import { buildValidationChain } from "./voucherValidator.js";
 import { discountCalculator } from "./discountCalculator.js";
 
-export const createVoucher = async (voucherData) => {
-  const voucher = await Voucher.create(voucherData);
+export const createVoucher = async (voucherData, userId) => {
+  const data = { ...voucherData, createdBy: userId, updatedBy: userId };
+
+  if (new Date(data.startDatetime) >= new Date(data.endDatetime)) {
+    throw new AppError("End datetime must be after start datetime", 400);
+  }
+
+  const voucher = await Voucher.create(data);
   return voucher;
 };
 
 export const getAllVouchers = async (query = {}) => {
   const filter = {};
-  if (query.isActive !== undefined) filter.isActive = query.isActive;
+  if (query.state) filter.state = query.state;
+  if (query.scope) filter.scope = query.scope;
   if (query.discountType) filter.discountType = query.discountType;
 
   const vouchers = await Voucher.find(filter).sort({ createdAt: -1 });
@@ -21,11 +29,14 @@ export const getAllVouchers = async (query = {}) => {
 export const getActiveVouchers = async () => {
   const now = new Date();
   const vouchers = await Voucher.find({
-    isActive: true,
-    startDate: { $lte: now },
-    endDate: { $gte: now },
-    $or: [{ maxUsage: null }, { $expr: { $lt: ["$usedCount", "$maxUsage"] } }],
-  }).sort({ endDate: 1 });
+    state: "Active",
+    startDatetime: { $lte: now },
+    endDatetime: { $gte: now },
+    $or: [
+      { totalLimit: null },
+      { $expr: { $lt: ["$usedCount", "$totalLimit"] } },
+    ],
+  }).sort({ endDatetime: 1 });
   return vouchers;
 };
 
@@ -51,7 +62,7 @@ export const getVoucherByCode = async (code) => {
  * @param {string} code - Voucher code
  * @param {number} orderTotal - Total order amount
  * @param {Array} items - Cart items [{productId, quantity, price}]
- * @param {string} campusId - Campus ID (from cart/order context)
+ * @param {string} canteenId - Canteen ID
  * @param {string} userId - User ID
  * @returns {Promise<Object>} { voucher, discountAmount } or throws AppError
  */
@@ -59,7 +70,7 @@ export const validateVoucherForApply = async (
   code,
   orderTotal,
   items,
-  campusId,
+  canteenId,
   userId,
 ) => {
   // Find voucher by code
@@ -70,7 +81,7 @@ export const validateVoucherForApply = async (
     voucher,
     orderTotal,
     items: items || [],
-    campusId,
+    canteenId,
     userId,
   };
 
@@ -94,36 +105,63 @@ export const validateVoucherForApply = async (
       _id: voucher._id,
       code: voucher.code,
       discountType: voucher.discountType,
-      value: voucher.value,
-      maxDiscount: voucher.maxDiscount,
-      description: voucher.description,
+      discountValue: voucher.discountValue,
+      maxDiscountCap: voucher.maxDiscountCap,
+      displayDescription: voucher.displayDescription,
     },
     discountAmount,
     message: `Áp dụng voucher thành công! Giảm ${discountAmount.toLocaleString("vi-VN")}đ`,
   };
 };
 
-// Keep old validateVoucher for backward compatibility
-export const validateVoucher = async (code, orderAmount, userId) => {
-  return validateVoucherForApply(code, orderAmount, [], null, userId);
-};
+export const updateVoucher = async (id, updateData, userId) => {
+  const voucher = await Voucher.findById(id);
+  if (!voucher) throw new AppError("Voucher not found", 404);
 
-export const updateVoucher = async (id, updateData) => {
-  const voucher = await Voucher.findByIdAndUpdate(id, updateData, {
-    new: true,
-    runValidators: true,
-  });
-  if (!voucher) {
-    throw new AppError("Voucher not found", 404);
+  // Example subset of BR04 state-based update rule (Draft/Upcoming allows all, Active restricts fields)
+  // Complete BR04 logic goes here or in a dedicated validator
+
+  if (voucher.state === "Active") {
+    // Only certain fields can be updated
+    const allowedFields = [
+      "totalLimit",
+      "endDatetime",
+      "internalDescription",
+      "displayDescription",
+    ];
+    for (const key of Object.keys(updateData)) {
+      if (!allowedFields.includes(key)) {
+        throw new AppError(`Cannot update ${key} while voucher is Active`, 400);
+      }
+    }
+    // Also BR06 check: cannot reduce total limit below used count
+    if (updateData.totalLimit && updateData.totalLimit < voucher.usedCount) {
+      throw new AppError(
+        `Cannot reduce total limit below used count (${voucher.usedCount})`,
+        400,
+      );
+    }
   }
-  return voucher;
+
+  const updatedVoucher = await Voucher.findByIdAndUpdate(
+    id,
+    { ...updateData, updatedBy: userId },
+    {
+      new: true,
+      runValidators: true,
+    },
+  );
+  return updatedVoucher;
 };
 
 export const deleteVoucher = async (id) => {
-  const voucher = await Voucher.findByIdAndDelete(id);
-  if (!voucher) {
-    throw new AppError("Voucher not found", 404);
-  }
+  const voucher = await Voucher.findById(id);
+  if (!voucher) throw new AppError("Voucher not found", 404);
+  if (voucher.usedCount > 0)
+    throw new AppError("Cannot delete a voucher that has been used", 400);
+  if (voucher.state !== "Draft")
+    throw new AppError("Only Draft vouchers can be deleted", 400);
+  await Voucher.findByIdAndDelete(id);
 };
 
 /**
@@ -132,25 +170,29 @@ export const deleteVoucher = async (id) => {
  * @param {string} voucherId - Voucher ID
  * @param {string} orderId - Order ID
  * @param {string} userId - User ID
+ * @param {string} canteenId - Canteen ID
+ * @param {number} originalAmount - Un-discounted order total
  * @param {number} discountAmount - Calculated discount amount
+ * @param {number} finalAmount - Final amount after discount
  * @param {Object} session - MongoDB session (optional, for transaction)
- * @returns {Promise<Object>} VoucherUsage record
+ * @returns {Promise<Object>} VoucherUsageHistory record
  */
 export const commitVoucher = async (
   voucherId,
   orderId,
   userId,
+  canteenId,
+  originalAmount,
   discountAmount,
+  finalAmount,
   session = null,
 ) => {
-  // Optimistic locking: Only increment if usedCount < maxUsage
-  // This atomic operation prevents race conditions
   const updateResult = await Voucher.findOneAndUpdate(
     {
       _id: voucherId,
       $or: [
-        { maxUsage: null }, // Unlimited usage
-        { $expr: { $lt: ["$usedCount", "$maxUsage"] } }, // Still has remaining usage
+        { totalLimit: null }, // Unlimited usage
+        { $expr: { $lt: ["$usedCount", "$totalLimit"] } }, // Still has remaining usage
       ],
     },
     { $inc: { usedCount: 1 } },
@@ -161,47 +203,323 @@ export const commitVoucher = async (
     throw new AppError("Voucher đã hết lượt sử dụng", 400);
   }
 
-  // Create usage record
+  // Create usage history record
   const usageData = {
     voucherId,
     orderId,
     userId,
+    canteenId,
+    originalAmount,
     discountAmount,
+    finalAmount,
+    orderStatus: "Completed",
+    voucherStatus: "Consumed",
   };
 
   const usage = session
-    ? await VoucherUsage.create([usageData], { session }).then(
+    ? await VoucherUsageHistory.create([usageData], { session }).then(
         (docs) => docs[0],
       )
-    : await VoucherUsage.create(usageData);
+    : await VoucherUsageHistory.create(usageData);
 
   return usage;
 };
 
-// Keep old applyVoucher for backward compatibility (deprecated)
 export const applyVoucher = commitVoucher;
 
 export const getVoucherUsageStats = async (voucherId) => {
-  const usages = await VoucherUsage.find({ voucherId })
+  const usages = await VoucherUsageHistory.find({ voucherId })
     .populate("userId", "fullName email")
     .populate("orderId", "totalAmount")
+    .populate("canteenId", "name")
     .sort({ createdAt: -1 });
 
   const totalDiscountGiven = usages.reduce(
     (sum, u) => sum + u.discountAmount,
     0,
   );
+  const totalRevenue = usages.reduce((sum, u) => sum + u.finalAmount, 0);
 
   return {
     usageCount: usages.length,
     totalDiscountGiven,
+    totalRevenue,
     usages,
   };
 };
 
 export const getUserVoucherUsage = async (userId) => {
-  const usages = await VoucherUsage.find({ userId })
-    .populate("voucherId", "code discountType value")
+  const usages = await VoucherUsageHistory.find({ userId })
+    .populate("voucherId", "code discountType discountValue")
     .sort({ createdAt: -1 });
   return usages;
+};
+
+// =============================================
+// STATE MANAGEMENT FUNCTIONS (PRD v6)
+// =============================================
+
+/**
+ * F-05: Clone Voucher
+ * Creates a copy with reset code, dates, and used_count
+ */
+export const cloneVoucher = async (id, userId) => {
+  const original = await Voucher.findById(id);
+  if (!original) throw new AppError("Voucher not found", 404);
+
+  const clonedData = original.toObject();
+
+  // Remove fields that should not be cloned
+  delete clonedData._id;
+  delete clonedData.__v;
+  delete clonedData.createdAt;
+  delete clonedData.updatedAt;
+
+  // Reset fields per FR05
+  clonedData.code = undefined; // Must be set by user
+  clonedData.state = "Draft";
+  clonedData.startDatetime = undefined;
+  clonedData.endDatetime = undefined;
+  clonedData.usedCount = 0;
+  clonedData.createdBy = userId;
+  clonedData.updatedBy = userId;
+  clonedData.changeLog = [];
+
+  return clonedData; // Return data for user to complete before saving
+};
+
+/**
+ * F-06: Publish Voucher (Draft -> Upcoming)
+ * BR02: start_datetime must not be in the past
+ */
+export const publishVoucher = async (id, userId) => {
+  const voucher = await Voucher.findById(id);
+  if (!voucher) throw new AppError("Voucher not found", 404);
+  if (voucher.state !== "Draft") {
+    throw new AppError("Only Draft vouchers can be published", 400);
+  }
+
+  const now = new Date();
+  if (voucher.startDatetime <= now) {
+    throw new AppError("Start datetime must be in the future to publish", 400);
+  }
+
+  voucher.state = "Upcoming";
+  voucher.updatedBy = userId;
+  voucher.changeLog.push({
+    field: "state",
+    oldValue: "Draft",
+    newValue: "Upcoming",
+    changedBy: userId,
+    changedAt: now,
+  });
+
+  await voucher.save();
+  return voucher;
+};
+
+/**
+ * F-07: Deactivate Voucher (Active -> Inactive)
+ */
+export const deactivateVoucher = async (id, userId) => {
+  const voucher = await Voucher.findById(id);
+  if (!voucher) throw new AppError("Voucher not found", 404);
+  if (voucher.state !== "Active") {
+    throw new AppError("Only Active vouchers can be deactivated", 400);
+  }
+
+  const now = new Date();
+  voucher.state = "Inactive";
+  voucher.updatedBy = userId;
+  voucher.changeLog.push({
+    field: "state",
+    oldValue: "Active",
+    newValue: "Inactive",
+    changedBy: userId,
+    changedAt: now,
+  });
+
+  await voucher.save();
+  return voucher;
+};
+
+/**
+ * F-08: Reactivate Voucher (Inactive -> Active)
+ * Conditions: current_time < end_time AND (used_count < total_limit OR total_limit = null)
+ */
+export const reactivateVoucher = async (id, userId) => {
+  const voucher = await Voucher.findById(id);
+  if (!voucher) throw new AppError("Voucher not found", 404);
+  if (voucher.state !== "Inactive") {
+    throw new AppError("Only Inactive vouchers can be reactivated", 400);
+  }
+
+  const now = new Date();
+
+  if (now >= voucher.endDatetime) {
+    throw new AppError("Cannot reactivate: voucher has already expired", 400);
+  }
+  if (voucher.totalLimit !== null && voucher.usedCount >= voucher.totalLimit) {
+    throw new AppError(
+      "Cannot reactivate: voucher has reached its usage limit",
+      400,
+    );
+  }
+
+  voucher.state = "Active";
+  voucher.updatedBy = userId;
+  voucher.changeLog.push({
+    field: "state",
+    oldValue: "Inactive",
+    newValue: "Active",
+    changedBy: userId,
+    changedAt: now,
+  });
+
+  await voucher.save();
+  return voucher;
+};
+
+/**
+ * F-09: Archive Voucher (Expired/OutOfQuota -> Archived)
+ */
+export const archiveVoucher = async (id, userId) => {
+  const voucher = await Voucher.findById(id);
+  if (!voucher) throw new AppError("Voucher not found", 404);
+
+  if (!["Expired", "OutOfQuota"].includes(voucher.state)) {
+    throw new AppError(
+      "Only Expired or OutOfQuota vouchers can be archived",
+      400,
+    );
+  }
+
+  const now = new Date();
+  const oldState = voucher.state;
+  voucher.state = "Archived";
+  voucher.updatedBy = userId;
+  voucher.changeLog.push({
+    field: "state",
+    oldValue: oldState,
+    newValue: "Archived",
+    changedBy: userId,
+    changedAt: now,
+  });
+
+  await voucher.save();
+  return voucher;
+};
+
+/**
+ * BR01: Auto-generate unique voucher code
+ * Uppercase A-Z, 0-9, 8 characters
+ */
+export const generateVoucherCode = async () => {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let code;
+  let exists = true;
+
+  while (exists) {
+    code = "";
+    for (let i = 0; i < 8; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const found = await Voucher.findOne({ code });
+    exists = !!found;
+  }
+
+  return code;
+};
+
+/**
+ * Automatic state transitions (called by Cron Job)
+ * - Upcoming -> Active (when current_time >= start_time)
+ * - Active -> Expired (when current_time > end_time)
+ * - Active -> OutOfQuota (when used_count >= total_limit)
+ * - Inactive -> Expired (when current_time > end_time)
+ */
+export const autoTransitionVoucherStates = async () => {
+  const now = new Date();
+  const results = { activated: 0, expired: 0, outOfQuota: 0 };
+
+  // Upcoming -> Active
+  const activated = await Voucher.updateMany(
+    { state: "Upcoming", startDatetime: { $lte: now } },
+    {
+      $set: { state: "Active" },
+      $push: {
+        changeLog: {
+          field: "state",
+          oldValue: "Upcoming",
+          newValue: "Active",
+          changedBy: null, // system
+          changedAt: now,
+          reason: "Auto-activated by system (start_time reached)",
+        },
+      },
+    },
+  );
+  results.activated = activated.modifiedCount;
+
+  // Active -> Expired
+  const expiredActive = await Voucher.updateMany(
+    { state: "Active", endDatetime: { $lt: now } },
+    {
+      $set: { state: "Expired" },
+      $push: {
+        changeLog: {
+          field: "state",
+          oldValue: "Active",
+          newValue: "Expired",
+          changedBy: null,
+          changedAt: now,
+          reason: "Auto-expired by system (end_time passed)",
+        },
+      },
+    },
+  );
+
+  // Inactive -> Expired
+  const expiredInactive = await Voucher.updateMany(
+    { state: "Inactive", endDatetime: { $lt: now } },
+    {
+      $set: { state: "Expired" },
+      $push: {
+        changeLog: {
+          field: "state",
+          oldValue: "Inactive",
+          newValue: "Expired",
+          changedBy: null,
+          changedAt: now,
+          reason: "Auto-expired by system (end_time passed while Inactive)",
+        },
+      },
+    },
+  );
+  results.expired = expiredActive.modifiedCount + expiredInactive.modifiedCount;
+
+  // Active -> OutOfQuota
+  const outOfQuota = await Voucher.updateMany(
+    {
+      state: "Active",
+      totalLimit: { $ne: null },
+      $expr: { $gte: ["$usedCount", "$totalLimit"] },
+    },
+    {
+      $set: { state: "OutOfQuota" },
+      $push: {
+        changeLog: {
+          field: "state",
+          oldValue: "Active",
+          newValue: "OutOfQuota",
+          changedBy: null,
+          changedAt: now,
+          reason: "Auto-disabled by system (usage limit reached)",
+        },
+      },
+    },
+  );
+  results.outOfQuota = outOfQuota.modifiedCount;
+
+  return results;
 };

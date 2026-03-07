@@ -3,7 +3,7 @@
  * Each validator checks one condition and passes to the next
  */
 
-import { VoucherUsage } from "./voucher.model.js";
+import { VoucherUsageHistory } from "./voucherHistory.model.js";
 
 /**
  * Base Validator class
@@ -47,10 +47,10 @@ export class DateValidator extends VoucherValidator {
     const { voucher } = context;
     const now = new Date();
 
-    if (now < voucher.startDate) {
+    if (now < voucher.startDatetime) {
       return { valid: false, error: "Voucher chưa có hiệu lực", code: 400 };
     }
-    if (now > voucher.endDate) {
+    if (now > voucher.endDatetime) {
       return { valid: false, error: "Voucher đã hết hạn", code: 400 };
     }
     return super.validate(context);
@@ -63,39 +63,46 @@ export class DateValidator extends VoucherValidator {
 export class ActiveValidator extends VoucherValidator {
   async validate(context) {
     const { voucher } = context;
-    if (!voucher.isActive) {
-      return { valid: false, error: "Voucher đã bị vô hiệu hóa", code: 400 };
+    if (voucher.state !== "Active") {
+      return {
+        valid: false,
+        error: "Voucher không trong trạng thái hoạt động",
+        code: 400,
+      };
     }
     return super.validate(context);
   }
 }
 
 /**
- * 4. Check campus constraint (null = Global, otherwise must match)
+ * 4. Check canteen constraint (Global vs Branch)
  */
-export class CampusValidator extends VoucherValidator {
+export class CanteenValidator extends VoucherValidator {
   async validate(context) {
-    const { voucher, campusId } = context;
+    const { voucher, canteenId } = context;
 
-    // If voucher.campusId is null -> Global voucher, skip check
-    if (voucher.campusId === null) {
+    // If voucher.scope is Global, skip check
+    if (voucher.scope === "Global") {
       return super.validate(context);
     }
 
-    // If campusId not provided in context, fail
-    if (!campusId) {
+    // If canteenId not provided in context, fail
+    if (!canteenId) {
       return {
         valid: false,
-        error: "Không xác định được Campus của đơn hàng",
+        error: "Không xác định được Canteen của đơn hàng",
         code: 400,
       };
     }
 
-    // Compare campusIds
-    if (voucher.campusId.toString() !== campusId.toString()) {
+    // Compare canteenIds
+    if (
+      !voucher.canteen_ids ||
+      !voucher.canteen_ids.some((id) => id.toString() === canteenId.toString())
+    ) {
       return {
         valid: false,
-        error: "Voucher không áp dụng cho Campus này",
+        error: "Voucher không áp dụng cho Canteen này",
         code: 400,
       };
     }
@@ -105,14 +112,17 @@ export class CampusValidator extends VoucherValidator {
 }
 
 /**
- * 5. Check global usage limit (usedCount < maxUsage)
+ * 5. Check global usage limit (usedCount < totalLimit)
  */
 export class GlobalLimitValidator extends VoucherValidator {
   async validate(context) {
     const { voucher } = context;
 
-    // maxUsage = null means unlimited
-    if (voucher.maxUsage !== null && voucher.usedCount >= voucher.maxUsage) {
+    // totalLimit = null means unlimited
+    if (
+      voucher.totalLimit !== null &&
+      voucher.usedCount >= voucher.totalLimit
+    ) {
       return { valid: false, error: "Voucher đã hết lượt sử dụng", code: 400 };
     }
     return super.validate(context);
@@ -134,16 +144,17 @@ export class UserLimitValidator extends VoucherValidator {
       };
     }
 
-    // Count how many times this user has used this voucher
-    const userUsageCount = await VoucherUsage.countDocuments({
+    // Count how many times this user has used this voucher without getting refunded
+    const userUsageCount = await VoucherUsageHistory.countDocuments({
       voucherId: voucher._id,
       userId,
+      voucherStatus: "Consumed",
     });
 
-    if (userUsageCount >= voucher.userUsageLimit) {
+    if (userUsageCount >= voucher.usagePerUser) {
       return {
         valid: false,
-        error: `Bạn đã sử dụng voucher này ${userUsageCount}/${voucher.userUsageLimit} lần`,
+        error: `Bạn đã sử dụng voucher này ${userUsageCount}/${voucher.usagePerUser} lần`,
         code: 400,
       };
     }
@@ -159,45 +170,78 @@ export class MinSpendValidator extends VoucherValidator {
   async validate(context) {
     const { voucher, orderTotal } = context;
 
-    if (orderTotal < voucher.minOrderAmount) {
+    if (orderTotal < voucher.minOrderValue) {
       return {
         valid: false,
-        error: `Đơn hàng tối thiểu ${voucher.minOrderAmount.toLocaleString("vi-VN")}đ để áp dụng voucher`,
+        error: `Đơn hàng tối thiểu ${voucher.minOrderValue.toLocaleString("vi-VN")}đ để áp dụng voucher`,
         code: 400,
       };
     }
+    // Also check item quantity if specified
+    const totalQty = context.items.reduce(
+      (sum, item) => sum + item.quantity,
+      0,
+    );
+    if (totalQty < voucher.minItemQuantity) {
+      return {
+        valid: false,
+        error: `Đơn hàng cần tối thiểu ${voucher.minItemQuantity} sản phẩm để áp dụng voucher`,
+        code: 400,
+      };
+    }
+
     return super.validate(context);
   }
 }
 
 /**
- * 8. Check if cart contains required products (for specific_products vouchers)
+ * 8. Check if cart contains required products/categories based on application
  */
 export class ProductValidator extends VoucherValidator {
   async validate(context) {
     const { voucher, items } = context;
 
-    // Skip if applyTo is 'all'
-    if (voucher.applyTo === "all") {
+    if (voucher.applyTo === "All items" || voucher.applyTo === "Combo only") {
       return super.validate(context);
     }
 
-    // Check if any item in cart matches productIds
-    if (!voucher.productIds || voucher.productIds.length === 0) {
-      return super.validate(context);
+    if (voucher.applyTo === "Specific items") {
+      if (!voucher.productIds || voucher.productIds.length === 0) {
+        return super.validate(context);
+      }
+      const productIdStrings = voucher.productIds.map((id) => id.toString());
+      const hasMatchingProduct = items.some((item) =>
+        productIdStrings.includes(item.productId.toString()),
+      );
+      if (!hasMatchingProduct) {
+        return {
+          valid: false,
+          error: "Giỏ hàng không có sản phẩm áp dụng voucher này",
+          code: 400,
+        };
+      }
     }
 
-    const productIdStrings = voucher.productIds.map((id) => id.toString());
-    const hasMatchingProduct = items.some((item) =>
-      productIdStrings.includes(item.productId.toString()),
-    );
-
-    if (!hasMatchingProduct) {
-      return {
-        valid: false,
-        error: "Giỏ hàng không có sản phẩm áp dụng voucher này",
-        code: 400,
-      };
+    if (voucher.applyTo === "Category") {
+      // NOTE: Context.items might need category info populated, or we skip deep validation for now
+      // Assuming item.categoryId exists or we fetch it
+      if (!voucher.categoryIds || voucher.categoryIds.length === 0) {
+        return super.validate(context);
+      }
+      const categoryIdStrings = voucher.categoryIds.map((id) => id.toString());
+      const hasMatchingCategory = items.some(
+        (item) =>
+          item.categoryId &&
+          categoryIdStrings.includes(item.categoryId.toString()),
+      );
+      if (!hasMatchingCategory) {
+        return {
+          valid: false,
+          error:
+            "Giỏ hàng không có sản phẩm thuộc danh mục áp dụng voucher này",
+          code: 400,
+        };
+      }
     }
 
     return super.validate(context);
@@ -212,7 +256,7 @@ export function buildValidationChain() {
   const existence = new ExistenceValidator();
   const date = new DateValidator();
   const active = new ActiveValidator();
-  const campus = new CampusValidator();
+  const canteen = new CanteenValidator();
   const globalLimit = new GlobalLimitValidator();
   const userLimit = new UserLimitValidator();
   const minSpend = new MinSpendValidator();
@@ -222,7 +266,7 @@ export function buildValidationChain() {
   existence
     .setNext(date)
     .setNext(active)
-    .setNext(campus)
+    .setNext(canteen)
     .setNext(globalLimit)
     .setNext(userLimit)
     .setNext(minSpend)
