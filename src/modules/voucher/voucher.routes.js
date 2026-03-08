@@ -1,37 +1,33 @@
-import express from 'express';
-import * as voucherController from './voucher.controller.js';
-import { protect, restrictTo } from '../../middlewares/auth.middleware.js';
-import { auditLogger } from '../auditLog/auditLog.middleware.js';
+import express from "express";
+import * as voucherController from "./voucher.controller.js";
+import { protect, restrictTo } from "../../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
 // Public routes
-router.get('/active', voucherController.getActiveVouchers);
-router.get('/code/:code', voucherController.getVoucherByCode);
+router.get("/active", voucherController.getActiveVouchers);
+router.get("/code/:code", voucherController.getVoucherByCode);
 
 // Protected routes (all authenticated users)
 router.use(protect);
 
-router.post('/validate', voucherController.validateVoucher);
-router.get('/my-usage', voucherController.getMyVoucherUsage);
+router.post("/validate", voucherController.validateVoucher);
+router.get("/my-usage", voucherController.getMyVoucherUsage);
 
 // Admin & Manager routes
 router.use(restrictTo("admin", "manager"));
 
 router
-  .route('/')
+  .route("/")
   .get(voucherController.getAllVouchers)
-  .post(
-    auditLogger('CREATE', 'Voucher', 'Voucher'),
-    voucherController.createVoucher
-  );
+  .post(voucherController.createVoucher);
 
 // Utility endpoints
 router.get("/generate-code", voucherController.generateCode);
 router.get("/export", voucherController.exportUsageReport);
 
 router
-  .route('/:id')
+  .route("/:id")
   .get(voucherController.getVoucherById)
   .patch(voucherController.updateVoucher)
   .delete(voucherController.deleteVoucher);
@@ -46,15 +42,5 @@ router.patch("/:id/archive", voucherController.archiveVoucher);
 // Usage history & stats
 router.get("/:id/stats", voucherController.getVoucherUsageStats);
 router.get("/:id/usage-history", voucherController.getVoucherUsageHistory);
-  .patch(
-    auditLogger('UPDATE', 'Voucher', 'Voucher'),
-    voucherController.updateVoucher
-  )
-  .delete(
-    auditLogger('DELETE', 'Voucher', 'Voucher'),
-    voucherController.deleteVoucher
-  );
-
-router.get('/:id/stats', voucherController.getVoucherUsageStats);
 
 export default router;
