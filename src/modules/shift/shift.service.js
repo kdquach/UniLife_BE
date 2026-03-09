@@ -2,6 +2,8 @@ import { Shift, StaffShift } from "./shift.model.js";
 import AppError from "../../utils/AppError.js";
 import { ShiftChangeRequest } from "./shiftChangeRequest.model.js";
 import User from "../user/user.model.js";
+import { createNotification } from "../notification/notification.service.js";
+import { notifyUser } from "../../websocket/notify.js";
 
 function normalizeDateOnly(value) {
   const date = new Date(value);
