@@ -98,6 +98,27 @@ router.get(
   shiftController.getShiftSuggestions,
 );
 
+router.get(
+  "/draft",
+  restrictTo("manager", "admin"),
+  shiftController.getShiftDraft,
+);
+router.post(
+  "/draft/save",
+  restrictTo("manager", "admin"),
+  shiftController.saveShiftDraft,
+);
+router.post(
+  "/draft/publish",
+  restrictTo("manager", "admin"),
+  shiftController.publishShiftDraft,
+);
+router.delete(
+  "/draft/cancel",
+  restrictTo("manager", "admin"),
+  shiftController.cancelShiftDraft,
+);
+
 // ============ Shift Routes ============
 router.get("/", restrictTo("staff", "manager", "admin"), shiftController.getAllShifts);
 router.get("/:id", restrictTo("staff", "manager", "admin"), shiftController.getShiftById);

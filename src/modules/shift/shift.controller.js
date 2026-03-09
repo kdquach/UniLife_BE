@@ -1,5 +1,7 @@
 import catchAsync from "../../utils/catchAsync.js";
 import * as shiftService from "./shift.service.js";
+import * as shiftDraftService from "./shiftDraft.service.js";
+import AppError from "../../utils/AppError.js";
 import {
   paginatedQuery,
   filterPresets,
@@ -41,6 +43,21 @@ const buildShiftScopeFilter = async (req, options = {}) => {
   }
 
   return baseFilter;
+};
+
+const normalizeDateOnly = (value) => {
+  const date = new Date(value);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+};
+
+const resolveWeekStart = (req, assignments = []) => {
+  if (req.body?.weekStart) return normalizeDateOnly(req.body.weekStart);
+  if (req.query?.weekStart) return normalizeDateOnly(req.query.weekStart);
+  if (req.body?.startDate) return normalizeDateOnly(req.body.startDate);
+  if (assignments.length && assignments[0]?.date) {
+    return normalizeDateOnly(assignments[0].date);
+  }
+  throw new AppError("Thiếu weekStart hoặc startDate", 400);
 };
 
 // ============ Shift Controllers ============
@@ -201,7 +218,7 @@ export const getMyAssignments = catchAsync(async (req, res) => {
   const scopeFilter = await buildShiftScopeFilter(req, { field: "canteenId" });
   const baseFilter = {
     staffId: req.user._id,
-    status: { $in: ["scheduled", "active"] },
+    status: { $in: ["scheduled", "checked_in", "checked_out", "absent"] },
     ...scopeFilter,
   };
 
@@ -291,7 +308,8 @@ export const updateAssignment = catchAsync(async (req, res) => {
 
 export const bulkSaveAssignments = catchAsync(async (req, res) => {
   const assignments = Array.isArray(req.body?.assignments) ? req.body.assignments : [];
-  const data = await shiftService.bulkSaveAssignments(assignments, req.user);
+  const weekStart = resolveWeekStart(req, assignments);
+  const data = await shiftDraftService.saveWeeklyDraft(assignments, weekStart, req.user);
 
   res.status(200).json({
     success: true,
@@ -301,7 +319,52 @@ export const bulkSaveAssignments = catchAsync(async (req, res) => {
 });
 
 export const publishAssignments = catchAsync(async (req, res) => {
-  const data = await shiftService.publishAssignments(req.body || {}, req.user);
+  const weekStart = resolveWeekStart(req);
+  const data = await shiftDraftService.publishWeeklyDraft(weekStart, req.user);
+
+  res.status(200).json({
+    success: true,
+    message: "Phát hành lịch làm việc thành công",
+    data,
+  });
+});
+
+export const getShiftDraft = catchAsync(async (req, res) => {
+  const weekStart = resolveWeekStart(req);
+  const data = await shiftDraftService.getWeeklyDraft(weekStart, req.user);
+
+  res.status(200).json({
+    success: true,
+    data,
+  });
+});
+
+export const saveShiftDraft = catchAsync(async (req, res) => {
+  const assignments = Array.isArray(req.body?.assignments) ? req.body.assignments : [];
+  const weekStart = resolveWeekStart(req, assignments);
+  const data = await shiftDraftService.saveWeeklyDraft(assignments, weekStart, req.user);
+
+  res.status(200).json({
+    success: true,
+    message: "Lưu nháp phân ca thành công",
+    data,
+  });
+});
+
+export const cancelShiftDraft = catchAsync(async (req, res) => {
+  const weekStart = resolveWeekStart(req);
+  const data = await shiftDraftService.cancelWeeklyDraft(weekStart, req.user);
+
+  res.status(200).json({
+    success: true,
+    message: "Hủy nháp phân ca thành công",
+    data,
+  });
+});
+
+export const publishShiftDraft = catchAsync(async (req, res) => {
+  const weekStart = resolveWeekStart(req);
+  const data = await shiftDraftService.publishWeeklyDraft(weekStart, req.user);
 
   res.status(200).json({
     success: true,
