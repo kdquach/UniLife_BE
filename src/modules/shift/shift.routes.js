@@ -25,16 +25,6 @@ router.post(
   shiftController.assignUserToShift,
 );
 router.post(
-  "/assignments/bulk-save",
-  restrictTo("manager", "admin"),
-  shiftController.bulkSaveAssignments,
-);
-router.post(
-  "/assignments/publish",
-  restrictTo("manager", "admin"),
-  shiftController.publishAssignments,
-);
-router.post(
   "/assignments/:id/check-in",
   restrictTo("staff", "manager", "admin"),
   shiftController.checkIn,
@@ -76,26 +66,10 @@ router.post(
   restrictTo("staff", "manager", "admin"),
   shiftController.createShiftChangeRequest,
 );
-router.get(
-  "/change-request/shifts",
-  restrictTo("staff", "manager", "admin"),
-  shiftController.getAvailableShiftsForChangeRequest,
-);
 router.patch(
   "/change-request/:id",
   restrictTo("manager", "admin"),
   shiftController.reviewShiftChangeRequest,
-);
-
-router.get(
-  "/available",
-  restrictTo("staff", "manager", "admin"),
-  shiftController.getAvailableShifts,
-);
-router.get(
-  "/suggestions",
-  restrictTo("staff", "manager", "admin"),
-  shiftController.getShiftSuggestions,
 );
 
 router.get(

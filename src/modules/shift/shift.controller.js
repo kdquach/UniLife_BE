@@ -12,6 +12,8 @@ import User from "../user/user.model.js";
 import { ShiftChangeRequest } from "./shiftChangeRequest.model.js";
 import Canteen from "../canteen/canteen.model.js";
 
+// ============ Controller Helpers ============
+
 const buildShiftScopeFilter = async (req, options = {}) => {
   const { field = "canteenId" } = options;
   const baseFilter = {};
@@ -306,28 +308,7 @@ export const updateAssignment = catchAsync(async (req, res) => {
   });
 });
 
-export const bulkSaveAssignments = catchAsync(async (req, res) => {
-  const assignments = Array.isArray(req.body?.assignments) ? req.body.assignments : [];
-  const weekStart = resolveWeekStart(req, assignments);
-  const data = await shiftDraftService.saveWeeklyDraft(assignments, weekStart, req.user);
-
-  res.status(200).json({
-    success: true,
-    message: "Lưu nháp phân ca thành công",
-    data,
-  });
-});
-
-export const publishAssignments = catchAsync(async (req, res) => {
-  const weekStart = resolveWeekStart(req);
-  const data = await shiftDraftService.publishWeeklyDraft(weekStart, req.user);
-
-  res.status(200).json({
-    success: true,
-    message: "Phát hành lịch làm việc thành công",
-    data,
-  });
-});
+// ============ Draft Schedule Controllers ============
 
 export const getShiftDraft = catchAsync(async (req, res) => {
   const weekStart = resolveWeekStart(req);
@@ -373,6 +354,8 @@ export const publishShiftDraft = catchAsync(async (req, res) => {
   });
 });
 
+// ============ Shift Staff Controllers ============
+
 export const getShiftManagerStaffList = catchAsync(async (req, res) => {
   const filter = {
     role: "staff",
@@ -403,8 +386,10 @@ export const getShiftManagerStaffList = catchAsync(async (req, res) => {
   });
 });
 
+// ============ Shift Change Request Controllers ============
+
 export const getMyShiftChangeRequests = catchAsync(async (req, res) => {
-  await shiftService.autoRejectExpiredPendingShiftChangeRequests({
+  await shiftService.expirePendingShiftChangeRequests({
     canteenId: req.user?.canteenId || null,
     staffId: req.user?._id || null,
   });
@@ -448,7 +433,7 @@ export const getShiftChangeRequests = catchAsync(async (req, res) => {
 
   const scopedCanteenId = req.user?.canteenId || req.query?.canteenId || null;
 
-  await shiftService.autoRejectExpiredPendingShiftChangeRequests({
+  await shiftService.expirePendingShiftChangeRequests({
     canteenId: scopedCanteenId,
   });
 
@@ -512,47 +497,5 @@ export const reviewShiftChangeRequest = catchAsync(async (req, res) => {
     success: true,
     message: "Cập nhật yêu cầu đổi ca thành công",
     data: { request },
-  });
-});
-
-export const getAvailableShiftsForChangeRequest = catchAsync(async (req, res) => {
-  const shifts = await shiftService.getAvailableShiftsForChangeRequest(
-    {
-      date: req.query?.date || null,
-    },
-    req.user,
-  );
-
-  res.status(200).json({
-    success: true,
-    data: shifts,
-  });
-});
-
-export const getAvailableShifts = catchAsync(async (req, res) => {
-  const shifts = await shiftService.getAvailableShiftsWithCapacity(
-    {
-      date: req.query?.date || null,
-    },
-    req.user,
-  );
-
-  res.status(200).json({
-    success: true,
-    data: shifts,
-  });
-});
-
-export const getShiftSuggestions = catchAsync(async (req, res) => {
-  const suggestions = await shiftService.getSuggestedShiftsForChangeRequest(
-    {
-      staffShiftId: req.query?.staffShiftId,
-    },
-    req.user,
-  );
-
-  res.status(200).json({
-    success: true,
-    data: suggestions,
   });
 });
