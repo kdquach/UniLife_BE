@@ -5,6 +5,15 @@ import { isTokenBlacklisted } from "../modules/auth/auth.service.js";
 
 let io;
 
+// Fallback cho môi trường local nếu chưa khai báo SOCKET_ORIGIN.
+// Có thể override hoàn toàn bằng biến env.
+const DEFAULT_SOCKET_ORIGINS = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174",
+];
+
 const toStringId = (value) => {
   if (!value) return "";
   if (typeof value === "string") return value;
@@ -15,6 +24,57 @@ const toStringId = (value) => {
 const normalizeToken = (rawToken = "") => {
   if (!rawToken) return "";
   return rawToken.startsWith("Bearer ") ? rawToken.slice(7).trim() : rawToken;
+};
+
+// SOCKET_ORIGIN hỗ trợ:
+// - "*" để mở toàn bộ origin (không khuyến nghị cho production)
+// - 1 origin đơn: "http://localhost:5173"
+// - nhiều origin ngăn cách dấu phẩy
+//   "http://localhost:5173,http://localhost:5174"
+const parseAllowedOrigins = () => {
+  const raw = String(process.env.SOCKET_ORIGIN || "").trim();
+
+  if (!raw) return DEFAULT_SOCKET_ORIGINS;
+  if (raw === "*") return "*";
+
+  const origins = raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return origins.length ? origins : DEFAULT_SOCKET_ORIGINS;
+};
+
+const buildSocketCorsOptions = () => {
+  const allowedOrigins = parseAllowedOrigins();
+
+  // Khi FE dùng withCredentials=true thì không nên trả wildcard origin.
+  // Hàm origin dưới đây sẽ phản hồi đúng origin nằm trong allow-list.
+  const origin = (requestOrigin, callback) => {
+    // request không có Origin (tool nội bộ, script server) thì cho qua.
+    if (!requestOrigin) {
+      callback(null, true);
+      return;
+    }
+
+    if (allowedOrigins === "*") {
+      callback(null, true);
+      return;
+    }
+
+    if (allowedOrigins.includes(requestOrigin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`Socket CORS blocked origin: ${requestOrigin}`), false);
+  };
+
+  return {
+    origin,
+    methods: ["GET", "POST"],
+    credentials: true,
+  };
 };
 
 const canJoinCanteenRoom = (socket, canteenId) => {
@@ -46,12 +106,15 @@ const joinCanteenRoomSafely = (socket, canteenId, source = "client") => {
 };
 
 export const initSocket = (httpServer) => {
+  const corsOptions = buildSocketCorsOptions();
+
   io = new Server(httpServer, {
-    cors: {
-      origin: process.env.SOCKET_ORIGIN || "*",
-      methods: ["GET", "POST"],
-    },
+    cors: corsOptions,
   });
+
+  console.info(
+    `[Socket] CORS config | SOCKET_ORIGIN=${process.env.SOCKET_ORIGIN || "(default local origins)"}`,
+  );
 
   io.use(async (socket, next) => {
     try {
