@@ -1,0 +1,307 @@
+@startuml Payroll Management Class Diagram
+title Class Diagram - Payroll Management Module
+
+skinparam classAttributeIconSize 0
+hide circle
+
+' ==================== PAYROLL ROUTES ====================
+package "Payroll Routes" {
+  class PayrollRoutes {
+    -router
+    --
+    +GET /
+    +GET /stats
+    +GET /:id
+    +POST /generate
+    +POST /
+    +PATCH /:id/approve
+    +PATCH /:id/pay
+    +PATCH /:payrollId/salaries/:salaryId
+    +DELETE /:id
+  }
+}
+
+' ==================== SALARY RATE ROUTES ====================
+package "Salary Rate Routes" {
+  class SalaryRateRoutes {
+    -router
+    --
+    +GET /
+    +GET /canteen/:canteenId
+    +GET /user/:userId
+    +POST /
+    +DELETE /user/:userId
+  }
+}
+
+' ==================== SALARY ROUTES ====================
+package "Salary Routes" {
+  class SalaryRoutes {
+    -router
+    --
+    +GET /
+    +GET /my-salaries
+    +GET /stats
+    +GET /:id
+    +POST /
+    +POST /calculate
+    +POST /bulk-calculate
+    +PATCH /:id
+    +PATCH /:id/approve
+    +PATCH /:id/pay
+    +DELETE /:id
+  }
+}
+
+' ==================== CONTROLLERS ====================
+package "Controllers" {
+  class PayrollController {
+    --
+    +createPayroll(req, res)
+    +getAllPayrolls(req, res)
+    +getPayrollById(req, res)
+    +generatePayroll(req, res)
+    +adjustSalary(req, res)
+    +approvePayroll(req, res)
+    +confirmPayment(req, res)
+    +deletePayroll(req, res)
+    +getPayrollStats(req, res)
+  }
+
+  class SalaryRateController {
+    --
+    +setSalaryRate(req, res)
+    +getSalaryRateByUser(req, res)
+    +getSalaryRatesByCanteen(req, res)
+    +getAllSalaryRates(req, res)
+    +deleteSalaryRate(req, res)
+  }
+
+  class SalaryController {
+    --
+    +createSalary(req, res)
+    +getAllSalaries(req, res)
+    +getSalaryById(req, res)
+    +getMySalaries(req, res)
+    +updateSalary(req, res)
+    +deleteSalary(req, res)
+    +calculateSalary(req, res)
+    +bulkCalculateSalaries(req, res)
+    +approveSalary(req, res)
+    +markAsPaid(req, res)
+    +getSalaryStats(req, res)
+  }
+}
+
+' ==================== SERVICES ====================
+package "Services" {
+  class PayrollService {
+    --
+    +createPayroll(data)
+    +getAllPayrolls(queryParams)
+    +getPayrollById(id)
+    +generatePayroll(canteenId, periodStart, periodEnd, hourlyRate, createdBy, description)
+    +adjustSalary(payrollId, salaryId, updateData)
+    +approvePayroll(id, approvedBy)
+    +confirmPayment(id, paidBy)
+    +deletePayroll(id)
+    +getPayrollStats(query)
+    -recalculatePayrollTotals(payrollId)
+  }
+
+  class SalaryRateService {
+    --
+    +setSalaryRate(data)
+    +getSalaryRateByUser(userId)
+    +getSalaryRatesByCanteen(canteenId)
+    +getAllSalaryRates()
+    +deleteSalaryRate(userId)
+  }
+
+  class SalaryService {
+    --
+    +createSalary(data)
+    +getAllSalaries(queryParams, dateRange)
+    +getSalaryById(id)
+    +getMySalaries(userId, queryParams)
+    +updateSalary(id, updateData)
+    +deleteSalary(id)
+    +calculateSalary(userId, canteenId, periodStart, periodEnd, hourlyRate)
+    +bulkCalculateSalaries(canteenId, periodStart, periodEnd, hourlyRate)
+    +approveSalary(id)
+    +markAsPaid(id)
+    +getSalaryStats(canteenId, periodStart, periodEnd)
+  }
+
+  class PayrollCalculator {
+    --
+    +calculatePayrollForAllUsers(canteenId, periodStart, periodEnd, payrollId)
+    +getUserConfig(userId)
+    -calculateUserPayroll(userId, canteenId, periodStart, periodEnd, payrollId)
+    -getShiftSummary(userId, canteenId, periodStart, periodEnd)
+    -calculateComponents(shiftSummary, config)
+  }
+}
+
+' ==================== MODELS ====================
+package "Models" {
+  class PayrollModel {
+    -canteenId: ObjectId
+    -periodStart: Date
+    -periodEnd: Date
+    -description: String
+    -totalStaff: Number
+    -totalHours: Number
+    -totalAmount: Number
+    -totalBonus: Number
+    -totalDeduction: Number
+    -status: String
+    -hourlyRate: Number
+    -isLocked: Boolean
+    -version: Number
+    -createdBy: ObjectId
+    -approvedBy: ObjectId
+    -approvedAt: Date
+    -paidBy: ObjectId
+    -paidAt: Date
+    -createdAt: Date
+    -updatedAt: Date
+    --
+    +create(data)
+    +find(filter)
+    +findOne(filter)
+    +findById(id)
+    +findByIdAndUpdate(id, data, options)
+    +findByIdAndDelete(id)
+    +aggregate(pipeline)
+  }
+
+  class SalaryRateModel {
+    -userId: ObjectId
+    -canteenId: ObjectId
+    -hourlyRate: Number
+    -effectiveFrom: Date
+    -attendanceBonus100: Number
+    -attendanceBonus95: Number
+    -attendanceBonus90: Number
+    -overtimeMultiplier: Number
+    -lateDeduction: Number
+    -earlyLeaveDeduction: Number
+    -absentDeduction: Number
+    -maxLateAllowed: Number
+    -updatedBy: ObjectId
+    -createdAt: Date
+    -updatedAt: Date
+    --
+    +create(data)
+    +find(filter)
+    +findOne(filter)
+    +findById(id)
+    +findByIdAndUpdate(id, data, options)
+    +findOneAndUpdate(filter, data, options)
+    +findByIdAndDelete(id)
+  }
+
+  class SalaryModel {
+    -payrollId: ObjectId
+    -userId: ObjectId
+    -canteenId: ObjectId
+    -periodStart: Date
+    -periodEnd: Date
+    -totalHours: Number
+    -baseSalary: Number
+    -bonus: Number
+    -deduction: Number
+    -totalSalary: Number
+    -status: String
+    -calculatedAt: Date
+    -paidAt: Date
+    -note: String
+    -adjustmentReason: String
+    -createdAt: Date
+    -updatedAt: Date
+    --
+    +create(data)
+    +find(filter)
+    +findOne(filter)
+    +findById(id)
+    +findByIdAndUpdate(id, data, options)
+    +updateMany(filter, data)
+    +findByIdAndDelete(id)
+    +aggregate(pipeline)
+  }
+
+  class StaffShiftModel {
+    --
+    +aggregate(pipeline)
+  }
+}
+
+' ==================== MIDDLEWARE ====================
+package "Middleware" {
+  class AuthMiddleware {
+    --
+    +protect(req, res, next)
+    +restrictTo(...roles)
+  }
+}
+
+' ==================== RELATIONSHIPS ====================
+
+' Routes to Controllers (Dependency - Routes use Controllers)
+PayrollRoutes ..> PayrollController : <<use>>
+PayrollRoutes ..> AuthMiddleware : <<use>>
+
+SalaryRateRoutes ..> SalaryRateController : <<use>>
+SalaryRateRoutes ..> AuthMiddleware : <<use>>
+
+SalaryRoutes ..> SalaryController : <<use>>
+SalaryRoutes ..> AuthMiddleware : <<use>>
+
+' Controllers to Services (Association - Controllers depend on Services)
+PayrollController --> "1" PayrollService : uses
+SalaryRateController --> "1" SalaryRateService : uses
+SalaryController --> "1" SalaryService : uses
+
+' Services to Models (Association - Services use Models)
+PayrollService --> "1" PayrollModel : manages
+PayrollService --> "*" SalaryModel : manages
+
+SalaryRateService --> "1" SalaryRateModel : manages
+
+SalaryService --> "*" SalaryModel : manages
+SalaryService ..> StaffShiftModel : <<query>>
+
+' Model Relationships (Composition & Association)
+PayrollModel "1" *-- "0..*" SalaryModel : contains
+SalaryRateModel "0..1" --o "1" SalaryModel : configures
+
+' PayrollCalculator relationships (Utility - Dependency)
+PayrollService ..> PayrollCalculator : <<use>>
+PayrollCalculator ..> StaffShiftModel : <<query>>
+PayrollCalculator ..> SalaryRateModel : <<query>>
+PayrollCalculator ..> SalaryModel : <<create>>
+
+note right of PayrollCalculator
+  Tính toán lương tự động:
+  - Tổng giờ làm việc
+  - Lương cơ bản
+  - Tăng ca
+  - Thưởng chuyên cần
+  - Khấu trừ (đi trễ, về sớm)
+  - Tổng lương
+end note
+
+note right of PayrollModel
+  Status flow:
+  draft → calculated → 
+  approved → paid
+end note
+
+note right of SalaryRateModel
+  Cấu hình mức lương
+  và chính sách thưởng/phạt
+  cho từng nhân viên
+end note
+
+@enduml

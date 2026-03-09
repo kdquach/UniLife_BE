@@ -1,0 +1,111 @@
+@startuml View Payroll List Sequence Diagram
+title View Payroll List
+
+actor "Manager/Admin" as User
+boundary "Payroll Page" as Frontend
+participant ":payrollRoutes" as Routes
+participant ":authMiddleware" as AuthMW
+participant ":payrollController" as Controller
+participant ":payrollService" as Service
+participant ":PayrollModel" as Model
+database ":MongoDB" as DB
+
+User -> Frontend: 1. Access /manager/payroll
+activate Frontend
+
+Frontend -> Frontend: 2. useEffect() fetchPayrolls()
+
+Frontend -> Routes: 3. GET /api/payrolls\n?page=1&limit=10&canteenId=xxx\n(Bearer Token)
+activate Routes
+
+ref over Routes, AuthMW
+  Verify Token Subsequence
+end ref
+
+opt [invalid token]
+    Routes --> Frontend: 4.1 HTTP 401 Response
+    Frontend --> User: 4.2 Redirect to Login
+end
+
+Routes -> Controller: 4. getAllPayrolls(req, res)
+activate Controller
+
+Controller -> Service: 5. getAllPayrolls(query)
+activate Service
+
+Service -> Service: 6. Build filter (canteenId, periodStart/periodEnd, status)
+
+Service -> Model: 7. find(filter).populate().sort().skip().limit()
+activate Model
+
+Model -> DB: 8. Query with pagination
+activate DB
+
+DB --> Model: 9. Payroll documents
+deactivate DB
+
+Model --> Service: 10. Payroll array
+deactivate Model
+
+Service --> Controller: 11. Payrolls
+deactivate Service
+
+Controller -> Controller: 12. Format response
+
+Controller --> Routes: 13. HTTP 200 Response
+deactivate Controller
+
+Routes --> Frontend: 14. JSON Response
+deactivate Routes
+
+Frontend -> Frontend: 15. Update state (payrolls, loading=false)
+
+Frontend --> User: 16. Display payroll table
+deactivate Frontend
+
+
+User -> Frontend: 17. Enter filters (month, status, canteen)
+activate Frontend
+
+Frontend -> Frontend: 18. handleFilterChange() build query params
+
+Frontend -> Routes: 19. GET /api/payrolls?status=approved&periodStart=...\n(Bearer Token)
+activate Routes
+
+ref over Routes, AuthMW
+  Verify Token Subsequence
+end ref
+
+Routes -> Controller: 20. getAllPayrolls(req, res)
+activate Controller
+
+Controller -> Service: 21. getAllPayrolls(query)
+activate Service
+
+Service -> Model: 22. find(filter) with new conditions
+activate Model
+
+Model -> DB: 23. Query filtered data
+activate DB
+
+DB --> Model: 24. Results
+deactivate DB
+
+Model --> Service: 25. Payrolls
+deactivate Model
+
+Service --> Controller: 26. Payrolls
+deactivate Service
+
+Controller --> Routes: 27. HTTP 200 Response
+deactivate Controller
+
+Routes --> Frontend: 28. JSON Response
+deactivate Routes
+
+Frontend -> Frontend: 29. Update state with filtered data
+
+Frontend --> User: 30. Display filtered payroll list
+deactivate Frontend
+
+@enduml

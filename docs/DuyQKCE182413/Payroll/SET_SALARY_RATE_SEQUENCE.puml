@@ -1,0 +1,106 @@
+@startuml Set Salary Rate Sequence Diagram
+title Set Salary Rate
+
+actor "Manager/Admin" as User
+boundary "Salary Rate Page" as Frontend
+participant ":salaryRateRoutes" as Routes
+participant ":authMiddleware" as AuthMW
+participant ":salaryRateController" as Controller
+participant ":salaryRateService" as Service
+participant ":SalaryRate Model" as Model
+database ":MongoDB" as DB
+
+User -> Frontend: 1. Click "Set Salary Rate" for employee
+activate Frontend
+
+Frontend -> Frontend: 2. Display form (select employee, hourly rate, bonus, multiplier, deduction)
+
+User -> Frontend: 3. Enter data and click "Save"
+
+Frontend -> Frontend: 4. form.validateFields()
+
+opt [validation failed]
+    Frontend --> User: 5.1 Show validation errors
+end
+
+Frontend -> Routes: 5. POST /api/salary-rates\n(Bearer Token)
+activate Routes
+
+ref over Routes, AuthMW
+  Verify Token Subsequence
+end ref
+
+opt [invalid token]
+    Routes --> Frontend: 6.1 HTTP 401 Response
+    Frontend --> User: 6.2 Redirect to Login
+end
+
+Routes -> Controller: 6. setSalaryRate(req, res)
+activate Controller
+
+Controller -> Controller: 7. Merge data with updatedBy
+
+Controller -> Service: 8. setSalaryRate(data)
+activate Service
+
+opt [validation failed]
+    Service --> Controller: 9.1 AppError "Invalid data" 400
+    deactivate Service
+    Controller --> Routes: 9.2 HTTP 400 Response
+    deactivate Controller
+    Routes --> Frontend: 9.3 JSON Error
+    deactivate Routes
+    Frontend --> User: 9.4 Show error
+end
+
+Service -> Model: 9. findOne({userId})
+activate Model
+
+Model -> DB: 10. Check existing
+activate DB
+
+DB --> Model: 11. Existing or null
+deactivate DB
+
+Model --> Service: 12. Salary rate or null
+deactivate Model
+
+opt [user not found]
+    Service --> Controller: 13.1 AppError "User not found" 404
+    deactivate Service
+    Controller --> Routes: 13.2 HTTP 404 Response
+    deactivate Controller
+    Routes --> Frontend: 13.3 JSON Error
+    deactivate Routes
+    Frontend --> User: 13.4 Show "User not found"
+end
+
+Service -> Model: 13. Create or update salary rate
+activate Model
+
+Model -> DB: 14. Insert or update
+activate DB
+
+DB --> Model: 15. Salary rate document
+deactivate DB
+
+Model --> Service: 16. Salary rate
+deactivate Model
+
+Service --> Controller: 17. Salary rate
+deactivate Service
+
+Controller -> Controller: 18. Format response
+
+Controller --> Routes: 19. HTTP 200/201 Response
+deactivate Controller
+
+Routes --> Frontend: 20. JSON Response
+deactivate Routes
+
+Frontend -> Frontend: 21. Show success, close form, reload list
+
+Frontend --> User: 22. "Salary rate set successfully"
+deactivate Frontend
+
+@enduml

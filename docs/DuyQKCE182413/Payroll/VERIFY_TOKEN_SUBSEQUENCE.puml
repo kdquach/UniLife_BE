@@ -1,0 +1,62 @@
+@startuml Verify Token Subsequence
+title Subsequence - Verify JWT Token (Auth Middleware)
+
+participant ":payrollRoutes" as Routes
+participant ":authMiddleware" as AuthMW
+participant ":UserModel" as UserModel
+database "MongoDB" as DB
+
+Routes -> AuthMW: 1. protect(req, res, next)
+activate AuthMW
+
+AuthMW -> AuthMW: 2. Extract & verify token
+
+opt Invalid Token
+    AuthMW --> Routes: 3a. HTTP 401\n"Invalid or expired token"
+end
+
+AuthMW -> UserModel: 3. findById(decoded.id)
+activate UserModel
+
+UserModel -> DB: 4. Query user
+activate DB
+
+opt User not exists
+    DB --> UserModel: 5a. null
+    deactivate DB
+    UserModel --> AuthMW: null
+    deactivate UserModel
+    AuthMW --> Routes: HTTP 401\n"User not found"
+end
+
+DB --> UserModel: 5. Return user
+deactivate DB
+
+UserModel --> AuthMW: 6. user object
+deactivate UserModel
+
+AuthMW -> AuthMW: 7. Check user status
+
+opt User not active
+    AuthMW --> Routes: 8a. HTTP 401\n"Account inactive"
+end
+
+AuthMW -> AuthMW: 8. req.user = user data
+
+AuthMW --> Routes: 9. next()
+deactivate AuthMW
+
+Routes -> Routes: 10. restrictTo(roles)
+activate Routes
+
+Routes -> Routes: 11. Check req.user.role
+
+opt No permission
+    Routes --> Routes: 12a. HTTP 403\n"No permission"
+    deactivate Routes
+end
+
+Routes --> Routes: 12. next()
+deactivate Routes
+
+@enduml

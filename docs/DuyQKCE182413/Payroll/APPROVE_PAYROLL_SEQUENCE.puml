@@ -1,0 +1,124 @@
+@startuml Approve Payroll Sequence Diagram
+title Approve Payroll
+
+actor "Manager/Admin" as User
+boundary "Payroll Detail Page" as Frontend
+participant ":payrollRoutes" as Routes
+participant ":authMiddleware" as AuthMW
+participant ":payrollController" as Controller
+participant ":payrollService" as Service
+participant ":Payroll Model" as PayrollModel
+participant ":Salary Model" as SalaryModel
+database ":MongoDB" as DB
+
+User -> Frontend: 1. Access /manager/payroll/:id
+activate Frontend
+
+Frontend -> Frontend: 2. useEffect() fetchPayrollDetail()
+
+Frontend --> User: 3. Display payroll info, salary list, "Approve Payroll" button
+
+User -> Frontend: 4. Click "Approve Payroll" button
+
+Frontend -> Frontend: 5. Confirm dialog "Confirm approve this payroll?"
+
+User -> Frontend: 6. Click "Confirm"
+
+Frontend -> Routes: 7. PATCH /api/payrolls/:id/approve\n(Bearer Token)
+activate Routes
+
+ref over Routes, AuthMW
+  Verify Token Subsequence
+end ref
+
+opt [invalid token]
+    Routes --> Frontend: 8.1 HTTP 401 Response
+    Frontend --> User: 8.2 Redirect to Login
+end
+
+opt [forbidden]
+    Routes --> Frontend: 8.3 HTTP 403 Response
+    Frontend --> User: 8.4 Show "No permission"
+end
+
+Routes -> Controller: 8. approvePayroll(req, res)
+activate Controller
+
+Controller -> Controller: 9. Extract payrollId and approvedBy
+
+Controller -> Service: 10. approvePayroll(payrollId, approvedBy)
+activate Service
+
+Service -> PayrollModel: 11. findById(payrollId)
+activate PayrollModel
+
+PayrollModel -> DB: 12. Query payroll
+activate DB
+
+DB --> PayrollModel: 13. Payroll document
+deactivate DB
+
+PayrollModel --> Service: 14. Payroll
+deactivate PayrollModel
+
+opt [not found]
+    Service --> Controller: 15.1 AppError "Payroll not found" 404
+    deactivate Service
+    Controller --> Routes: 15.2 HTTP 404 Response
+    deactivate Controller
+    Routes --> Frontend: 15.3 JSON Error
+    deactivate Routes
+    Frontend --> User: 15.4 Show "Not found"
+end
+
+opt [status not calculated]
+    Service --> Controller: 15.5 AppError "Only calculated payroll can be approved" 400
+    deactivate Service
+    Controller --> Routes: 15.6 HTTP 400 Response
+    deactivate Controller
+    Routes --> Frontend: 15.7 JSON Error
+    deactivate Routes
+    Frontend --> User: 15.8 Show error message
+end
+
+Service -> PayrollModel: 15. Update status to "approved"
+activate PayrollModel
+
+PayrollModel -> DB: 16. Update payroll status
+activate DB
+
+DB --> PayrollModel: 17. Updated document
+deactivate DB
+
+PayrollModel --> Service: 18. Updated payroll
+deactivate PayrollModel
+
+Service -> SalaryModel: 19. Update all salaries status
+activate SalaryModel
+
+SalaryModel -> DB: 20. Update many
+activate DB
+
+DB --> SalaryModel: 21. Update result
+deactivate DB
+
+SalaryModel --> Service: 22. Result
+deactivate SalaryModel
+
+Service --> Controller: 23. Approved payroll
+deactivate Service
+
+Controller -> Controller: 24. Format response
+
+Controller --> Routes: 25. HTTP 200 Response
+deactivate Controller
+
+Routes --> Frontend: 26. JSON Response
+deactivate Routes
+
+Frontend -> Frontend: 27. Update state, show success, reload
+
+Frontend --> User: 28. "Payroll approved successfully"
+deactivate Frontend
+
+@enduml

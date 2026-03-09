@@ -1,0 +1,72 @@
+@startuml View Salary Detail Sequence Diagram
+title View Salary Detail
+
+actor "Manager/Staff" as User
+boundary "Salary Detail Page" as Frontend
+participant ":salaryRoutes" as Routes
+participant ":authMiddleware" as AuthMW
+participant ":salaryController" as Controller
+participant ":salaryService" as Service
+participant ":Salary Model" as Model
+database ":MongoDB" as DB
+
+User -> Frontend: 1. Click salary record in payroll
+activate Frontend
+
+Frontend -> Routes: 2. GET /api/salaries/:id (Bearer Token)
+activate Routes
+
+ref over Routes, AuthMW
+  Verify Token Subsequence
+end ref
+
+opt [invalid token]
+    Routes --> Frontend: 3.1 HTTP 401 Response
+    Frontend --> User: 3.2 Redirect to Login
+end
+
+Routes -> Controller: 3. getSalaryById(req, res)
+activate Controller
+
+Controller -> Service: 4. getSalaryById(id)
+activate Service
+
+Service -> Model: 5. findById(id).populate()
+activate Model
+
+Model -> DB: 6. Query salary
+activate DB
+
+DB --> Model: 7. Salary document
+deactivate DB
+
+Model --> Service: 8. Salary
+deactivate Model
+
+opt [not found]
+    Service --> Controller: 9.1 AppError "Salary record not found" 404
+    deactivate Service
+    Controller --> Routes: 9.2 HTTP 404 Response
+    deactivate Controller
+    Routes --> Frontend: 9.3 JSON Error
+    deactivate Routes
+    Frontend --> User: 9.4 Show "Not found"
+end
+
+Service --> Controller: 9. Salary
+deactivate Service
+
+Controller -> Controller: 10. Format response
+
+Controller --> Routes: 11. HTTP 200 Response
+deactivate Controller
+
+Routes --> Frontend: 12. JSON Response
+deactivate Routes
+
+Frontend -> Frontend: 13. Update state (salary, loading=false)
+
+Frontend --> User: 14. Display salary details
+deactivate Frontend
+
+@enduml

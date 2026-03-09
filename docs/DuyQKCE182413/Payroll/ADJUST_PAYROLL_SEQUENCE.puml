@@ -1,0 +1,127 @@
+@startuml Adjust Payroll Sequence Diagram
+title Adjust Payroll
+
+actor "Manager/Admin" as User
+boundary "Payroll Detail Page" as Frontend
+participant ":payrollRoutes" as Routes
+participant ":authMiddleware" as AuthMW
+participant ":payrollController" as Controller
+participant ":payrollService" as Service
+participant ":Salary Model" as SalaryModel
+participant ":Payroll Model" as PayrollModel
+database ":MongoDB" as DB
+
+User -> Frontend: 1. Click "Adjust" button on salary row
+activate Frontend
+
+Frontend -> Frontend: 2. Open adjust dialog
+
+Frontend --> User: 3. Display form (adjustment type, amount, reason)
+
+User -> Frontend: 4. Enter adjustment data and click "Save"
+
+Frontend -> Frontend: 5. form.validateFields()
+
+opt [validation failed]
+    Frontend --> User: 6.1 Show validation errors
+end
+
+Frontend -> Frontend: 6. Calculate bonus or deduction
+
+Frontend -> Routes: 7. PATCH /api/salaries/:id\n(Bearer Token)
+activate Routes
+
+ref over Routes, AuthMW
+  Verify Token Subsequence
+end ref
+
+opt [invalid token]
+    Routes --> Frontend: 8.1 HTTP 401 Response
+    Frontend --> User: 8.2 Redirect to Login
+end
+
+Routes -> Controller: 8. updateSalary(req, res)
+activate Controller
+
+Controller -> Controller: 9. Extract salaryId and update data
+
+Controller -> Service: 10. updateSalary(salaryId, updateData)
+activate Service
+
+Service -> SalaryModel: 11. findById(salaryId)
+activate SalaryModel
+
+SalaryModel -> DB: 12. Query salary
+activate DB
+
+DB --> SalaryModel: 13. Salary document
+deactivate DB
+
+SalaryModel --> Service: 14. Salary
+deactivate SalaryModel
+
+opt [not found]
+    Service --> Controller: 15.1 AppError "Salary not found" 404
+    deactivate Service
+    Controller --> Routes: 15.2 HTTP 404 Response
+    deactivate Controller
+    Routes --> Frontend: 15.3 JSON Error
+    deactivate Routes
+    Frontend --> User: 15.4 Show error
+end
+
+Service -> Service: 15. Recalculate netSalary
+
+Service -> SalaryModel: 16. Update and save salary
+activate SalaryModel
+
+SalaryModel -> DB: 17. Update salary
+activate DB
+
+DB --> SalaryModel: 18. Updated document
+deactivate DB
+
+SalaryModel --> Service: 19. Updated salary
+deactivate SalaryModel
+
+Service -> PayrollModel: 20. Aggregate total salaries
+activate PayrollModel
+
+PayrollModel -> DB: 21. Calculate sum(netSalary)
+activate DB
+
+DB --> PayrollModel: 22. Total amount
+deactivate DB
+
+PayrollModel --> Service: 23. Total
+deactivate PayrollModel
+
+Service -> PayrollModel: 24. Update payroll total
+activate PayrollModel
+
+PayrollModel -> DB: 25. Update
+activate DB
+
+DB --> PayrollModel: 26. Updated payroll
+deactivate DB
+
+PayrollModel --> Service: 27. Payroll
+deactivate PayrollModel
+
+Service --> Controller: 28. Updated salary
+deactivate Service
+
+Controller -> Controller: 29. Format response
+
+Controller --> Routes: 30. HTTP 200 Response
+deactivate Controller
+
+Routes --> Frontend: 31. JSON Response
+deactivate Routes
+
+Frontend -> Frontend: 32. Show success, close dialog, reload
+
+Frontend --> User: 33. "Salary adjusted successfully"
+deactivate Frontend
+
+@enduml

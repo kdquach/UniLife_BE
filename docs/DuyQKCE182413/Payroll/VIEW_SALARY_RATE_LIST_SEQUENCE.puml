@@ -1,0 +1,64 @@
+@startuml View Salary Rate List Sequence Diagram
+title View Salary Rate List
+
+actor "Manager/Admin" as User
+boundary "Salary Rate Page" as Frontend
+participant ":salaryRateRoutes" as Routes
+participant ":authMiddleware" as AuthMW
+participant ":salaryRateController" as Controller
+participant ":salaryRateService" as Service
+participant ":SalaryRate Model" as Model
+database ":MongoDB" as DB
+
+User -> Frontend: 1. Access /manager/salary-rates
+activate Frontend
+
+Frontend -> Frontend: 2. useEffect() fetchSalaryRates()
+
+Frontend -> Routes: 3. GET /api/salary-rates/canteen/:canteenId\n(Bearer Token)
+activate Routes
+
+ref over Routes, AuthMW
+  Verify Token Subsequence
+end ref
+
+opt [invalid token]
+    Routes --> Frontend: 4.1 HTTP 401 Response
+    Frontend --> User: 4.2 Redirect to Login
+end
+
+Routes -> Controller: 4. getSalaryRatesByCanteen(req, res)
+activate Controller
+
+Controller -> Service: 5. getSalaryRatesByCanteen(canteenId)
+activate Service
+
+Service -> Model: 6. find({canteenId}).populate().sort()
+activate Model
+
+Model -> DB: 7. Query salary rates with population
+activate DB
+
+DB --> Model: 8. Salary rate documents
+deactivate DB
+
+Model --> Service: 9. SalaryRates array
+deactivate Model
+
+Service --> Controller: 10. SalaryRates
+deactivate Service
+
+Controller -> Controller: 11. Format response
+
+Controller --> Routes: 12. HTTP 200 Response
+deactivate Controller
+
+Routes --> Frontend: 13. JSON Response
+deactivate Routes
+
+Frontend -> Frontend: 14. Update state (salaryRates, loading=false)
+
+Frontend --> User: 15. Display salary rate table
+deactivate Frontend
+
+@enduml

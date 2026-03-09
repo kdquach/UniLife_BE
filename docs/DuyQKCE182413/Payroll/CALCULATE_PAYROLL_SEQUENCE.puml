@@ -1,0 +1,113 @@
+@startuml Calculate Payroll Sequence Diagram
+title Calculate Payroll
+
+actor "Manager/Admin" as User
+boundary "Payroll Page" as Frontend
+participant ":payrollRoutes" as Routes
+participant ":authMiddleware" as AuthMW
+participant ":payrollController" as Controller
+participant ":payrollService" as Service
+participant ":PayrollCalculator" as Calculator
+participant ":StaffShift Model" as ShiftModel
+participant ":SalaryRate Model" as SalaryRateModel
+participant ":Salary Model" as SalaryModel
+participant ":Payroll Model" as PayrollModel
+database ":MongoDB" as DB
+
+User -> Frontend: 1. Submit create payroll form
+activate Frontend
+
+Frontend -> Routes: 2. POST /api/payrolls/generate\n(Bearer Token)
+activate Routes
+
+ref over Routes, AuthMW
+  Verify Token Subsequence
+end ref
+
+opt [invalid token]
+    Routes --> Frontend: 3.1 HTTP 401 Response
+    Frontend --> User: 3.2 Redirect to Login
+end
+
+Routes -> Controller: 3. generatePayroll(req, res)
+activate Controller
+
+opt [validation failed]
+    Controller --> Routes: 4.1 HTTP 400
+    Routes --> Frontend: 4.2 Error Response
+    Frontend --> User: 4.3 Show error
+end
+
+Controller -> Service: 4. generatePayroll(params)
+activate Service
+
+Service -> PayrollModel: 5. create(payroll data)
+activate PayrollModel
+
+PayrollModel -> DB: 6. Insert
+activate DB
+DB --> PayrollModel: 7. payroll doc
+deactivate DB
+
+PayrollModel --> Service: 8. payroll
+deactivate PayrollModel
+
+Service -> Calculator: 9. calculatePayrollForAllUsers()
+activate Calculator
+
+loop [for each employee]
+    Calculator -> ShiftModel: 10. Aggregate shifts
+    activate ShiftModel
+    ShiftModel -> DB: 11. Query
+    activate DB
+    DB --> ShiftModel: 12. shift data
+    deactivate DB
+    ShiftModel --> Calculator: 13. shift summary
+    deactivate ShiftModel
+    
+    Calculator -> SalaryRateModel: 14. findOne(userId)
+    activate SalaryRateModel
+    SalaryRateModel -> DB: 15. Query
+    activate DB
+    DB --> SalaryRateModel: 16. config
+    deactivate DB
+    SalaryRateModel --> Calculator: 17. salary config
+    deactivate SalaryRateModel
+    
+    Calculator -> Calculator: 18. Calculate salary
+    
+    Calculator -> SalaryModel: 19. create(salary)
+    activate SalaryModel
+    SalaryModel -> DB: 20. Insert
+    activate DB
+    DB --> SalaryModel: 21. salary doc
+    deactivate DB
+    SalaryModel --> Calculator: 22. salary
+    deactivate SalaryModel
+end
+
+Calculator --> Service: 23. salaries array
+deactivate Calculator
+
+Service -> PayrollModel: 24. Update totals & status
+activate PayrollModel
+PayrollModel -> DB: 25. Update
+activate DB
+DB --> PayrollModel: 26. updated payroll
+deactivate DB
+PayrollModel --> Service: 27. payroll
+deactivate PayrollModel
+
+Service --> Controller: 28. {payroll, salaries}
+deactivate Service
+
+Controller --> Routes: 29. HTTP 201
+deactivate Controller
+
+Routes --> Frontend: 30. JSON Response
+deactivate Routes
+
+Frontend --> User: 31. "Calculated payroll for X employees"
+deactivate Frontend
+
+@enduml

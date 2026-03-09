@@ -1,0 +1,133 @@
+@startuml Confirm Payment Payroll Sequence Diagram
+title Confirm Payment Payroll
+
+actor "Manager/Admin" as User
+boundary "Payroll Detail Page" as Frontend
+participant ":payrollRoutes" as Routes
+participant ":authMiddleware" as AuthMW
+participant ":payrollController" as Controller
+participant ":payrollService" as Service
+participant ":Payroll Model" as PayrollModel
+participant ":Salary Model" as SalaryModel
+database ":MongoDB" as DB
+
+User -> Frontend: 1. Click "Confirm Payment" button
+activate Frontend
+
+Frontend -> Frontend: 2. Confirm dialog "Confirm payment to employees?"
+
+User -> Frontend: 3. Click "Confirm"
+
+Frontend -> Routes: 4. PATCH /api/payrolls/:id/pay\n(Bearer Token)
+activate Routes
+
+ref over Routes, AuthMW
+  Verify Token Subsequence
+end ref
+
+opt [invalid token]
+    Routes --> Frontend: 5.1 HTTP 401 Response
+    Frontend --> User: 5.2 Redirect to Login
+end
+
+opt [forbidden]
+    Routes --> Frontend: 5.3 HTTP 403 Response
+    Frontend --> User: 5.4 Show "No permission"
+end
+
+Routes -> Controller: 5. confirmPayment(req, res)
+activate Controller
+
+Controller -> Controller: 6. Extract payrollId and paidBy
+
+Controller -> Service: 7. confirmPayment(payrollId, paidBy)
+activate Service
+
+Service -> PayrollModel: 8. findById(payrollId)
+activate PayrollModel
+
+PayrollModel -> DB: 9. Query payroll
+activate DB
+
+DB --> PayrollModel: 10. Payroll document
+deactivate DB
+
+PayrollModel --> Service: 11. Payroll
+deactivate PayrollModel
+
+opt [not found]
+    Service --> Controller: 12.1 AppError "Payroll not found" 404
+    deactivate Service
+    Controller --> Routes: 12.2 HTTP 404 Response
+    deactivate Controller
+    Routes --> Frontend: 12.3 JSON Error
+    deactivate Routes
+    Frontend --> User: 12.4 Show "Not found"
+end
+
+opt [status not approved]
+    Service --> Controller: 12.5 AppError "Payroll not approved yet" 400
+    deactivate Service
+    Controller --> Routes: 12.6 HTTP 400 Response
+    deactivate Controller
+    Routes --> Frontend: 12.7 JSON Error
+    deactivate Routes
+    Frontend --> User: 12.8 Show error message
+end
+
+Service -> PayrollModel: 12. Update status to "paid" and save
+activate PayrollModel
+
+PayrollModel -> DB: 13. Update payroll status
+activate DB
+
+DB --> PayrollModel: 14. Updated document
+deactivate DB
+
+PayrollModel --> Service: 18. Return paid payroll
+deactivate PayrollModel
+
+Service -> SalaryModel: 19. updateMany(\n  { payrollId: payrollId },\n  {\n    status: "paid",\n    paidAt: new Date()\n  }\n)
+activate SalaryModel
+
+SalaryModel -> DB: 20. Update tất cả\nsalaries trong payroll\nsang status "paid"
+activate DB
+
+DB --> SalaryModel: 21. Return update result
+deactivate DB
+
+SalaryModel --> Service: 22. Return result
+PayrollModel --> Service: 15. Updated payroll
+deactivate PayrollModel
+
+Service -> SalaryModel: 16. updateMany({payrollId}, {status: "paid"})
+activate SalaryModel
+
+SalaryModel -> DB: 17. Update all salaries status
+activate DB
+
+DB --> SalaryModel: 18. Update result
+deactivate DB
+
+SalaryModel --> Service: 19. Result
+deactivate SalaryModel
+
+Service --> Controller: 20. Paid payroll
+deactivate Service
+
+Controller -> Controller: 21. Format response
+
+Controller --> Routes: 22. HTTP 200 Response
+deactivate Controller
+
+Routes --> Frontend: 23. JSON Response
+deactivate Routes
+
+Frontend -> Frontend: 24. Update state (status="paid"), show success message
+
+Frontend -> Frontend: 25. fetchPayrollDetail() reload data
+
+Frontend --> User: 26. "Payment confirmed successfully"
+deactivate Frontend
+
+@enduml
