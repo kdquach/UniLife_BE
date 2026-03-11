@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import User from "../modules/user/user.model.js";
-import { StaffShift } from "../modules/shift/staffShift.model.js";
+import { StaffShift } from "../modules/staffShift/staffShift.model.js";
 import { Notification } from "../modules/notification/notification.model.js";
 import { createNotification } from "../modules/notification/notification.service.js";
 import { notifyUser } from "../websocket/notify.js";

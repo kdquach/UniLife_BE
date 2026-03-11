@@ -1,7 +1,7 @@
 import Payroll from "./payroll.model.js";
 import Salary from "../salary/salary.model.js";
 import SalaryRate from "../salaryRate/salaryRate.model.js";
-import { StaffShift } from "../shift/staffShift.model.js";
+import { StaffShift } from "../staffShift/staffShift.model.js";
 import AppError from "../../utils/AppError.js";
 import mongoose from "mongoose";
 import { calculateAdjustments } from "./payroll.calculator.js";

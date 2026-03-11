@@ -2,6 +2,18 @@ import mongoose from "mongoose";
 
 const staffShiftSchema = new mongoose.Schema(
   {
+    scheduleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Schedule",
+      index: true,
+      default: null,
+    },
+    // Tương thích dữ liệu/index cũ theo scheduleVersion.
+    scheduleVersion: {
+      type: Number,
+      default: null,
+      index: true,
+    },
     shiftId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Shift",
@@ -57,8 +69,6 @@ const staffShiftSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
-
-    // ============ Attendance Fields ============
     attendanceStatus: {
       type: String,
       enum: [
@@ -87,8 +97,6 @@ const staffShiftSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-
-    // ============ IP & Device Tracking ============
     checkInIp: {
       type: String,
       trim: true,
@@ -105,8 +113,6 @@ const staffShiftSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-
-    // ============ Review & Early Leave ============
     needsReview: {
       type: Boolean,
       default: false,
@@ -145,10 +151,15 @@ const staffShiftSchema = new mongoose.Schema(
 staffShiftSchema.index({ shiftId: 1, date: 1 });
 staffShiftSchema.index({ staffId: 1, date: 1 });
 staffShiftSchema.index({ canteenId: 1, date: 1 });
+staffShiftSchema.index({ scheduleId: 1, date: 1 });
+staffShiftSchema.index({ scheduleVersion: 1 });
 staffShiftSchema.index({ status: 1 });
 staffShiftSchema.index({ attendanceStatus: 1 });
 staffShiftSchema.index({ needsReview: 1 });
-staffShiftSchema.index({ shiftId: 1, staffId: 1, date: 1 }, { unique: true });
+staffShiftSchema.index(
+  { scheduleId: 1, shiftId: 1, staffId: 1, date: 1 },
+  { unique: true, sparse: true },
+);
 
 export const StaffShift =
   mongoose.models.StaffShift || mongoose.model("StaffShift", staffShiftSchema);

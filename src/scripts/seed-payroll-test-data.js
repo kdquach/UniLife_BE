@@ -10,7 +10,7 @@ dotenv.config({ path: path.join(__dirname, "../../.env") });
 
 import User from "../modules/user/user.model.js";
 import { Shift } from "../modules/shift/shift.model.js";
-import { StaffShift } from "../modules/shift/staffShift.model.js";
+import { StaffShift } from "../modules/staffShift/staffShift.model.js";
 import SalaryRate from "../modules/salaryRate/salaryRate.model.js";
 import Payroll from "../modules/payroll/payroll.model.js";
 import Salary from "../modules/salary/salary.model.js";

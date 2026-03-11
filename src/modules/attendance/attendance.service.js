@@ -1,4 +1,4 @@
-import { StaffShift } from "../shift/staffShift.model.js";
+import { StaffShift } from "../staffShift/staffShift.model.js";
 import { Shift } from "../shift/shift.model.js";
 import AppError from "../../utils/AppError.js";
 import mongoose from "mongoose";

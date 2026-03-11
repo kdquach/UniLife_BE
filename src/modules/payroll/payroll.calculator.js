@@ -1,4 +1,4 @@
-import { StaffShift } from "../shift/staffShift.model.js";
+import { StaffShift } from "../staffShift/staffShift.model.js";
 import SalaryRate from "../salaryRate/salaryRate.model.js";
 import mongoose from "mongoose";
 
