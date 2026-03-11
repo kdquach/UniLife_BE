@@ -74,6 +74,3 @@ shiftSchema.index({ status: 1 });
 
 export const Shift =
   mongoose.models.Shift || mongoose.model("Shift", shiftSchema);
-
-// Re-export StaffShift from its dedicated file for backward compatibility
-export { StaffShift } from "./staffShift.model.js";

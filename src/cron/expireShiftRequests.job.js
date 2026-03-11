@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { expirePendingShiftChangeRequests } from "../modules/shift/shift.service.js";
+import { expirePendingShiftChangeRequests } from "../modules/shiftChange/shiftChange.service.js";
 
 export const registerExpireShiftChangeRequestCron = () => {
   cron.schedule("0 0 * * *", async () => {
