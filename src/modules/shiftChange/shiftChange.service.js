@@ -1,8 +1,10 @@
 import AppError from "../../utils/AppError.js";
 import { StaffShift } from "../staffShift/staffShift.model.js";
 import { ShiftChangeRequest } from "./shiftChange.model.js";
+import User from "../user/user.model.js";
+import { createNotification } from "../notification/notification.service.js";
+import { notifyUser } from "../../websocket/notify.js";
 
-const VALID_TYPES = ["drop", "swap", "replace"];
 const VALID_REVIEW_STATUSES = ["approved", "rejected"];
 
 const validateCreatePayload = (payload = {}) => {
@@ -10,16 +12,8 @@ const validateCreatePayload = (payload = {}) => {
     throw new AppError("Thiếu staffShiftId", 400);
   }
 
-  if (!VALID_TYPES.includes(payload?.type)) {
-    throw new AppError("Loại yêu cầu không hợp lệ", 400);
-  }
-
   if (!payload?.reason) {
     throw new AppError("Thiếu lý do đổi ca", 400);
-  }
-
-  if (["swap", "replace"].includes(payload.type) && !payload?.targetStaffId) {
-    throw new AppError("Thiếu targetStaffId cho yêu cầu swap/replace", 400);
   }
 };
 
@@ -105,6 +99,78 @@ const ensureTargetStaffNoConflict = async ({
   }
 };
 
+const mapTypeLabel = (type = "drop") => {
+  if (type === "swap") return "đổi ca";
+  if (type === "replace") return "nhờ thay ca";
+  return "bỏ ca";
+};
+
+const createRealtimeNotificationPayload = (notification, type = "shift") => ({
+  id: String(notification?._id || ""),
+  title: notification?.title || "",
+  content: notification?.content || "",
+  type,
+  isRead: false,
+  createdAt: notification?.createdAt || new Date(),
+  meta: {
+    ...(notification?.metadata || {}),
+    notificationId: String(notification?._id || ""),
+  },
+});
+
+const notifyUsersWithShiftEvent = async ({
+  userIds = [],
+  canteenId = null,
+  title = "",
+  content = "",
+  metadata = {},
+}) => {
+  if (!userIds.length) return;
+
+  await Promise.all(userIds.map(async (userId) => {
+    if (!userId) return;
+
+    try {
+      const notification = await createNotification({
+        userId,
+        canteenId,
+        type: "shift",
+        title,
+        content,
+        metadata,
+      });
+
+      notifyUser(String(userId), createRealtimeNotificationPayload(notification, "shift"));
+    } catch (error) {
+      console.error("Không thể gửi thông báo shift-change:", error?.message || error);
+    }
+  }));
+};
+
+const resolveManagerAndAdminUserIds = async (canteenId = null) => {
+  const managers = canteenId
+    ? await User.find({
+      role: "manager",
+      status: "active",
+      canteenId,
+    })
+      .select("_id")
+      .lean()
+    : [];
+
+  const admins = await User.find({
+    role: "admin",
+    status: "active",
+  })
+    .select("_id")
+    .lean();
+
+  return Array.from(new Set([
+    ...managers.map((item) => String(item._id)),
+    ...admins.map((item) => String(item._id)),
+  ]));
+};
+
 export const expirePendingShiftChangeRequests = async () => {
   const now = new Date();
 
@@ -163,14 +229,14 @@ export const expirePendingShiftChangeRequests = async () => {
 const createRequest = async (payload = {}, currentUser = null) => {
   const requestPayload = {
     ...payload,
-    type: payload?.type || "drop",
+    type: "drop",
   };
 
   validateCreatePayload(requestPayload);
 
   const assignment = await StaffShift.findById(requestPayload.staffShiftId).populate({
     path: "shiftId",
-    select: "startTime",
+    select: "name startTime endTime",
   });
   if (!assignment) {
     throw new AppError("Không tìm thấy phân công", 404);
@@ -195,14 +261,32 @@ const createRequest = async (payload = {}, currentUser = null) => {
     throw new AppError("Đã tồn tại yêu cầu pending cho ca này", 400);
   }
 
-  return ShiftChangeRequest.create({
+  const request = await ShiftChangeRequest.create({
     staffShiftId: assignment._id,
     staffId: currentUser._id,
+    canteenId: assignment.canteenId || null,
     type: requestPayload.type,
-    targetStaffId: requestPayload.targetStaffId || null,
+    targetStaffId: null,
     reason: requestPayload.reason,
     status: "pending",
   });
+
+  const reviewerUserIds = await resolveManagerAndAdminUserIds(assignment.canteenId || null);
+  await notifyUsersWithShiftEvent({
+    userIds: reviewerUserIds,
+    canteenId: assignment.canteenId || null,
+    title: "Có yêu cầu đổi ca mới",
+    content: "Nhân viên vừa gửi yêu cầu bỏ ca, vui lòng vào hệ thống để xử lý.",
+    metadata: {
+      kind: "shift_change_request",
+      requestId: request._id,
+      requestType: request.type,
+      staffShiftId: assignment._id,
+      status: request.status,
+    },
+  });
+
+  return request;
 };
 
 const listRequests = async (query = {}, currentUser = null) => {
@@ -215,24 +299,27 @@ const listRequests = async (query = {}, currentUser = null) => {
   }
 
   const scopedStaffShiftIds = currentUser?.role === "admin"
-    ? null
+    ? []
     : await StaffShift.find({
       canteenId: currentUser.canteenId,
-      isDeleted: { $ne: true },
     }).distinct("_id");
 
-  if (currentUser?.role !== "admin" && !scopedStaffShiftIds.length) {
-    return [];
-  }
-
-  const requests = await ShiftChangeRequest.find({
-    ...baseQuery,
-    ...(currentUser?.role === "admin"
-      ? {}
+  const requests = await ShiftChangeRequest.find(
+    currentUser?.role === "admin"
+      ? baseQuery
       : {
-        staffShiftId: { $in: scopedStaffShiftIds },
-      }),
-  })
+        ...baseQuery,
+        $or: [
+          { canteenId: currentUser.canteenId },
+          {
+            canteenId: null,
+            ...(scopedStaffShiftIds.length
+              ? { staffShiftId: { $in: scopedStaffShiftIds } }
+              : { _id: null }),
+          },
+        ],
+      },
+  )
     .populate("staffId", "fullName email")
     .populate("targetStaffId", "fullName email")
     .populate({
@@ -293,7 +380,12 @@ const approveRequest = async (requestId, currentUser = null) => {
   }
 
   if (request.type === "drop") {
-    await StaffShift.findByIdAndDelete(assignment._id);
+    await StaffShift.findByIdAndUpdate(assignment._id, {
+      status: "cancelled",
+      isDeleted: true,
+      assignedBy: currentUser?._id,
+      updatedAt: new Date(),
+    });
   } else if (["swap", "replace"].includes(request.type)) {
     if (!request.targetStaffId) {
       throw new AppError("Thiếu targetStaffId cho yêu cầu swap/replace", 400);
@@ -318,6 +410,20 @@ const approveRequest = async (requestId, currentUser = null) => {
 
   await request.save();
 
+  await notifyUsersWithShiftEvent({
+    userIds: [String(request.staffId)],
+    canteenId: request.canteenId || assignment.canteenId || null,
+    title: "Yêu cầu đổi ca đã được duyệt",
+    content: `Yêu cầu ${mapTypeLabel(request.type)} của bạn đã được quản lý duyệt.`,
+    metadata: {
+      kind: "shift_change_reviewed",
+      requestId: request._id,
+      requestType: request.type,
+      status: request.status,
+      reviewedBy: currentUser?._id || null,
+    },
+  });
+
   return request;
 };
 
@@ -336,6 +442,20 @@ const rejectRequest = async (requestId, currentUser = null) => {
   request.reviewedAt = new Date();
 
   await request.save();
+
+  await notifyUsersWithShiftEvent({
+    userIds: [String(request.staffId)],
+    canteenId: request.canteenId || null,
+    title: "Yêu cầu đổi ca bị từ chối",
+    content: `Yêu cầu ${mapTypeLabel(request.type)} của bạn đã bị từ chối.`,
+    metadata: {
+      kind: "shift_change_reviewed",
+      requestId: request._id,
+      requestType: request.type,
+      status: request.status,
+      reviewedBy: currentUser?._id || null,
+    },
+  });
 
   return request;
 };

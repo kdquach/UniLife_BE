@@ -12,6 +12,11 @@ const shiftChangeRequestSchema = new mongoose.Schema(
       ref: "User",
       required: [true, "Staff ID is required"],
     },
+    canteenId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Canteen",
+      default: null,
+    },
     type: {
       type: String,
       enum: ["swap", "drop", "replace"],
@@ -54,6 +59,7 @@ const shiftChangeRequestSchema = new mongoose.Schema(
 
 shiftChangeRequestSchema.index({ staffShiftId: 1, status: 1 });
 shiftChangeRequestSchema.index({ staffId: 1, createdAt: -1 });
+shiftChangeRequestSchema.index({ canteenId: 1, status: 1, createdAt: -1 });
 shiftChangeRequestSchema.index({ targetStaffId: 1, createdAt: -1 });
 shiftChangeRequestSchema.index({ status: 1, createdAt: -1 });
 
