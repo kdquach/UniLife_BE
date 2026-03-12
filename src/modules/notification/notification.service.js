@@ -25,7 +25,7 @@ const withCanteenScope = (filter = {}, canteenId = null) => {
 
 const resolveAllowedTypesByRole = (role = "customer") => {
   const normalized = String(role || "").toLowerCase();
-  if (normalized === "admin" || normalized === "staff") {
+  if (normalized === "admin" || normalized === "staff" || normalized === "manager") {
     return NOTIFICATION_TYPES.dashboard;
   }
   return NOTIFICATION_TYPES.client;
