@@ -1,6 +1,49 @@
 import AuditLog from './auditLog.model.js';
 import * as auditLogService from './auditLog.service.js';
 
+// Chuẩn hóa resourceType về đúng enum trong schema
+const resourceTypeNormalizeMap = {
+  Unknown: 'Không xác định',
+  User: 'Người dùng',
+  Product: 'Sản phẩm',
+  ProductCategory: 'Danh mục sản phẩm',
+  Ingredient: 'Nguyên liệu',
+  IngredientCategory: 'Danh mục nguyên liệu',
+  Recipe: 'Công thức',
+  Order: 'Đơn hàng',
+  Menu: 'Thực đơn',
+  MenuSchedule: 'Lịch thực đơn',
+  Shift: 'Ca làm việc',
+  Attendance: 'Chấm công',
+  Role: 'Quyền hạn',
+  Permission: 'Quyền',
+  Voucher: 'Phiếu giảm giá',
+  Banner: 'Banner',
+  Feedback: 'Phản hồi',
+  Canteen: 'Căn tin',
+  'Không xác định': 'Không xác định',
+  'Người dùng': 'Người dùng',
+  'Sản phẩm': 'Sản phẩm',
+  'Danh mục sản phẩm': 'Danh mục sản phẩm',
+  'Nguyên liệu': 'Nguyên liệu',
+  'Danh mục nguyên liệu': 'Danh mục nguyên liệu',
+  'Công thức': 'Công thức',
+  'Đơn hàng': 'Đơn hàng',
+  'Thực đơn': 'Thực đơn',
+  'Lịch thực đơn': 'Lịch thực đơn',
+  'Ca làm việc': 'Ca làm việc',
+  'Chấm công': 'Chấm công',
+  'Quyền hạn': 'Quyền hạn',
+  Quyền: 'Quyền',
+  'Phiếu giảm giá': 'Phiếu giảm giá',
+  'Phản hồi': 'Phản hồi',
+  'Căn tin': 'Căn tin',
+};
+
+const normalizeResourceType = (resourceType) => {
+  return resourceTypeNormalizeMap[resourceType] || 'Không xác định';
+};
+
 // Mapping từ endpoint path tới tên module và resource type
 const getAuditLogInfo = (req) => {
   const pathSegments = req.path.split('/').filter((seg) => seg);
@@ -84,7 +127,7 @@ export const auditLogMiddleware = async (req, res, next) => {
           userEmail: req.user?.email,
           userRole: req.user?.role,
           canteenId: req.user?.canteenId,
-          resourceType,
+          resourceType: normalizeResourceType(resourceType),
           resourceId: req.params?.id || data?.data?._id,
           resourceName:
             data?.data?.name ||
@@ -115,7 +158,7 @@ export const auditLogMiddleware = async (req, res, next) => {
 // Middleware: Ghi lại các lỗi
 export const auditErrorLogging = async (err, req, res, next) => {
   if (req.user) {
-    const { module } = getAuditLogInfo(req);
+    const { module, resourceType } = getAuditLogInfo(req);
 
     const errorLog = {
       action: 'ERROR',
@@ -126,7 +169,7 @@ export const auditErrorLogging = async (err, req, res, next) => {
       userEmail: req.user?.email,
       userRole: req.user?.role,
       canteenId: req.user?.canteenId,
-      resourceType: 'Unknown',
+      resourceType: normalizeResourceType(resourceType),
       method: req.method,
       endpoint: req.originalUrl,
       ipAddress: req.ip,

@@ -45,6 +45,7 @@ const auditLogSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Vui lòng nhập loại tài nguyên'],
       enum: [
+        'Không xác định',
         'Người dùng',
         'Sản phẩm',
         'Danh mục sản phẩm',
