@@ -112,7 +112,7 @@ export const auditLogMiddleware = async (req, res, next) => {
     const skipPaths = ['/api/health', '/api/upload'];
     const shouldSkip = skipPaths.some((path) => req.path.startsWith(path));
 
-    if (!shouldSkip && req.user) {
+    if (!shouldSkip && req.user && !req.hasCustomAuditLogger) {
       const { module, resourceType } = getAuditLogInfo(req);
       const action = getAuditAction(req);
 
@@ -228,6 +228,9 @@ const resourceTypeVietnamese = {
 //         router.delete('/:id', auditLogger('DELETE', 'Product', 'Product'), controller.delete)
 export const auditLogger = (action, resourceType, moduleName) => {
   return async (req, res, next) => {
+    // Đánh dấu request này dùng logger riêng để middleware global không log trùng
+    req.hasCustomAuditLogger = true;
+
     // Lưu data cũ từ URL (cho DELETE và UPDATE)
     if (action === 'UPDATE' || action === 'DELETE') {
       req.oldAuditValues = { ...req.body };

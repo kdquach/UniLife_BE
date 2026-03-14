@@ -101,13 +101,6 @@ router.patch(
   productController.updateProduct
 );
 
-// Recipe management
-router.post('/:id/recipe', productController.addRecipeIngredient);
-router.delete(
-  '/:id/recipe/:ingredientId',
-  productController.removeRecipeIngredient
-);
-
 // Restore và delete (cho cả staff/manager/admin)
 router.patch(
   '/:id/restore',

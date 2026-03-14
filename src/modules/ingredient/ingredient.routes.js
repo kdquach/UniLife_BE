@@ -28,7 +28,7 @@ router
     ingredientController.updateIngredient
   )
   .delete(
-    restrictTo('admin', 'staff'),
+    restrictTo('admin', 'staff', 'manager'),
     auditLogger('DELETE', 'Ingredient', 'Ingredient'),
     ingredientController.deleteIngredient
   );
