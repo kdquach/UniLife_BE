@@ -21,6 +21,12 @@ const resourceTypeNormalizeMap = {
   Banner: 'Banner',
   Feedback: 'Phản hồi',
   Canteen: 'Căn tin',
+  Payroll: 'Bảng lương',
+  Salary: 'Lương',
+  SalaryRate: 'Mức lương',
+  Schedule: 'Lịch làm việc',
+  ShiftChange: 'Đổi ca',
+  FeedbackReply: 'Trả lời phản hồi',
   'Không xác định': 'Không xác định',
   'Người dùng': 'Người dùng',
   'Sản phẩm': 'Sản phẩm',
@@ -38,6 +44,12 @@ const resourceTypeNormalizeMap = {
   'Phiếu giảm giá': 'Phiếu giảm giá',
   'Phản hồi': 'Phản hồi',
   'Căn tin': 'Căn tin',
+  'Bảng lương': 'Bảng lương',
+  Lương: 'Lương',
+  'Mức lương': 'Mức lương',
+  'Lịch làm việc': 'Lịch làm việc',
+  'Đổi ca': 'Đổi ca',
+  'Trả lời phản hồi': 'Trả lời phản hồi',
 };
 
 const normalizeResourceType = (resourceType) => {
@@ -221,6 +233,12 @@ const resourceTypeVietnamese = {
   Feedback: 'Phản hồi',
   Canteen: 'Căn tin',
   Attendance: 'Chấm công',
+  Payroll: 'Bảng lương',
+  Salary: 'Lương',
+  SalaryRate: 'Mức lương',
+  Schedule: 'Lịch làm việc',
+  ShiftChange: 'Đổi ca',
+  FeedbackReply: 'Trả lời phản hồi',
 };
 
 // Sử dụng: router.post('/', auditLogger('CREATE', 'Product', 'Product'), controller.create)
