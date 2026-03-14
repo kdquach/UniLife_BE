@@ -382,68 +382,6 @@ export const restoreProduct = async (id, user) => {
 };
 
 /**
- * Add ingredient to product recipe
- * @param {string} productId - Product ID
- * @param {Object} ingredient - Ingredient data
- * @param {Object} user - Current user
- * @returns {Promise<Object>} Updated product
- */
-export const addRecipeIngredient = async (productId, ingredient, user) => {
-  const product = await Product.findById(productId);
-  if (!product) {
-    throw new AppError('Product not found', 404);
-  }
-
-  // Kiểm tra quyền
-  checkUserCanCRUD(user);
-  checkProductAccess(user, product);
-
-  const exists = product.recipe.some(
-    (item) => item.ingredientId.toString() === ingredient.ingredientId
-  );
-
-  if (exists) {
-    throw new AppError('Ingredient already exists in recipe', 400);
-  }
-
-  product.recipe.push(ingredient);
-  await product.save();
-
-  return product;
-};
-
-/**
- * Remove ingredient from product recipe
- * @param {string} productId - Product ID
- * @param {string} ingredientId - Ingredient ID to remove
- * @param {Object} user - Current user
- * @returns {Promise<Object>} Updated product
- */
-export const removeRecipeIngredient = async (productId, ingredientId, user) => {
-  const product = await Product.findById(productId);
-  if (!product) {
-    throw new AppError('Product not found', 404);
-  }
-
-  // Kiểm tra quyền
-  checkUserCanCRUD(user);
-  checkProductAccess(user, product);
-
-  const before = product.recipe.length;
-
-  product.recipe = product.recipe.filter(
-    (item) => item.ingredientId.toString() !== ingredientId
-  );
-
-  if (product.recipe.length === before) {
-    throw new AppError('Ingredient not found in recipe', 404);
-  }
-
-  await product.save();
-  return product;
-};
-
-/**
  * Inventory Management
  */
 

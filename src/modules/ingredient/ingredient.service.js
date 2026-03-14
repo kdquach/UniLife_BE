@@ -1,5 +1,5 @@
 import { Ingredient } from './ingredient.model.js';
-import { Recipe } from '../recipe/recipe.model.js';
+import Product from '../product/product.model.js';
 import AppError from '../../utils/AppError.js';
 
 // ============ Ingredient Services ============
@@ -47,8 +47,18 @@ export const deleteIngredient = async (id) => {
   if (!ingredient) {
     throw new AppError('Không tìm thấy nguyên liệu', 404);
   }
-  // Xoa cac recipe lien quan
-  await Recipe.deleteMany({ ingredientId: id });
+
+  // Xoa nguyen lieu khoi recipe embedded cua tat ca product
+  await Product.updateMany(
+    { 'recipe.ingredientId': id },
+    {
+      $pull: {
+        recipe: {
+          ingredientId: id,
+        },
+      },
+    }
+  );
 };
 
 export const updateStock = async (id, quantity, operation = 'add') => {

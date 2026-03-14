@@ -1,7 +1,81 @@
 import mongoose from 'mongoose';
 
 // Danh sach don vi hop le cho nguyen lieu
-const VALID_UNITS = ['kg', 'g', 'lit', 'lít', 'ml', 'cái', 'gói', 'hộp', 'lon'];
+const VALID_UNITS = ['kg', 'g', 'lít', 'ml', 'cái', 'gói', 'hộp', 'lon'];
+
+const normalizeUnitValue = (unit) => unit;
+
+const getDefaultStandardConfig = (unit) => {
+  const normalizedUnit = normalizeUnitValue(unit);
+
+  switch (normalizedUnit) {
+    case 'kg':
+      return { standardUnit: 'g', standardUnitFactor: 1000 };
+    case 'g':
+      return { standardUnit: 'g', standardUnitFactor: 1 };
+    case 'lít':
+      return { standardUnit: 'ml', standardUnitFactor: 1000 };
+    case 'ml':
+      return { standardUnit: 'ml', standardUnitFactor: 1 };
+    default:
+      return { standardUnit: normalizedUnit, standardUnitFactor: 1 };
+  }
+};
+
+const normalizeCostFields = (target) => {
+  if (!target || typeof target !== 'object') {
+    return;
+  }
+
+  const hasCostRelatedField = [
+    'unit',
+    'standardUnit',
+    'standardUnitFactor',
+    'costPrice',
+    'costPerStandardUnit',
+  ].some((field) => target[field] !== undefined);
+
+  if (!hasCostRelatedField) {
+    return;
+  }
+
+  if (target.unit) {
+    target.unit = normalizeUnitValue(target.unit);
+  }
+
+  const baseUnit = target.unit || target.standardUnit;
+  const defaultConfig = getDefaultStandardConfig(baseUnit);
+
+  target.standardUnit = normalizeUnitValue(
+    target.standardUnit || defaultConfig.standardUnit
+  );
+
+  const standardUnitFactor = Number(target.standardUnitFactor);
+  target.standardUnitFactor =
+    Number.isFinite(standardUnitFactor) && standardUnitFactor > 0
+      ? standardUnitFactor
+      : defaultConfig.standardUnitFactor;
+
+  const costPrice = Number(target.costPrice);
+  const costPerStandardUnit = Number(target.costPerStandardUnit);
+
+  if (
+    Number.isFinite(costPrice) &&
+    costPrice > 0 &&
+    (!Number.isFinite(costPerStandardUnit) || costPerStandardUnit <= 0)
+  ) {
+    target.costPerStandardUnit = costPrice / target.standardUnitFactor;
+    return;
+  }
+
+  if (
+    Number.isFinite(costPerStandardUnit) &&
+    costPerStandardUnit > 0 &&
+    (!Number.isFinite(costPrice) || costPrice <= 0)
+  ) {
+    target.costPrice = costPerStandardUnit * target.standardUnitFactor;
+  }
+};
 
 // Ingredient Schema
 const ingredientSchema = new mongoose.Schema(
@@ -38,6 +112,33 @@ const ingredientSchema = new mongoose.Schema(
         message: `Đơn vị phải là một trong: ${VALID_UNITS.join(', ')}`,
       },
     },
+    // Gia von theo don vi nhap kho (VD: 1kg, 1 lít)
+    costPrice: {
+      type: Number,
+      default: 0,
+      min: [0, 'Giá vốn không được âm'],
+    },
+    // Don vi chuan de quy doi chi phi (VD: g, ml)
+    standardUnit: {
+      type: String,
+      trim: true,
+      enum: {
+        values: VALID_UNITS,
+        message: `Đơn vị chuẩn phải là một trong: ${VALID_UNITS.join(', ')}`,
+      },
+    },
+    // He so quy doi: 1 don vi nhap = bao nhieu don vi chuan
+    standardUnitFactor: {
+      type: Number,
+      default: 1,
+      min: [0.000001, 'Hệ số quy đổi phải lớn hơn 0'],
+    },
+    // Chi phi tren 1 don vi chuan
+    costPerStandardUnit: {
+      type: Number,
+      default: 0,
+      min: [0, 'Chi phí/đơn vị chuẩn không được âm'],
+    },
     // Nguong canh bao het hang cho tung nguyen lieu
     lowStockThreshold: {
       type: Number,
@@ -59,24 +160,25 @@ const ingredientSchema = new mongoose.Schema(
 
 // Indexes cho performance
 ingredientSchema.index({ canteenId: 1, name: 1 }, { unique: true }); // Unique trong cung canteen
-ingredientSchema.index({ categoryId: 1 });
 ingredientSchema.index({ stock: 1 }); // Index cho truy van low stock
 ingredientSchema.index({ canteenId: 1, stock: 1 }); // Compound index cho filter canteen + stock
 ingredientSchema.index({ canteenId: 1, isActive: 1 }); // Filter active ingredients
 ingredientSchema.index({ isActive: 1 });
 
-// Pre-save middleware: Normalize unit từ "lit" thành "lít"
+// Pre-save middleware: Chuan hoa don vi va chi phi don vi chuan
 ingredientSchema.pre('save', function (next) {
-  if (this.unit === 'lit') {
-    this.unit = 'lít';
-  }
+  normalizeCostFields(this);
   next();
 });
 
-// Pre-update middleware: Normalize unit
+// Pre-update middleware: Chuan hoa don vi va chi phi don vi chuan
 ingredientSchema.pre('findOneAndUpdate', function (next) {
-  if (this._update && this._update.unit === 'lit') {
-    this._update.unit = 'lít';
+  if (this._update) {
+    if (this._update.$set) {
+      normalizeCostFields(this._update.$set);
+    } else {
+      normalizeCostFields(this._update);
+    }
   }
   next();
 });

@@ -200,46 +200,6 @@ export const restoreProduct = catchAsync(async (req, res) => {
 });
 
 /**
- * Add ingredient to recipe
- * @route POST /api/products/:id/recipe
- * @access Private (Staff, Admin)
- */
-export const addRecipeIngredient = catchAsync(async (req, res) => {
-  const product = await productService.addRecipeIngredient(
-    req.params.id,
-    req.body,
-    req.user
-  );
-
-  res.status(200).json({
-    status: 'success',
-    data: {
-      product,
-    },
-  });
-});
-
-/**
- * Remove ingredient from recipe
- * @route DELETE /api/products/:id/recipe/:ingredientId
- * @access Private (Staff, Admin)
- */
-export const removeRecipeIngredient = catchAsync(async (req, res) => {
-  const product = await productService.removeRecipeIngredient(
-    req.params.id,
-    req.params.ingredientId,
-    req.user
-  );
-
-  res.status(200).json({
-    status: 'success',
-    data: {
-      product,
-    },
-  });
-});
-
-/**
  * Get out of stock products by canteen
  * @route GET /api/products/inventory/out-of-stock?page=1&limit=20
  * @access Private (Staff, Admin)
