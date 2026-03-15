@@ -44,7 +44,10 @@
   },
   "devDependencies": {
     "@types/socket.io": "^3.0.1",
+<<<<<<< Updated upstream
     "k6": "^0.0.0",
+=======
+>>>>>>> Stashed changes
     "nodemon": "^3.0.2"
   }
 }

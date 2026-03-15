@@ -12,11 +12,27 @@ export const createFeedback = catchAsync(async (req, res) => {
 });
 
 export const getAllFeedbacks = catchAsync(async (req, res) => {
-  const result = await feedbackService.getAllFeedbacks(req.query);
+  // Nếu request có gửi kèm canteenId (ví dụ từ Dashboard qua header x-canteen-id),
+  // thì chỉ lấy feedback của canteen đó
+  const canteenIdFromHeader =
+    req?.user?.canteenId;
+
+  const query = { ...req.query };
+  if (canteenIdFromHeader) {
+    query.canteenId = canteenIdFromHeader;
+  }
+
+  // Map fromDate -> createdAt[gte] cho queryHelper (lọc theo ngày tạo)
+  if (query.fromDate) {
+    query["createdAt[gte]"] = query.fromDate;
+    delete query.fromDate;
+  }
+
+  const result = await feedbackService.getAllFeedbacks(query);
   res
     .status(200)
     .json(formatPaginatedResponse(result, 'Lấy danh sách feedback thành công'));
-});
+})
 
 // Lấy feedbacks của user hiện tại (authenticated)
 export const getMyFeedbacks = catchAsync(async (req, res) => {
