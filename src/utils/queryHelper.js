@@ -321,7 +321,13 @@ export const filterPresets = {
 
   // Feedback filters
   feedback: {
-    allowedFilters: ["rating", "status", "productId", "userId", "canteenId"],
+    allowedFilters: [
+      "rating",
+      "productId",
+      "userId",
+      // hỗ trợ lọc theo ngày tạo từ Dashboard (fromDate)
+      "createdAt[gte]",
+    ],
     searchFields: ["comment"],
     allowedSortFields: ["createdAt", "rating"],
   },
