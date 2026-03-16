@@ -2,6 +2,9 @@ import mongoose from "mongoose";
 import { Notification, SystemNotification } from "./notification.model.js";
 import { SystemNotificationRead } from "./systemNotificationRead.model.js";
 import AppError from "../../utils/AppError.js";
+import { paginatedQuery } from "../../utils/queryHelper.js";
+import { notifyCanteen, notifyGlobal } from "../../websocket/notify.js";
+import { dispatchSystemNotification } from "./notification.dispatcher.js";
 
 const NOTIFICATION_TYPES = {
   dashboard: ["order", "promotion", "system", "feedback", "shift", "salary"],
@@ -13,6 +16,183 @@ const toObjectIdString = (value) => {
   if (typeof value === "string") return value;
   if (value.toString) return value.toString();
   return null;
+};
+
+const normalizeRole = (value = "") => String(value || "").toLowerCase();
+
+const isAdminRole = (role = "") => normalizeRole(role) === "admin";
+
+const isManagerRole = (role = "") => {
+  const normalized = normalizeRole(role);
+  return normalized === "manager" || normalized === "canteen_owner";
+};
+
+const normalizeSystemRoleForFilter = (role = "") => {
+  const normalized = normalizeRole(role);
+  if (normalized === "canteen_owner") return "manager";
+  return normalized || "customer";
+};
+
+const hasRolePermissionForSystemNotification = (targetRole = "", role = "") => {
+  const actorRole = normalizeRole(role);
+  const normalizedTargetRole = String(targetRole || "all").toLowerCase();
+
+  if (isAdminRole(actorRole)) {
+    return true;
+  }
+
+  if (!isManagerRole(actorRole)) {
+    return false;
+  }
+
+  // Manager không thể gửi thông báo tới admin hoặc manager khác.
+  return !["admin", "manager"].includes(normalizedTargetRole);
+};
+
+const hasValue = (value) => value !== undefined && value !== null && value !== "";
+
+const assertSystemNotificationAccess = (actor) => {
+  const role = normalizeRole(actor?.role);
+  if (!isAdminRole(role) && !isManagerRole(role)) {
+    throw new AppError("Bạn không có quyền quản lý thông báo hệ thống", 403);
+  }
+
+  if (isManagerRole(role) && !actor?.canteenId) {
+    throw new AppError("Bạn chưa được phân quyền căng tin", 403);
+  }
+};
+
+const buildSystemReadableScope = (actor) => {
+  const role = normalizeRole(actor?.role);
+
+  if (isAdminRole(role)) {
+    return {};
+  }
+
+  const canteenId = actor?.canteenId;
+  return {
+    $or: [{ canteenId }, { canteenId: null }],
+  };
+};
+
+const buildSystemWritableScope = (actor) => {
+  const role = normalizeRole(actor?.role);
+
+  if (isAdminRole(role)) {
+    return {};
+  }
+
+  return {
+    canteenId: actor?.canteenId,
+  };
+};
+
+const buildActiveRangeFilter = (now = new Date()) => ({
+  activeFrom: { $lte: now },
+  $or: [{ activeTo: null }, { activeTo: { $gte: now } }],
+});
+
+const buildSystemLifecycleFilter = (lifecycle = "") => {
+  const normalized = String(lifecycle || "").trim().toLowerCase();
+  if (!normalized) return {};
+
+  const now = new Date();
+
+  if (normalized === "active") {
+    return {
+      isActive: true,
+      ...buildActiveRangeFilter(now),
+    };
+  }
+
+  if (normalized === "expired") {
+    return {
+      activeTo: { $lt: now },
+    };
+  }
+
+  if (normalized === "inactive") {
+    return {
+      isActive: false,
+    };
+  }
+
+  throw new AppError("Giá trị lifecycle không hợp lệ", 400);
+};
+
+const mergeAndFilters = (...filters) => {
+  const validFilters = filters.filter(
+    (item) => item && Object.keys(item).length > 0,
+  );
+
+  if (validFilters.length === 0) return {};
+  if (validFilters.length === 1) return validFilters[0];
+  return { $and: validFilters };
+};
+
+const buildNotDeletedFilter = () => ({
+  isDeleted: { $ne: true },
+});
+
+const removeUndefinedFields = (payload = {}) => Object.fromEntries(
+  Object.entries(payload).filter(([, value]) => value !== undefined),
+);
+
+const normalizeSystemNotificationPayload = (payload = {}, actor = null) => {
+  const role = normalizeRole(actor?.role);
+  const normalized = {
+    title: hasValue(payload.title) ? String(payload.title).trim() : undefined,
+    content: hasValue(payload.content)
+      ? String(payload.content).trim()
+      : hasValue(payload.body)
+        ? String(payload.body).trim()
+        : undefined,
+    targetRole: hasValue(payload.targetRole) ? payload.targetRole : undefined,
+    isActive: payload.isActive,
+  };
+
+  if (isAdminRole(role)) {
+    normalized.canteenId = hasValue(payload.canteenId) ? payload.canteenId : null;
+  }
+
+  if (isManagerRole(role)) {
+    normalized.canteenId = actor?.canteenId;
+  }
+
+  if (
+    hasValue(normalized.targetRole)
+    && !hasRolePermissionForSystemNotification(normalized.targetRole, role)
+  ) {
+    throw new AppError("Manager không thể gửi thông báo tới vai trò này", 400);
+  }
+
+  return normalized;
+};
+
+const emitRealtimeSystemNotification = (notificationDoc) => {
+  if (!notificationDoc || notificationDoc.isActive === false) {
+    return;
+  }
+
+  const eventPayload = {
+    id: notificationDoc._id,
+    type: "system",
+    title: notificationDoc.title,
+    content: notificationDoc.content,
+    createdAt: notificationDoc.createdAt,
+    meta: {
+      source: "system_notification",
+      targetRole: notificationDoc.targetRole,
+      canteenId: notificationDoc.canteenId || null,
+    },
+  };
+
+  if (notificationDoc.canteenId) {
+    notifyCanteen(toObjectIdString(notificationDoc.canteenId), eventPayload);
+    return;
+  }
+
+  notifyGlobal(eventPayload);
 };
 
 const withCanteenScope = (filter = {}, canteenId = null) => {
@@ -89,20 +269,29 @@ const buildCursorFilter = (cursor) => {
 };
 
 const buildActiveSystemFilter = (role, canteenId = null, extraFilter = {}) => {
+  const targetRole = normalizeSystemRoleForFilter(role);
   const now = new Date();
-  const filter = {
+  const activeRoleFilter = {
     isActive: true,
     activeFrom: { $lte: now },
     $or: [{ activeTo: null }, { activeTo: { $gte: now } }],
-    targetRole: { $in: ["all", role] },
-    ...extraFilter,
+    targetRole: { $in: ["all", targetRole] },
   };
 
-  if (canteenId) {
-    filter.$and = [{ $or: [{ canteenId }, { canteenId: null }] }];
-  }
+  const canteenScope = canteenId ? { $or: [{ canteenId }, { canteenId: null }] } : {};
 
-  return filter;
+  return mergeAndFilters(
+    buildNotDeletedFilter(),
+    activeRoleFilter,
+    canteenScope,
+    extraFilter,
+  );
+};
+
+const assertValidObjectId = (value, message = "Notification not found") => {
+  if (!mongoose.Types.ObjectId.isValid(value)) {
+    throw new AppError(message, 404);
+  }
 };
 
 // ============ User Notification Services ============
@@ -154,6 +343,62 @@ export const getMyNotifications = async (
   return rows;
 };
 
+export const getNotificationById = async (
+  notificationId,
+  userId,
+  canteenId = null,
+  role = "customer",
+) => {
+  assertValidObjectId(notificationId);
+
+  const personalFilter = withPersonalScope(
+    {
+      _id: notificationId,
+      userId,
+    },
+    canteenId,
+    role,
+  );
+
+  const personal = await Notification.findOne(personalFilter)
+    .select("_id canteenId type title content isRead metadata createdAt")
+    .lean();
+
+  if (personal) {
+    return personal;
+  }
+
+  const systemFilter = buildActiveSystemFilter(role, canteenId, {
+    _id: notificationId,
+  });
+
+  const systemNotification = await SystemNotification.findOne(systemFilter)
+    .select("_id canteenId title content createdAt")
+    .lean();
+
+  if (!systemNotification) {
+    throw new AppError("Notification not found", 404);
+  }
+
+  const readDoc = await SystemNotificationRead.findOne({
+    userId,
+    systemNotificationId: systemNotification._id,
+  })
+    .select("_id")
+    .lean();
+
+  return {
+    _id: systemNotification._id,
+    canteenId: systemNotification.canteenId || null,
+    type: "system",
+    title: systemNotification.title,
+    content: systemNotification.content,
+    isRead: Boolean(readDoc),
+    metadata: null,
+    createdAt: systemNotification.createdAt,
+  };
+};
+
 export const getUnreadCount = async (userId, canteenId = null, role = "customer") => {
   const personalUnread = await Notification.countDocuments(
     withPersonalScope({ userId, isRead: false }, canteenId, role),
@@ -164,12 +409,39 @@ export const getUnreadCount = async (userId, canteenId = null, role = "customer"
   const activeSystemIds = await SystemNotification.find(systemFilter).distinct("_id");
   if (!activeSystemIds.length) return personalUnread;
 
+  const personalSystemRows = await Notification.find(
+    withPersonalScope(
+      {
+        userId,
+        type: "system",
+      },
+      canteenId,
+      role,
+    ),
+  )
+    .select("metadata.systemNotificationId")
+    .lean();
+
+  const dispatchedSystemIds = new Set(
+    personalSystemRows
+      .map((item) => toObjectIdString(item?.metadata?.systemNotificationId))
+      .filter(Boolean),
+  );
+
+  const templateOnlyIds = activeSystemIds.filter(
+    (id) => !dispatchedSystemIds.has(toObjectIdString(id)),
+  );
+
+  if (!templateOnlyIds.length) {
+    return personalUnread;
+  }
+
   const readSystemCount = await SystemNotificationRead.countDocuments({
     userId,
-    systemNotificationId: { $in: activeSystemIds },
+    systemNotificationId: { $in: templateOnlyIds },
   });
 
-  const systemUnread = Math.max(activeSystemIds.length - readSystemCount, 0);
+  const systemUnread = Math.max(templateOnlyIds.length - readSystemCount, 0);
   return personalUnread + systemUnread;
 };
 
@@ -179,6 +451,8 @@ export const markAsRead = async (
   canteenId = null,
   role = "customer",
 ) => {
+  assertValidObjectId(notificationId);
+
   const filter = withPersonalScope({ _id: notificationId, userId }, canteenId, role);
   const existing = await Notification.findOne(filter);
   if (existing) {
@@ -193,7 +467,9 @@ export const markAsRead = async (
     );
   }
 
-  const systemFilter = withCanteenScope({ _id: notificationId }, canteenId);
+  const systemFilter = buildActiveSystemFilter(role, canteenId, {
+    _id: notificationId,
+  });
   const systemNotification = await SystemNotification.findOne(systemFilter).lean();
   if (!systemNotification) {
     throw new AppError("Notification not found", 404);
@@ -281,11 +557,30 @@ export const deleteAllNotifications = async (userId, canteenId = null, role = "c
 
 // ============ System Notification Services ============
 
-export const createSystemNotification = async (notificationData, createdBy) => {
+export const createSystemNotification = async (notificationData, actor) => {
+  assertSystemNotificationAccess(actor);
+
+  const payload = normalizeSystemNotificationPayload(notificationData, actor);
+
+  if (!payload.title) {
+    throw new AppError("Tiêu đề thông báo là bắt buộc", 400);
+  }
+
+  if (!payload.content) {
+    throw new AppError("Nội dung thông báo là bắt buộc", 400);
+  }
+
   const notification = await SystemNotification.create({
-    ...notificationData,
-    createdBy,
+    ...removeUndefinedFields(payload),
+    createdBy: actor?._id,
   });
+
+  const dispatchResult = await dispatchSystemNotification(notification);
+
+  if (!dispatchResult.dispatched) {
+    emitRealtimeSystemNotification(notification);
+  }
+
   return notification;
 };
 
@@ -308,7 +603,7 @@ export const getNotificationFeed = async (context = {}, query = {}) => {
   }
 
   const parsedIsRead = parseIsRead(isRead);
-  const limit = Math.min(Math.max(Number(query.limit) || 20, 1), 200);
+  const limit = Math.min(Math.max(Number(query.limit) || 20, 1), 100);
   const cursor = decodeCursor(query.cursor);
   const cursorFilter = buildCursorFilter(cursor);
   const personalFilter = withPersonalScope(
@@ -346,17 +641,20 @@ export const getNotificationFeed = async (context = {}, query = {}) => {
       : Promise.resolve([]),
   ]);
 
-  const systemIds = systemRows.map((item) => item._id);
-  const readRows = await SystemNotificationRead.find({
-    userId,
-    systemNotificationId: { $in: systemIds },
-  })
-    .select("systemNotificationId")
-    .lean();
+  let readSet = new Set();
+  if (systemRows.length > 0) {
+    const systemIds = systemRows.map((item) => item._id);
+    const readRows = await SystemNotificationRead.find({
+      userId,
+      systemNotificationId: { $in: systemIds },
+    })
+      .select("systemNotificationId")
+      .lean();
 
-  const readSet = new Set(
-    readRows.map((item) => toObjectIdString(item.systemNotificationId)).filter(Boolean),
-  );
+    readSet = new Set(
+      readRows.map((item) => toObjectIdString(item.systemNotificationId)).filter(Boolean),
+    );
+  }
 
   const normalizedPersonal = personalRows.map((item) => ({
     _id: item._id,
@@ -368,9 +666,20 @@ export const getNotificationFeed = async (context = {}, query = {}) => {
     isRead: item.isRead,
     metadata: item.metadata || null,
     createdAt: item.createdAt,
+    createdAtMs: item.createdAt ? new Date(item.createdAt).getTime() : 0,
+    sortKey: toObjectIdString(item._id) || "",
   }));
 
-  const normalizedSystemBase = systemRows.map((item) => ({
+  const dispatchedSystemIds = new Set(
+    personalRows
+      .filter((item) => item?.type === "system")
+      .map((item) => toObjectIdString(item?.metadata?.systemNotificationId))
+      .filter(Boolean),
+  );
+
+  const normalizedSystemBase = systemRows
+    .filter((item) => !dispatchedSystemIds.has(toObjectIdString(item._id)))
+    .map((item) => ({
     _id: item._id,
     source: "system",
     canteenId: item.canteenId || null,
@@ -380,20 +689,34 @@ export const getNotificationFeed = async (context = {}, query = {}) => {
     isRead: readSet.has(toObjectIdString(item._id)),
     metadata: null,
     createdAt: item.createdAt,
-  }));
+    createdAtMs: item.createdAt ? new Date(item.createdAt).getTime() : 0,
+    sortKey: toObjectIdString(item._id) || "",
+    }));
 
   const normalizedSystem = parsedIsRead === undefined
     ? normalizedSystemBase
     : normalizedSystemBase.filter((item) => item.isRead === parsedIsRead);
 
-  const merged = [...normalizedPersonal, ...normalizedSystem].sort((a, b) => {
-    const timeDiff = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    if (timeDiff !== 0) return timeDiff;
-    return toObjectIdString(b._id).localeCompare(toObjectIdString(a._id));
+  const merged = [...normalizedPersonal, ...normalizedSystem];
+  merged.sort((a, b) => {
+    if (a.createdAtMs === b.createdAtMs) {
+      return b.sortKey.localeCompare(a.sortKey);
+    }
+    return b.createdAtMs - a.createdAtMs;
   });
 
   const hasNextPage = merged.length > limit;
-  const data = hasNextPage ? merged.slice(0, limit) : merged;
+  const data = (hasNextPage ? merged.slice(0, limit) : merged).map((item) => ({
+    _id: item._id,
+    source: item.source,
+    canteenId: item.canteenId,
+    type: item.type,
+    title: item.title,
+    content: item.content,
+    isRead: item.isRead,
+    metadata: item.metadata,
+    createdAt: item.createdAt,
+  }));
   const last = data[data.length - 1];
   const nextCursor = hasNextPage ? encodeCursor(last?.createdAt, last?._id) : null;
 
@@ -407,50 +730,132 @@ export const getNotificationFeed = async (context = {}, query = {}) => {
   };
 };
 
-export const getAllSystemNotifications = async (query = {}) => {
-  const filter = withCanteenScope({}, query.canteenId);
-  if (query.isActive !== undefined) filter.isActive = query.isActive;
-  if (query.targetRole) filter.targetRole = query.targetRole;
+export const getAllSystemNotifications = async (query = {}, actor) => {
+  assertSystemNotificationAccess(actor);
 
-  const notifications = await SystemNotification.find(filter)
-    .populate("createdBy", "fullName")
-    .sort({ createdAt: -1 });
-  return notifications;
+  const role = normalizeRole(actor?.role);
+  const normalizedQuery = { ...query };
+
+  const lifecycleFilter = buildSystemLifecycleFilter(normalizedQuery.lifecycle);
+  delete normalizedQuery.lifecycle;
+
+  const scope = String(normalizedQuery.scope || "").trim().toLowerCase();
+  delete normalizedQuery.scope;
+
+  if (isManagerRole(role)) {
+    delete normalizedQuery.canteenId;
+  }
+
+  let scopeFilter = buildSystemReadableScope(actor);
+
+  if (scope) {
+    if (scope !== "all" && scope !== "global" && scope !== "canteen") {
+      throw new AppError("Giá trị scope không hợp lệ", 400);
+    }
+
+    if (scope === "global") {
+      scopeFilter = mergeAndFilters(scopeFilter, { canteenId: null });
+    }
+
+    if (scope === "canteen") {
+      scopeFilter = mergeAndFilters(scopeFilter, { canteenId: { $ne: null } });
+    }
+  }
+
+  const baseFilter = mergeAndFilters(
+    buildNotDeletedFilter(),
+    scopeFilter,
+    lifecycleFilter,
+  );
+
+  return paginatedQuery(SystemNotification, normalizedQuery, {
+    allowedFilters: ["targetRole", "isActive", "canteenId", "createdBy"],
+    searchFields: ["title", "content"],
+    allowedSortFields: ["createdAt", "activeFrom", "activeTo", "updatedAt"],
+    baseFilter,
+    populate: [
+      { path: "canteenId", select: "name location" },
+      { path: "createdBy", select: "fullName email role" },
+    ],
+  });
 };
 
-export const getSystemNotificationById = async (id, canteenId = null) => {
-  const notification = await SystemNotification.findOne(
-    withCanteenScope({ _id: id }, canteenId),
-  ).populate(
-    "createdBy",
-    "fullName",
+export const getSystemNotificationById = async (id, actor) => {
+  assertSystemNotificationAccess(actor);
+
+  const filter = mergeAndFilters(
+    { _id: id },
+    buildNotDeletedFilter(),
+    buildSystemReadableScope(actor),
   );
+
+  const notification = await SystemNotification.findOne(filter).populate(
+    "createdBy",
+    "fullName email role",
+  );
+
   if (!notification) {
     throw new AppError("System notification not found", 404);
   }
   return notification;
 };
 
-export const updateSystemNotification = async (id, updateData, canteenId = null) => {
-  const notification = await SystemNotification.findOneAndUpdate(
-    withCanteenScope({ _id: id }, canteenId),
-    updateData,
+export const updateSystemNotification = async (id, updateData, actor) => {
+  assertSystemNotificationAccess(actor);
+
+  const role = normalizeRole(actor?.role);
+  const writableScope = buildSystemWritableScope(actor);
+  const existing = await SystemNotification.findOne(
+    mergeAndFilters({ _id: id }, writableScope, buildNotDeletedFilter()),
+  );
+
+  if (!existing) {
+    throw new AppError("System notification not found", 404);
+  }
+
+  const payload = normalizeSystemNotificationPayload(updateData, actor);
+
+  if (isManagerRole(role)) {
+    payload.canteenId = actor?.canteenId;
+  }
+
+  if (payload.title !== undefined && !payload.title) {
+    throw new AppError("Tiêu đề thông báo là bắt buộc", 400);
+  }
+
+  if (payload.content !== undefined && !payload.content) {
+    throw new AppError("Nội dung thông báo là bắt buộc", 400);
+  }
+
+  const notification = await SystemNotification.findByIdAndUpdate(
+    existing._id,
+    removeUndefinedFields(payload),
     {
       new: true,
       runValidators: true,
     },
   );
-  if (!notification) {
-    throw new AppError("System notification not found", 404);
-  }
+
   return notification;
 };
 
-export const deleteSystemNotification = async (id, canteenId = null) => {
-  const notification = await SystemNotification.findOneAndDelete(
-    withCanteenScope({ _id: id }, canteenId),
+export const deleteSystemNotification = async (id, actor) => {
+  assertSystemNotificationAccess(actor);
+
+  const notification = await SystemNotification.findOne(
+    mergeAndFilters(
+      { _id: id },
+      buildSystemWritableScope(actor),
+      buildNotDeletedFilter(),
+    ),
   );
+
   if (!notification) {
     throw new AppError("System notification not found", 404);
   }
+
+  notification.isDeleted = true;
+  notification.deletedAt = new Date();
+  notification.isActive = false;
+  await notification.save();
 };
