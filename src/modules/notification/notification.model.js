@@ -46,6 +46,7 @@ const notificationSchema = new mongoose.Schema(
 );
 
 notificationSchema.index({ userId: 1, isRead: 1 });
+notificationSchema.index({ userId: 1, createdAt: -1 });
 notificationSchema.index({ createdAt: -1 });
 
 // System Notification Schema (for all users or specific groups)
@@ -69,7 +70,7 @@ const systemNotificationSchema = new mongoose.Schema(
     },
     targetRole: {
       type: String,
-      enum: ["all", "admin", "staff", "customer"],
+      enum: ["all", "admin", "manager", "staff", "customer"],
       default: "all",
     },
     activeFrom: {
@@ -83,9 +84,21 @@ const systemNotificationSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
+    },
+    dispatchedAt: {
+      type: Date,
+      default: null,
     },
   },
   {
@@ -94,6 +107,8 @@ const systemNotificationSchema = new mongoose.Schema(
 );
 
 systemNotificationSchema.index({ isActive: 1, activeFrom: 1, activeTo: 1 });
+systemNotificationSchema.index({ isDeleted: 1, createdAt: -1 });
+systemNotificationSchema.index({ dispatchedAt: 1 });
 systemNotificationSchema.index({ targetRole: 1 });
 
 export const Notification = mongoose.model("Notification", notificationSchema);

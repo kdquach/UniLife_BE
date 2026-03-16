@@ -21,17 +21,40 @@ router.get(
   notificationController.getActiveSystemNotifications,
 );
 
-// Admin routes
-router.use(restrictTo("admin"));
-
-router.get("/system", notificationController.getAllSystemNotifications);
-router.post("/system", notificationController.createSystemNotification);
-router.post("/send-bulk", notificationController.sendNotificationToUsers);
+// Admin/Manager routes
+router.get(
+  "/system",
+  restrictTo("admin", "manager"),
+  notificationController.getAllSystemNotifications,
+);
+router.post(
+  "/system",
+  restrictTo("admin", "manager"),
+  notificationController.createSystemNotification,
+);
+router.post(
+  "/send-bulk",
+  restrictTo("admin", "manager"),
+  restrictTo("admin"),
+  notificationController.sendNotificationToUsers,
+);
 
 router
   .route("/system/:id")
-  .get(notificationController.getSystemNotificationById)
-  .patch(notificationController.updateSystemNotification)
-  .delete(notificationController.deleteSystemNotification);
+  .get(
+    restrictTo("admin", "manager"),
+    notificationController.getSystemNotificationById,
+  )
+  .patch(
+    restrictTo("admin", "manager"),
+    notificationController.updateSystemNotification,
+  )
+  .delete(
+    restrictTo("admin", "manager"),
+    notificationController.deleteSystemNotification,
+  );
+
+// Keep dynamic :id route last to avoid shadowing static paths like /system
+router.get("/:id", notificationController.getNotificationById);
 
 export default router;

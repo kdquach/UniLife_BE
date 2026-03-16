@@ -1,14 +1,21 @@
 import catchAsync from "../../utils/catchAsync.js";
 import * as notificationService from "./notification.service.js";
-import { paginatedQuery, formatPaginatedResponse } from "../../utils/queryHelper.js";
-import { SystemNotification } from "./notification.model.js";
+import { formatPaginatedResponse } from "../../utils/queryHelper.js";
 
 // ============ User Notification Controllers ============
 
 const buildFeedContext = (req) => ({
   userId: req.user._id,
   role: req.user.role,
-  canteenId: req.user.canteenId || null,
+  canteenId: (() => {
+    const role = String(req.user?.role || "").toLowerCase();
+    const staffScopedRoles = ["admin", "manager", "staff", "canteen_owner"];
+    if (staffScopedRoles.includes(role)) {
+      return req.user.canteenId || null;
+    }
+
+    return req.query.canteenId || req.user.canteenId || null;
+  })(),
 });
 
 export const getNotificationFeed = catchAsync(async (req, res) => {
@@ -26,29 +33,47 @@ export const getNotificationFeed = catchAsync(async (req, res) => {
 });
 
 export const getUnreadCount = catchAsync(async (req, res) => {
+  const context = buildFeedContext(req);
   const count = await notificationService.getUnreadCount(
     req.user._id,
-    req.user.canteenId,
-    req.user.role,
+    context.canteenId,
+    context.role,
   );
   res.status(200).json({ status: "success", data: { unreadCount: count } });
 });
 
+export const getNotificationById = catchAsync(async (req, res) => {
+  const context = buildFeedContext(req);
+  const notification = await notificationService.getNotificationById(
+    req.params.id,
+    req.user._id,
+    context.canteenId,
+    context.role,
+  );
+
+  res.status(200).json({
+    status: "success",
+    data: { notification },
+  });
+});
+
 export const markAsRead = catchAsync(async (req, res) => {
+  const context = buildFeedContext(req);
   const notification = await notificationService.markAsRead(
     req.params.id,
     req.user._id,
-    req.user.canteenId,
-    req.user.role,
+    context.canteenId,
+    context.role,
   );
   res.status(200).json({ status: "success", data: { notification } });
 });
 
 export const markAllAsRead = catchAsync(async (req, res) => {
+  const context = buildFeedContext(req);
   await notificationService.markAllAsRead(
     req.user._id,
-    req.user.canteenId,
-    req.user.role,
+    context.canteenId,
+    context.role,
   );
   res
     .status(200)
@@ -79,15 +104,19 @@ export const deleteAllNotifications = catchAsync(async (req, res) => {
 export const createSystemNotification = catchAsync(async (req, res) => {
   const notification = await notificationService.createSystemNotification(
     req.body,
-    req.user._id,
+    req.user,
   );
   res.status(201).json({ status: "success", data: { notification } });
 });
 
 export const getActiveSystemNotifications = catchAsync(async (req, res) => {
+  const canteenScope = req.user.role === "admin"
+    ? req.query.canteenId || null
+    : req.user.canteenId || null;
+
   const notifications = await notificationService.getActiveSystemNotifications(
     req.user.role,
-    req.query.canteenId,
+    canteenScope,
   );
   res.status(200).json({
     status: "success",
@@ -97,15 +126,10 @@ export const getActiveSystemNotifications = catchAsync(async (req, res) => {
 });
 
 export const getAllSystemNotifications = catchAsync(async (req, res) => {
-  const result = await paginatedQuery(SystemNotification, req.query, {
-    allowedFilters: ["targetRole", "isActive", "canteenId"],
-    searchFields: ["title", "content"],
-    allowedSortFields: ["createdAt", "activeFrom", "activeTo"],
-    populate: [
-      { path: "canteenId", select: "name" },
-      { path: "createdBy", select: "fullName" },
-    ],
-  });
+  const result = await notificationService.getAllSystemNotifications(
+    req.query,
+    req.user,
+  );
   res
     .status(200)
     .json(formatPaginatedResponse(result, "Lấy thông báo hệ thống thành công"));
@@ -114,7 +138,7 @@ export const getAllSystemNotifications = catchAsync(async (req, res) => {
 export const getSystemNotificationById = catchAsync(async (req, res) => {
   const notification = await notificationService.getSystemNotificationById(
     req.params.id,
-    req.user.canteenId,
+    req.user,
   );
   res.status(200).json({ status: "success", data: { notification } });
 });
@@ -123,7 +147,7 @@ export const updateSystemNotification = catchAsync(async (req, res) => {
   const notification = await notificationService.updateSystemNotification(
     req.params.id,
     req.body,
-    req.user.canteenId,
+    req.user,
   );
   res.status(200).json({ status: "success", data: { notification } });
 });
@@ -131,7 +155,7 @@ export const updateSystemNotification = catchAsync(async (req, res) => {
 export const deleteSystemNotification = catchAsync(async (req, res) => {
   await notificationService.deleteSystemNotification(
     req.params.id,
-    req.user.canteenId,
+    req.user,
   );
   res.status(204).json({ status: "success", data: null });
 });
