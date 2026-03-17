@@ -1,0 +1,145 @@
+@startuml Product Category Management Class Diagram
+title Product Category Management Module - Class Diagram
+
+skinparam classAttributeIconSize 0
+hide circle
+
+' ========== PRODUCT CATEGORY CLASSES ==========
+
+class ProductCategoryRoutes {
+  - router: Router
+  - controller: ProductCategoryController
+  - authMiddleware: AuthMiddleware
+  --
+  + GET /api/product-categories
+  + GET /api/product-categories/active
+  + GET /api/product-categories/:id
+  + POST /api/product-categories
+  + PATCH /api/product-categories/:id
+  + DELETE /api/product-categories/:id
+  --
+  + initializeRoutes(): void
+}
+
+class ProductCategoryController {
+  - service: ProductCategoryService
+  - QueryHelper: Helper
+  --
+  + createProductCategory(req, res, next): Promise<void>
+  + getAllProductCategories(req, res, next): Promise<void>
+  + getActiveProductCategories(req, res, next): Promise<void>
+  + getProductCategoryById(req, res, next): Promise<void>
+  + updateProductCategory(req, res, next): Promise<void>
+  + deleteProductCategory(req, res, next): Promise<void>
+}
+
+class ProductCategoryService {
+  - Model: ProductCategoryModel
+  - PaginatedQuery: Helper
+  - AppError: ErrorClass
+  --
+  + createProductCategory(data): Promise<Object>
+  + getAllProductCategories(queryParams, canteenId): Promise<Object>
+  + getActiveProductCategories(canteenId): Promise<Array>
+  + getProductCategoryById(id, canteenId): Promise<Object>
+  + updateProductCategory(id, updateData, canteenId): Promise<Object>
+  + deleteProductCategory(id, canteenId): Promise<Object>
+  - checkDuplicateName(name, canteenId, excludeId): Promise<void>
+}
+
+class ProductCategoryModel {
+  - _id: ObjectId
+  - canteenId: ObjectId
+  - name: String
+  - description: String
+  - icon: String
+  - isActive: Boolean
+  - createdAt: Date
+  - updatedAt: Date
+  --
+  + create(data): Promise<ProductCategory>
+  + find(filter): Promise<Array>
+  + findOne(filter): Promise<ProductCategory>
+  + findById(id): Promise<ProductCategory>
+  + findByIdAndUpdate(id, data, options): Promise<ProductCategory>
+  + findOneAndDelete(filter): Promise<ProductCategory>
+  + countDocuments(filter): Promise<Number>
+}
+
+' ========== SHARED MIDDLEWARE & UTILITIES ==========
+
+class AuthMiddleware {
+  - jwt: JsonWebToken
+  - User: Model
+  - AppError: ErrorClass
+  --
+  + protect(req, res, next): Promise<void>
+  + restrictTo(...roles): Function
+  - verifyToken(token): Object
+  - extractTokenFromHeader(req): String
+}
+
+class QueryHelper {
+  --
+  + formatPaginatedResponse(result, message): Object
+  + formatSuccessResponse(data, message): Object
+  + formatErrorResponse(message, statusCode): Object
+}
+
+class PaginatedQuery {
+  --
+  + paginatedQuery(Model, queryParams, options): Promise<Object>
+  - buildFilter(queryParams, baseFilter): Object
+  - buildSort(sortBy, order): Object
+  - calculatePagination(page, limit, total): Object
+}
+
+class AppError {
+  - message: String
+  - statusCode: Number
+  - isOperational: Boolean
+  --
+  + constructor(message, statusCode)
+}
+
+' ========== RELATIONSHIPS ==========
+
+ProductCategoryRoutes --> ProductCategoryController : uses
+ProductCategoryRoutes ..> AuthMiddleware : authenticates
+
+ProductCategoryController --> ProductCategoryService : calls
+ProductCategoryController ..> QueryHelper : formats response
+
+ProductCategoryService --> ProductCategoryModel : queries
+ProductCategoryService ..> PaginatedQuery : paginates
+ProductCategoryService ..> AppError : throws errors
+
+' ========== NOTES ==========
+
+note right of ProductCategoryModel
+  MongoDB Schema
+  Scoped by canteenId
+  Case-insensitive unique name
+  per canteen
+end note
+
+note bottom of AuthMiddleware
+  JWT validation
+  User authentication
+  Role verification
+end note
+
+note bottom of PaginatedQuery
+  Reusable pagination utility
+  Builds filters and sorts
+  Calculates pagination metadata
+end note
+
+note right of ProductCategoryService
+  Business logic layer
+  Validates data
+  Checks duplicate names
+  Enforces canteen scope
+end note
+
+@enduml

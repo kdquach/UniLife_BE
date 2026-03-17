@@ -1,0 +1,195 @@
+@startuml AUTH_MODULE_CLASS_DIAGRAM
+
+' Định nghĩa các class trong module Authentication
+' Kiến trúc layered backend: Routes → Controller → Service → Model/Utils
+
+skinparam classAttributeIconSize 0
+hide circle
+
+class AuthRoutes {
+  + POST /api/auth/register/send-otp
+  + POST /api/auth/register/verify-otp
+  + POST /api/auth/register
+  + POST /api/auth/login
+  + POST /api/auth/google-login
+  + POST /api/auth/logout
+  + POST /api/auth/forgot-password/send-otp
+  + POST /api/auth/forgot-password/verify-otp
+  + POST /api/auth/reset-password
+  + PUT /api/auth/change-password
+  --
+  + registerRoutes()
+}
+
+class AuthController {
+  - authService: AuthService
+  --
+  + handleSendRegisterOTP(req, res, next)
+  + handleVerifyRegisterOTP(req, res, next)
+  + handleResendRegisterOTP(req, res, next)
+  + handleRegister(req, res, next)
+  + handleLogin(req, res, next)
+  + handleGoogleAuth(req, res, next)
+  + handleLogout(req, res, next)
+  + handleSendForgotPasswordOTP(req, res, next)
+  + handleVerifyForgotPasswordOTP(req, res, next)
+  + handleResetPassword(req, res, next)
+  + handleChangePassword(req, res, next)
+}
+
+class AuthService {
+  - User: Model
+  - NotificationModel: Model
+  - googleClient: OAuth2Client
+  - tokenBlacklist: Set<String>
+  - AppError: ErrorClass
+  - jwt: JsonWebToken
+  --
+  + sendRegisterOTP(userData): Promise<Object>
+  + verifyRegisterOTP(data): Promise<Object>
+  + resendRegisterOTP(email): Promise<Object>
+  + register(userData): Promise<Object>
+  + login(credentials): Promise<Object>
+  + googleAuth(idToken): Promise<Object>
+  + logout(token, userId): Promise<void>
+  + sendForgotPasswordOTP(email): Promise<Object>
+  + verifyForgotPasswordOTP(data): Promise<Object>
+  + resetPassword(data): Promise<Object>
+  + changePassword(userId, data): Promise<Object>
+  - ensureUserActiveForLogin(user): void
+  - verifyGoogleToken(idToken): Promise<Object>
+  - addToBlacklist(token, userId): Promise<void>
+  + isTokenBlacklisted(token): Boolean
+  - createWelcomePromotionNotification(userId): Promise<void>
+}
+
+class AuthMiddleware {
+  - jwt: JsonWebToken
+  - User: Model
+  - AppError: ErrorClass
+  --
+  + authenticate(req, res, next)
+  + authorize(...roles)
+  + verifyToken(token): Object
+  + extractTokenFromHeader(req): String
+}
+
+class User {
+  - _id: ObjectId
+  - fullName: String
+  - email: String
+  - password: String
+  - phone: String
+  - avatar: String
+  - role: String
+  - status: String
+  - provider: String
+  - providerId: String
+  - emailVerified: Boolean
+  - emailVerifiedAt: Date
+  - lastLoginAt: Date
+  - forceChangePassword: Boolean
+  - createdAt: Date
+  - updatedAt: Date
+  --
+  + comparePassword(password): Promise<Boolean>
+  + hashPassword(): Promise<void>
+  + save(): Promise<User>
+  + findOne(query): Promise<User>
+  + findById(id): Promise<User>
+  + create(data): Promise<User>
+}
+
+class OtpUtils {
+  - otpStore: Map<String, Object>
+  - OTP_EXPIRY: Number
+  - RESEND_COOLDOWN: Number
+  --
+  + generateOTP(): String
+  + storeOTP(email, otp, type, userData): void
+  + verifyOTP(email, otp, type): Object
+  + canResendOTP(email, type): Object
+  - cleanupExpiredOTPs(): void
+}
+
+class EmailConfig {
+  - transporter: NodeMailerTransport
+  - EMAIL_FROM: String
+  - EMAIL_USER: String
+  - EMAIL_PASSWORD: String
+  --
+  + sendOTPEmail(email, otp): Promise<void>
+  + sendPasswordResetOTP(email, otp): Promise<void>
+  + sendWelcomeEmail(email, name): Promise<void>
+  - createMailOptions(to, subject, html): Object
+}
+
+class OAuth2Client {
+  - clientId: String
+  - clientSecret: String
+  - GOOGLE_CLIENT_ID: String
+  --
+  + verifyIdToken(options): Promise<Ticket>
+  + getPayload(): Object
+}
+
+' Định nghĩa các mối quan hệ
+AuthRoutes --> AuthController : uses
+AuthRoutes --> AuthMiddleware : uses
+
+AuthController --> AuthService : calls
+
+AuthService --> User : creates/queries
+AuthService --> OtpUtils : uses
+AuthService --> EmailConfig : sends emails
+AuthService --> OAuth2Client : verifies token
+
+' Ghi chú về luồng xử lý
+note right of AuthRoutes
+  Định nghĩa các API endpoints
+  và ánh xạ đến Controller
+end note
+
+note right of AuthController
+  Xử lý HTTP requests
+  Gọi Service layer
+  Trả về response
+end note
+
+note right of AuthService
+  Chứa business logic
+  Xử lý authentication
+  Quản lý OTP workflow
+  Tích hợp Google OAuth
+end note
+
+note right of AuthMiddleware
+  Bảo vệ routes
+  Xác thực JWT token
+  Kiểm tra quyền truy cập
+end note
+
+note bottom of User
+  MongoDB Model
+  Lưu trữ thông tin user
+  Hash password tự động
+end note
+
+note bottom of OtpUtils
+  Quản lý OTP lifecycle
+  In-memory storage
+  Rate limiting
+end note
+
+note bottom of EmailConfig
+  NodeMailer integration
+  Gửi OTP và thông báo
+  Template emails
+end note
+
+note bottom of OAuth2Client
+  Google OAuth library
+  Xác thực Google ID token
+end note
+
+@enduml

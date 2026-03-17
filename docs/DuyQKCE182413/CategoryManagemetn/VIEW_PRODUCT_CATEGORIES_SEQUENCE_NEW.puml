@@ -1,0 +1,62 @@
+@startuml View Product Categories Sequence Diagram
+title UC09 - View Product Categories List
+
+actor "Staff/Manager" as User
+participant "Product\nCategories Page" as Frontend
+participant ":productRoutes" as Routes
+participant ":productController" as Controller
+participant ":productService" as Service
+participant "ProductCategory\nModel" as Model
+database "MongoDB" as DB
+
+User -> Frontend: 1. Click "Product Categories"\non Sidebar
+
+Frontend -> Routes: 2. GET /api/product-categories\n?page=1&limit=10\n(Bearer Token)
+
+ref over Routes, Controller
+    SSD - Verify JWT Token
+end ref
+
+Routes -> Routes: 3. Check Token
+
+opt [Authentication / Authorization failed]
+    Routes --> Frontend: 3.1 JSON Error
+    Frontend --> User: 3.2 Redirect to Login
+end
+
+Routes -> Controller: 4. getAllProductCategories(req, res)
+
+Controller -> Service: 5. getAllProductCategories\n(queryParams, canteenId)
+
+Service -> Model: 6. paginatedQuery(Model, queryParams,\n{ baseFilter: { canteenId } })
+
+Model -> DB: 7. find({ canteenId })\n.skip().limit().sort()
+
+DB --> Model: 8. Categories list
+
+Model -> DB: 9. countDocuments({ canteenId })
+
+DB --> Model: 10. Total count
+
+Model --> Service: 11. { data: [...], pagination: {...} }
+
+Service --> Controller: 12. Return result
+
+Controller --> Routes: 13. HTTP 200 Response
+
+Routes --> Frontend: 14. JSON Response\n{ success: true, data: [...], pagination: {...} }
+
+Frontend -> Frontend: 15. setState: items, pagination\nRender Table
+
+Frontend --> User: 16. Display list of\nproduct categories\n(with pagination)
+
+opt [User changes page or page size]
+    User -> Frontend: 17. Click page 2 or change page size
+    Frontend -> Routes: 18. GET /api/product-categories\n?page=2&limit=10
+    ref over Routes, Frontend
+        Repeat flow from step 3
+    end ref
+    Frontend --> User: 19. Display updated list
+end
+
+@enduml

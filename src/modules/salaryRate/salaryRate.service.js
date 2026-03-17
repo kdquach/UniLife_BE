@@ -11,10 +11,28 @@ export const setSalaryRate = async (data) => {
   let salaryRate = await SalaryRate.findOne({ userId: data.userId });
 
   if (salaryRate) {
-    // Cập nhật mức lương hiện tại
-    salaryRate.hourlyRate = data.hourlyRate;
-    salaryRate.effectiveFrom = data.effectiveFrom || new Date();
-    salaryRate.note = data.note || "";
+    // Cập nhật toàn bộ cấu hình lương/thưởng/phạt nếu có gửi lên
+    salaryRate.hourlyRate = data.hourlyRate ?? salaryRate.hourlyRate;
+    salaryRate.effectiveFrom = data.effectiveFrom ?? salaryRate.effectiveFrom;
+
+    salaryRate.attendanceBonus100 =
+      data.attendanceBonus100 ?? salaryRate.attendanceBonus100;
+    salaryRate.attendanceBonus95 =
+      data.attendanceBonus95 ?? salaryRate.attendanceBonus95;
+    salaryRate.attendanceBonus90 =
+      data.attendanceBonus90 ?? salaryRate.attendanceBonus90;
+    salaryRate.overtimeMultiplier =
+      data.overtimeMultiplier ?? salaryRate.overtimeMultiplier;
+
+    salaryRate.lateDeduction = data.lateDeduction ?? salaryRate.lateDeduction;
+    salaryRate.earlyLeaveDeduction =
+      data.earlyLeaveDeduction ?? salaryRate.earlyLeaveDeduction;
+    salaryRate.absentDeduction =
+      data.absentDeduction ?? salaryRate.absentDeduction;
+    salaryRate.maxLateAllowed =
+      data.maxLateAllowed ?? salaryRate.maxLateAllowed;
+
+    salaryRate.note = data.note ?? salaryRate.note;
     salaryRate.updatedBy = data.updatedBy;
     await salaryRate.save();
   } else {

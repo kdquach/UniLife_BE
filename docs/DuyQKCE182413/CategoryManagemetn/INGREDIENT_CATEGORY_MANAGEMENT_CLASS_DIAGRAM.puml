@@ -1,0 +1,156 @@
+@startuml Ingredient Category Management Class Diagram
+title Ingredient Category Management Module - Class Diagram
+
+skinparam classAttributeIconSize 0
+hide circle
+
+' ========== INGREDIENT CATEGORY CLASSES ==========
+
+class IngredientCategoryRoutes {
+  - router: Router
+  - controller: IngredientCategoryController
+  - authMiddleware: AuthMiddleware
+  - permissionMiddleware: PermissionMiddleware
+  --
+  + GET /api/ingredient-categories
+  + GET /api/ingredient-categories/active
+  + GET /api/ingredient-categories/:id
+  + POST /api/ingredient-categories
+  + PATCH /api/ingredient-categories/:id
+  + DELETE /api/ingredient-categories/:id
+  --
+  + initializeRoutes(): void
+}
+
+class IngredientCategoryController {
+  - service: IngredientCategoryService
+  - QueryHelper: Helper
+  --
+  + createIngredientCategory(req, res, next): Promise<void>
+  + getAllIngredientCategories(req, res, next): Promise<void>
+  + getActiveIngredientCategories(req, res, next): Promise<void>
+  + getIngredientCategoryById(req, res, next): Promise<void>
+  + updateIngredientCategory(req, res, next): Promise<void>
+  + deleteIngredientCategory(req, res, next): Promise<void>
+}
+
+class IngredientCategoryService {
+  - Model: IngredientCategoryModel
+  - PaginatedQuery: Helper
+  - AppError: ErrorClass
+  --
+  + createIngredientCategory(data): Promise<Object>
+  + getAllIngredientCategories(queryParams, canteenId): Promise<Object>
+  + getAllIngredientCategoriesNoPagination(filter): Promise<Array>
+  + getActiveIngredientCategories(canteenId): Promise<Array>
+  + getIngredientCategoryById(id, canteenId): Promise<Object>
+  + updateIngredientCategory(id, updateData, canteenId): Promise<Object>
+  + deleteIngredientCategory(id, canteenId): Promise<Object>
+  - checkDuplicateName(name, canteenId, excludeId): Promise<void>
+}
+
+class IngredientCategoryModel {
+  - _id: ObjectId
+  - canteenId: ObjectId
+  - name: String
+  - description: String
+  - icon: String
+  - isActive: Boolean
+  - createdAt: Date
+  - updatedAt: Date
+  --
+  + create(data): Promise<IngredientCategory>
+  + find(filter): Promise<Array>
+  + findOne(filter): Promise<IngredientCategory>
+  + findById(id): Promise<IngredientCategory>
+  + findByIdAndUpdate(id, data, options): Promise<IngredientCategory>
+  + findOneAndDelete(filter): Promise<IngredientCategory>
+  + countDocuments(filter): Promise<Number>
+}
+
+' ========== SHARED MIDDLEWARE & UTILITIES ==========
+
+class AuthMiddleware {
+  - jwt: JsonWebToken
+  - User: Model
+  - AppError: ErrorClass
+  --
+  + protect(req, res, next): Promise<void>
+  + restrictTo(...roles): Function
+  - verifyToken(token): Object
+  - extractTokenFromHeader(req): String
+}
+
+class PermissionMiddleware {
+  - AppError: ErrorClass
+  --
+  + requirePermission(...permissions): Function
+  - checkUserPermissions(user, requiredPermissions): Boolean
+}
+
+class QueryHelper {
+  --
+  + formatPaginatedResponse(result, message): Object
+  + formatSuccessResponse(data, message): Object
+  + formatErrorResponse(message, statusCode): Object
+}
+
+class PaginatedQuery {
+  --
+  + paginatedQuery(Model, queryParams, options): Promise<Object>
+  - buildFilter(queryParams, baseFilter): Object
+  - buildSort(sortBy, order): Object
+  - calculatePagination(page, limit, total): Object
+}
+
+class AppError {
+  - message: String
+  - statusCode: Number
+  - isOperational: Boolean
+  --
+  + constructor(message, statusCode)
+}
+
+' ========== RELATIONSHIPS ==========
+
+IngredientCategoryRoutes --> IngredientCategoryController : uses
+IngredientCategoryRoutes ..> AuthMiddleware : authenticates
+IngredientCategoryRoutes ..> PermissionMiddleware : checks permissions
+
+IngredientCategoryController --> IngredientCategoryService : calls
+IngredientCategoryController ..> QueryHelper : formats response
+
+IngredientCategoryService --> IngredientCategoryModel : queries
+IngredientCategoryService ..> PaginatedQuery : paginates
+IngredientCategoryService ..> AppError : throws errors
+
+' ========== NOTES ==========
+
+note right of IngredientCategoryModel
+  MongoDB Schema
+  Scoped by canteenId
+  Case-insensitive unique name
+  per canteen
+end note
+
+note bottom of AuthMiddleware
+  JWT validation
+  User authentication
+  Role verification
+end note
+
+note bottom of PermissionMiddleware
+  Fine-grained permission checking
+  Role-based access control
+  Extends authentication
+end note
+
+note right of IngredientCategoryService
+  Business logic layer
+  Validates data
+  Checks duplicate names
+  Enforces canteen scope
+  Supports non-paginated queries
+end note
+
+@enduml

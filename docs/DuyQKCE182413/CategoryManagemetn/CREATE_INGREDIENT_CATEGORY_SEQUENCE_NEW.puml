@@ -1,0 +1,75 @@
+@startuml Create Ingredient Category Sequence Diagram
+title UC07 - Create Ingredient Category
+
+actor "Staff/Manager" as User
+participant "Ingredient\nCategories Page" as Frontend
+participant ":ingredientRoutes" as Routes
+participant ":ingredientController" as Controller
+participant ":ingredientService" as Service
+participant "IngredientCategory\nModel" as Model
+database "MongoDB" as DB
+
+User -> Frontend: 1. Click "Create New"\nEnter Group Name, Description
+
+opt [Validation failed]
+    Frontend --> User: 1.1 Display error
+end
+
+Frontend -> Routes: 2. POST /api/ingredient-categories\n(Bearer Token, body: name, description)
+
+ref over Routes, Controller
+    SSD - Verify JWT Token
+end ref
+
+Routes -> Routes: 3. Check Token
+
+opt [Authentication / Authorization failed]
+    Routes --> Frontend: 3.1 JSON Error
+    Frontend --> User: 3.2 Redirect to Login
+end
+
+Routes -> Controller: 4. createIngredientCategory(req, res)
+
+Controller -> Controller: 5. Check canteenId from req.user
+
+opt [User has no canteenId]
+    Controller --> Routes: 5.1 HTTP 400 Response
+    Routes --> Frontend: 5.2 JSON Error
+    Frontend --> User: 5.3 Display error
+end
+
+Controller -> Service: 6. createIngredientCategory(data)
+
+Service -> Model: 7. findOne({ name, canteenId })
+
+Model -> DB: 8. Check duplicate name
+
+DB --> Model: 9. Result
+
+opt [Name already exists]
+    Service -> Service: 10.1 throw AppError\n"Category already exists" 400
+    Service --> Controller: 10.2 HTTP 400 Response
+    Controller --> Routes: 10.3 JSON Error
+    Routes --> Frontend: 10.4 JSON Error Response
+    Frontend --> User: 10.5 Display error
+end
+
+Service -> Model: 11. create(data)
+
+Model -> DB: 12. Insert document
+
+DB --> Model: 13. New category document
+
+Model --> Service: 14. Category object
+
+Service --> Controller: 15. Return category
+
+Controller --> Routes: 16. HTTP 201 Created
+
+Routes --> Frontend: 17. JSON Response\n{ success: true, data: category }
+
+Frontend -> Frontend: 18. Close modal, resetFields\nShow success notification
+
+Frontend --> User: 19. Display:\n"Category created successfully"\nList reloads
+
+@enduml

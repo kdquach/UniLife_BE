@@ -1,0 +1,66 @@
+@startuml View Product Category Detail Sequence Diagram
+title UC10 - View Product Category Detail
+
+actor "Staff/Manager" as User
+participant "Product\nCategories Page" as Frontend
+participant ":productRoutes" as Routes
+participant ":productController" as Controller
+participant ":productService" as Service
+participant "ProductCategory\nModel" as Model
+database "MongoDB" as DB
+
+User -> Frontend: 1. Click "View Details"\non a category
+
+opt [Validation failed]
+    Frontend --> User: 1.1 Display error
+end
+
+Frontend -> Routes: 2. GET /api/product-categories/:id\n(Bearer Token)
+
+ref over Routes, Controller
+    SSD - Verify JWT Token
+end ref
+
+Routes -> Routes: 3. Check Token
+
+opt [Authentication / Authorization failed]
+    Routes --> Frontend: 3.1 JSON Error
+    Frontend --> User: 3.2 Redirect to Login
+end
+
+Routes -> Controller: 4. getProductCategoryById(req, res)
+
+Controller -> Service: 5. getProductCategoryById\n(categoryId, canteenId)
+
+Service -> Model: 6. findOne(filter)
+
+Model -> DB: 7. Query category
+
+DB --> Model: 8. Category document
+
+Model --> Service: 9. Category data
+
+opt [Category not found]
+    Service -> Service: 10.1 throw AppError\n"Product category not found" 404
+    Service --> Controller: 10.2 HTTP 404 Response
+    Controller --> Routes: 10.3 JSON Error
+    Routes --> Frontend: 10.4 JSON Error Response
+    Frontend --> User: 10.5 Display error
+end
+
+Service --> Controller: 11. Return category
+
+Controller --> Routes: 12. HTTP 200 Response
+
+Routes --> Frontend: 13. JSON Response\n{ success: true, data: category }
+
+Frontend -> Frontend: 14. setState:\n- selected = response.data\n- detailOpen = true
+
+Frontend --> User: 15. Render Detail Modal\n(Name, Description, Status,\nCreated Date, Last Updated)
+
+@enduml
+
+Frontend --> User: 23. Display edit form
+deactivate Frontend
+
+@enduml

@@ -1,0 +1,80 @@
+@startuml Login Sequence Diagram
+title UC01 - Login
+
+actor "User" as User
+boundary "Login Page" as Frontend
+participant ":authRoutes" as Routes
+participant ":authController" as Controller
+participant ":authService" as Service
+participant ":User Model" as UserModel
+database ":MongoDB" as DB
+
+User -> Frontend: 1. Enter email and password
+activate Frontend
+
+Frontend -> Frontend: 2. validateFields()
+
+opt [Validation failed]
+    Frontend --> User: 2.1 Display validation error
+end
+
+Frontend -> Routes: 3. POST /api/auth/login\n(email, password)
+activate Routes
+
+Routes -> Controller: 4. login(req, res)
+activate Controller
+
+Controller -> Service: 5. login(email, password)
+activate Service
+
+Service -> UserModel: 6. findOne({email})
+activate UserModel
+
+UserModel -> DB: 7. Query user
+activate DB
+
+DB --> UserModel: 8. User document
+deactivate DB
+
+UserModel --> Service: 9. User data
+deactivate UserModel
+
+opt [User not found]
+    Service --> Controller: 10.1 AppError "Invalid email or password" 401
+    deactivate Service
+    Controller --> Routes: 10.2 HTTP 401 Response
+    deactivate Controller
+    Routes --> Frontend: 10.3 JSON Error
+    deactivate Routes
+    Frontend --> User: 10.4 Display error message
+end
+
+Service -> Service: 10. Verify password
+
+opt [Password incorrect]
+    Service --> Controller: 11.1 AppError "Invalid email or password" 401
+    deactivate Service
+    Controller --> Routes: 11.2 HTTP 401 Response
+    deactivate Controller
+    Routes --> Frontend: 11.3 JSON Error
+    deactivate Routes
+    Frontend --> User: 11.4 Display error message
+end
+
+Service -> Service: 11. Generate JWT token
+
+Service --> Controller: 12. Return {user, token}
+deactivate Service
+
+Controller --> Routes: 13. HTTP 200 Response
+deactivate Controller
+
+Routes --> Frontend: 14. JSON {user, token}
+deactivate Routes
+
+Frontend -> Frontend: 15. Save token to localStorage
+
+Frontend --> User: 16. Redirect to home page
+deactivate Frontend
+
+@enduml

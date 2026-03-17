@@ -1,0 +1,52 @@
+@startuml Verify OTP Subsequence
+title UC20.sd Verify OTP (SubSequence)
+
+participant ":authController" as Controller
+participant ":authService" as Service
+participant ":OTP Model" as OTPModel
+database "MongoDB" as DB
+
+activate Controller
+Controller -> Service: 1. verifyOTP(email, otp)
+activate Service
+
+Service -> OTPModel: 2. findOne({email, otp})
+activate OTPModel
+
+OTPModel -> DB: 3. Query OTP
+activate DB
+
+opt OTP not found
+    DB --> OTPModel: 4a. null
+    OTPModel --> Service: null
+    Service --> Controller: AppError "Invalid OTP code" 400
+end
+
+DB --> OTPModel: 4. Return OTP document
+deactivate DB
+
+OTPModel --> Service: 5. OTP data
+deactivate OTPModel
+
+Service -> Service: 6. Check OTP expiresAt
+
+opt OTP expired
+    Service --> Controller: 7a. AppError "OTP has expired" 400
+end
+
+Service -> OTPModel: 7. deleteOne({email, otp})
+activate OTPModel
+
+OTPModel -> DB: 8. Delete used OTP
+activate DB
+
+DB --> OTPModel: 9. Deleted
+deactivate DB
+
+OTPModel --> Service: 10. Success
+deactivate OTPModel
+
+Service --> Controller: 11. Return success
+deactivate Service
+deactivate Controller
+@enduml

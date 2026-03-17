@@ -1,0 +1,86 @@
+@startuml Logout Sequence Diagram
+title UC04 - Logout
+
+actor "User" as User
+boundary "Application Page" as Frontend
+participant ":authRoutes" as Routes
+participant ":authMiddleware" as AuthMW
+participant ":authController" as Controller
+participant ":authService" as Service
+participant ":User Model" as UserModel
+database ":MongoDB" as DB
+
+User -> Frontend: 1. Click "Logout" button
+activate Frontend
+
+Frontend -> Frontend: 2. Display confirmation
+
+User -> Frontend: 3. Confirm logout
+
+Frontend -> Routes: 4. POST /api/auth/logout\n(Bearer Token)
+activate Routes
+
+Routes -> AuthMW: 5. protect(req, res, next)
+activate AuthMW
+
+AuthMW -> AuthMW: 6. Verify JWT token
+
+opt [Invalid token]
+    AuthMW --> Routes: 7.1 HTTP 401 Response
+    deactivate AuthMW
+    Routes --> Frontend: 7.2 JSON Error
+    deactivate Routes
+    Frontend -> Frontend: 7.3 Remove token from localStorage
+    Frontend --> User: 7.4 Redirect to login page
+end
+
+AuthMW -> UserModel: 7. findById(decoded.id)
+activate UserModel
+
+UserModel -> DB: 8. Query user
+activate DB
+
+DB --> UserModel: 9. User document
+deactivate DB
+
+UserModel --> AuthMW: 10. User data
+deactivate UserModel
+
+AuthMW -> AuthMW: 11. req.user = user
+
+AuthMW --> Routes: 12. next()
+deactivate AuthMW
+
+Routes -> Controller: 13. logout(req, res)
+activate Controller
+
+Controller -> Service: 14. logout(userId)
+activate Service
+
+Service -> UserModel: 15. findByIdAndUpdate(userId, {lastLogout: Date.now()})
+activate UserModel
+
+UserModel -> DB: 16. Update user
+activate DB
+
+DB --> UserModel: 17. Updated user
+deactivate DB
+
+UserModel --> Service: 18. User data
+deactivate UserModel
+
+Service --> Controller: 19. Return success message
+deactivate Service
+
+Controller --> Routes: 20. HTTP 200 Response
+deactivate Controller
+
+Routes --> Frontend: 21. JSON {message: "Logout successful"}
+deactivate Routes
+
+Frontend -> Frontend: 22. Remove token from localStorage
+
+Frontend --> User: 23. Redirect to login page
+deactivate Frontend
+
+@enduml

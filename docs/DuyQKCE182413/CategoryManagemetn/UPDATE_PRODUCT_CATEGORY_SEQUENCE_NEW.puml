@@ -1,0 +1,83 @@
+@startuml Update Product Category Sequence Diagram
+title UC12 - Update Product Category
+
+actor "Staff/Manager" as User
+participant "Product\nCategories Page" as Frontend
+participant ":productRoutes" as Routes
+participant ":productController" as Controller
+participant ":productService" as Service
+participant "ProductCategory\nModel" as Model
+database "MongoDB" as DB
+
+User -> Frontend: 1. Click "Edit" on a category\nUpdate Name, Description, Status
+
+opt [Validation failed]
+    Frontend --> User: 1.1 Display error
+end
+
+Frontend -> Routes: 2. PATCH /api/product-categories/:id\n(Bearer Token, body: name, description, isActive)
+
+ref over Routes, Controller
+    SSD - Verify JWT Token
+end ref
+
+Routes -> Routes: 3. Check Token
+
+opt [Authentication / Authorization failed]
+    Routes --> Frontend: 3.1 JSON Error
+    Frontend --> User: 3.2 Redirect to Login
+end
+
+Routes -> Controller: 4. updateProductCategory(req, res)
+
+Controller -> Service: 5. updateProductCategory\n(categoryId, updateData, canteenId)
+
+Service -> Model: 6. findOne({ _id: categoryId, canteenId })
+
+Model -> DB: 7. Query category
+
+DB --> Model: 8. Result
+
+opt [Category not found]
+    Service -> Service: 9.1 throw AppError\n"Product category not found" 404
+    Service --> Controller: 9.2 HTTP 404 Response
+    Controller --> Routes: 9.3 JSON Error
+    Routes --> Frontend: 9.4 JSON Error Response
+    Frontend --> User: 9.5 Display error
+end
+
+Model --> Service: 10. Current category
+
+Service -> Model: 11. findOne({ name, canteenId,\n_id: { $ne: categoryId } })
+
+Model -> DB: 12. Check duplicate name\n(exclude current)
+
+DB --> Model: 13. Result
+
+opt [Name already exists]
+    Service -> Service: 14.1 throw AppError\n"Category already exists" 400
+    Service --> Controller: 14.2 HTTP 400 Response
+    Controller --> Routes: 14.3 JSON Error
+    Routes --> Frontend: 14.4 JSON Error Response
+    Frontend --> User: 14.5 Display error
+end
+
+Service -> Model: 15. findByIdAndUpdate\n(categoryId, updateData, { new: true })
+
+Model -> DB: 16. Update document
+
+DB --> Model: 17. Updated document
+
+Model --> Service: 18. Updated category
+
+Service --> Controller: 19. Return category
+
+Controller --> Routes: 20. HTTP 200 OK
+
+Routes --> Frontend: 21. JSON Response\n{ success: true, data: category }
+
+Frontend -> Frontend: 22. Close modal, resetFields\nShow success notification
+
+Frontend --> User: 23. Display:\n"Category updated successfully"\nList reloads
+
+@enduml

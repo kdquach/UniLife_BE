@@ -1,0 +1,112 @@
+@startuml Verify OTP Sequence Diagram
+title UC03 - Verify OTP (Complete Registration)
+
+actor "User" as User
+boundary "OTP Verification Page" as Frontend
+participant ":authRoutes" as Routes
+participant ":authController" as Controller
+participant ":authService" as Service
+participant ":OTP Model" as OTPModel
+participant ":User Model" as UserModel
+database ":MongoDB" as DB
+
+ref over User, Frontend, Routes, Controller, Service, OTPModel, UserModel, DB
+  UC02 - Register (Send OTP)
+  User completes registration and OTP is sent to email
+end ref
+
+User -> Frontend: 1. Enter OTP code
+activate Frontend
+
+Frontend -> Frontend: 2. validateOTP()
+
+opt [OTP not 6 digits]
+    Frontend --> User: 2.1 Display error
+end
+
+Frontend -> Routes: 3. POST /api/auth/verify-otp\n(email, otp, userData)
+activate Routes
+
+Routes -> Controller: 4. verifyOTP(req, res)
+activate Controller
+
+Controller -> Service: 5. verifyOTP(email, otp, userData)
+activate Service
+
+Service -> OTPModel: 6. findOne({email, otp})
+activate OTPModel
+
+OTPModel -> DB: 7. Query OTP
+activate DB
+
+DB --> OTPModel: 8. OTP document hoặc null
+deactivate DB
+
+OTPModel --> Service: 9. OTP data
+deactivate OTPModel
+
+opt [OTP not found or invalid]
+    Service --> Controller: 10.1 AppError "Invalid OTP code" 400
+    deactivate Service
+    Controller --> Routes: 10.2 HTTP 400 Response
+    deactivate Controller
+    Routes --> Frontend: 10.3 JSON Error
+    deactivate Routes
+    Frontend --> User: 10.4 Display error
+end
+
+Service -> Service: 10. Check OTP expiresAt
+
+opt [OTP expired]
+    Service --> Controller: 11.1 AppError "OTP has expired" 400
+    deactivate Service
+    Controller --> Routes: 11.2 HTTP 400 Response
+    deactivate Controller
+    Routes --> Frontend: 11.3 JSON Error
+    deactivate Routes
+    Frontend --> User: 11.4 Display error
+end
+
+Service -> Service: 11. Hash password
+
+Service -> UserModel: 12. create(userData)
+activate UserModel
+
+UserModel -> DB: 13. Insert user
+activate DB
+
+DB --> UserModel: 14. User document
+deactivate DB
+
+UserModel --> Service: 15. User data
+deactivate UserModel
+
+Service -> OTPModel: 16. deleteOne({email, otp})
+activate OTPModel
+
+OTPModel -> DB: 17. Delete used OTP
+activate DB
+
+DB --> OTPModel: 18. Deleted
+deactivate DB
+
+OTPModel --> Service: 19. Success
+deactivate OTPModel
+
+Service -> Service: 20. Generate JWT token
+
+Service --> Controller: 21. Return {user, token}
+deactivate Service
+
+Controller --> Routes: 22. HTTP 200 Response
+deactivate Controller
+
+Routes --> Frontend: 23. JSON {user, token}
+deactivate Routes
+
+Frontend -> Frontend: 24. Save token to localStorage
+
+Frontend --> User: 25. Redirect to home page
+deactivate Frontend
+
+@enduml

@@ -1,0 +1,95 @@
+@startuml Login With Google Sequence Diagram
+title UC03 - Login With Google
+
+actor "User" as User
+boundary "Login Page" as Frontend
+participant ":authRoutes" as Routes
+participant ":authController" as Controller
+participant ":authService" as Service
+participant ":GoogleOAuth" as GoogleOAuth
+participant ":User Model" as UserModel
+database ":MongoDB" as DB
+
+activate User
+User -> Frontend: 1. Click "Sign in with Google"
+activate Frontend
+
+Frontend -> Frontend: 2. Open Google OAuth popup
+
+Frontend -> GoogleOAuth: 3. Redirect to Google
+activate GoogleOAuth
+
+User -> GoogleOAuth: 4. Enter credentials and consent
+
+GoogleOAuth --> Frontend: 5. Return OAuth Token
+deactivate GoogleOAuth
+
+opt [Invalid Token]
+    Frontend --> User: 5.1 Display error
+end
+
+Frontend -> Routes: 6. POST /api/auth/google/callback?token\n(Bearer Token)
+activate Routes
+
+Routes -> Controller: 7. googleLogin(req, res)
+activate Controller
+
+Controller -> Service: 8. googleLogin(token)
+activate Service
+
+Service -> GoogleOAuth: 9. verifyToken(token)
+activate GoogleOAuth
+
+opt [Token invalid]
+    GoogleOAuth --> Service: 9.1 Error
+    
+    Service --> Controller: 9.2 AppError "Invalid Google token" 401
+    Controller --> Routes: 9.3 HTTP 401 Response
+    Routes --> Frontend: 9.4 JSON Error
+    Frontend --> User: 9.5 Display error
+end
+
+GoogleOAuth --> Service: 10. Return user info (email, name, picture)
+deactivate GoogleOAuth
+
+Service -> UserModel: 11. findOne({email})
+activate UserModel
+
+UserModel -> DB: 12. Query user by email
+activate DB
+
+DB --> UserModel: 13. User document or null
+deactivate DB
+
+UserModel --> Service: 14. User data
+deactivate UserModel
+
+opt [User not exists]
+    Service -> Service: 14.1 Validate email domain
+    Service -> UserModel: 14.2 create({email, name, avatar, provider: "google"})
+    activate UserModel
+    UserModel -> DB: 14.3 Insert new user
+    activate DB
+    DB --> UserModel: 14.4 Created user
+    deactivate DB
+    UserModel --> Service: 15.5 User data
+    deactivate UserModel
+end
+
+Service -> Service: 15. Generate JWT token
+
+Service --> Controller: 16. Return {user, token}
+deactivate Service
+
+Controller --> Routes: 17. HTTP 200 Response
+deactivate Controller
+
+Routes --> Frontend: 18. JSON {user, token}
+deactivate Routes
+
+Frontend -> Frontend: 19. Save token to localStorage
+
+Frontend --> User: 20. Redirect to home page
+deactivate Frontend
+deactivate User
+@enduml

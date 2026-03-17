@@ -1,0 +1,156 @@
+@startuml Register Sequence Diagram
+title UC02 - Register
+
+actor "User" as User
+boundary "Register Page" as Frontend
+participant ":authRoutes" as Routes
+participant ":authController" as Controller
+participant ":authService" as Service
+participant ":OTP Model" as OTPModel
+participant ":User Model" as UserModel
+participant ":EmailService" as EmailService
+database ":MongoDB" as DB
+
+User -> Frontend: 1. Enter registration information
+activate Frontend
+
+Frontend -> Frontend: 2. validateFields()
+
+opt [Validation failed]
+    Frontend --> User: 2.1 Display validation error
+end
+
+Frontend -> Routes: 3. POST /api/auth/register\n(email, password, name, phone)
+activate Routes
+
+Routes -> Controller: 4. register(req, res)
+activate Controller
+
+Controller -> Service: 5. register(userData)
+activate Service
+
+Service -> UserModel: 6. findOne({email})
+activate UserModel
+
+UserModel -> DB: 7. Check email exists
+activate DB
+
+DB --> UserModel: 8. User document or null
+deactivate DB
+
+UserModel --> Service: 9. Result
+deactivate UserModel
+
+opt [Email already exists]
+    Service --> Controller: 10.1 AppError "Email already in use" 400
+    deactivate Service
+    Controller --> Routes: 10.2 HTTP 400 Response
+    deactivate Controller
+    Routes --> Frontend: 10.3 JSON Error
+    deactivate Routes
+    Frontend --> User: 10.4 Display error
+end
+
+Service -> Service: 10. Generate OTP (6 digits)
+
+Service -> OTPModel: 11. create({email, otp, expiresAt})
+activate OTPModel
+
+OTPModel -> DB: 12. Save OTP
+activate DB
+
+DB --> OTPModel: 13. OTP document
+deactivate DB
+
+OTPModel --> Service: 14. OTP data
+deactivate OTPModel
+
+Service -> EmailService: 15. sendOTP(email, otp)
+activate EmailService
+
+EmailService --> Service: 16. Email sent
+deactivate EmailService
+
+opt [Send email failed]
+    Service --> Controller: 17.1 AppError "Failed to send OTP" 500
+    deactivate Service
+    Controller --> Routes: 17.2 HTTP 500 Response
+    deactivate Controller
+    Routes --> Frontend: 17.3 JSON Error
+    deactivate Routes
+    Frontend --> User: 17.4 Display error
+end
+
+Service --> Controller: 17. Return success message
+deactivate Service
+
+Controller --> Routes: 18. HTTP 200 Response
+deactivate Controller
+
+Routes --> Frontend: 19. JSON {message: "OTP sent successfully"}
+deactivate Routes
+
+Frontend --> User: 20. Display OTP input form
+deactivate Frontend
+
+User -> Frontend: 21. Enter OTP code
+activate Frontend
+
+Frontend -> Frontend: 22. validateOTP()
+
+opt [OTP not 6 digits]
+    Frontend --> User: 22.1 Display error
+end
+
+Frontend -> Routes: 23. POST /api/auth/verify-otp\n(email, otp, userData)
+activate Routes
+
+Routes -> Controller: 24. verifyOTP(req, res)
+activate Controller
+
+ref over Controller, Service, OTPModel, DB
+  Verify OTP Subsequence
+end ref
+
+opt [OTP invalid or expired]
+    Controller --> Routes: 25.1 HTTP 400 Response
+    deactivate Controller
+    Routes --> Frontend: 25.2 JSON Error
+    deactivate Routes
+    Frontend --> User: 25.3 Display error
+end
+
+Controller -> Service: 25. createUser(userData)
+activate Service
+
+Service -> Service: 26. Hash password
+
+Service -> UserModel: 27. create(userData)
+activate UserModel
+
+UserModel -> DB: 28. Insert user
+activate DB
+
+DB --> UserModel: 29. User document
+deactivate DB
+
+UserModel --> Service: 30. User data
+deactivate UserModel
+
+Service -> Service: 31. Generate JWT token
+
+Service --> Controller: 32. Return {user, token}
+deactivate Service
+
+Controller --> Routes: 33. HTTP 200 Response
+deactivate Controller
+
+Routes --> Frontend: 34. JSON {user, token}
+deactivate Routes
+
+Frontend -> Frontend: 35. Save token to localStorage
+
+Frontend --> User: 36. Redirect to home page
+deactivate Frontend
+
+@enduml
