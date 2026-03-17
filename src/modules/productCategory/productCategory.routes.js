@@ -3,6 +3,7 @@ import * as productCategoryController from './productCategory.controller.js';
 import {
   protect,
   requirePermission,
+  restrictTo,
 } from '../../middlewares/auth.middleware.js';
 import { auditLogger } from '../auditLog/auditLog.middleware.js';
 
@@ -11,22 +12,22 @@ const router = express.Router();
 // Tất cả routes yêu cầu xác thực
 router.use(protect);
 
-// Routes đọc dữ liệu - Yêu cầu quyền PRODUCT_READ hoặc PRODUCT_CATEGORY_READ
+// Routes đọc dữ liệu - Cho phép staff, manager, admin truy cập
 router.get(
   '/',
-  requirePermission('PRODUCT_READ', 'PRODUCT_CATEGORY_READ'),
+  restrictTo('staff', 'manager', 'admin'),
   productCategoryController.getAllProductCategories
 );
 
 router.get(
   '/active',
-  requirePermission('PRODUCT_READ', 'PRODUCT_CATEGORY_READ'),
+  restrictTo('staff', 'manager', 'admin'),
   productCategoryController.getActiveProductCategories
 );
 
 router.get(
   '/:id',
-  requirePermission('PRODUCT_READ', 'PRODUCT_CATEGORY_READ'),
+  restrictTo('staff', 'manager', 'admin'),
   productCategoryController.getProductCategoryById
 );
 
