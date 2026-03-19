@@ -109,7 +109,7 @@ export const restrictTo = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
       return next(
-        new AppError('You do not have permission to perform this action.', 403)
+        new AppError('Bạn không có quyền thực hiện thao tác này.', 403)
       );
     }
     next();
@@ -129,7 +129,9 @@ export const requirePermission = (...requiredPermissions) => {
     const userRoles = await UserRole.find({ userId }).populate('roleId');
 
     if (!userRoles || userRoles.length === 0) {
-      return next(new AppError('You do not have any assigned roles.', 403));
+      return next(
+        new AppError('Bạn chưa được gán vai trò nên không có quyền truy cập.', 403)
+      );
     }
 
     // Lấy tất cả permission của các role này
@@ -142,18 +144,16 @@ export const requirePermission = (...requiredPermissions) => {
     const userPermissionCodes = rolePermissions.map(
       (rp) => rp.permissionId.code
     );
-    console.log("🚀 ~ requirePermission ~ userPermissionCodes:", userPermissionCodes)
 
     // Kiểm tra xem user có ít nhất 1 permission trong danh sách yêu cầu không
     const hasPermission = requiredPermissions.some((permission) =>
       userPermissionCodes.includes(permission)
     );
-    console.log("🚀 ~ requirePermission ~ hasPermission:", hasPermission)
 
     if (!hasPermission) {
       return next(
         new AppError(
-          'You do not have the required permissions to perform this action.',
+          'Bạn không có quyền để thực hiện thao tác này.',
           403
         )
       );

@@ -69,7 +69,7 @@ const systemNotificationSchema = new mongoose.Schema(
     },
     targetRole: {
       type: String,
-      enum: ["all", "admin", "staff", "customer"],
+      enum: ["all", "admin", "manager", "staff", "customer"],
       default: "all",
     },
     activeFrom: {

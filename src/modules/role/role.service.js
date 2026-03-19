@@ -59,7 +59,20 @@ export const getPermissionById = async (id) => {
   if (!permission) {
     throw new AppError("Permission not found", 404);
   }
-  return permission;
+
+  const rolePermissions = await RolePermission.find({ permissionId: id })
+    .populate("roleId")
+    .sort({ createdAt: -1 });
+
+  const roles = rolePermissions
+    .map((rolePermission) => rolePermission.roleId)
+    .filter(Boolean);
+
+  return {
+    ...permission.toObject(),
+    roles,
+    roleCount: roles.length,
+  };
 };
 
 export const updatePermission = async (id, updateData) => {
@@ -108,6 +121,12 @@ export const getPermissionsByRole = async (roleId) => {
 // ============ User-Role Services ============
 
 export const assignRoleToUser = async (userId, roleId) => {
+  if (!userId || !roleId) {
+    throw new AppError("User ID and Role ID are required", 400);
+  }
+
+  // Single-role policy: replace any existing roles of the user
+  await UserRole.deleteMany({ userId });
   const userRole = await UserRole.create({ userId, roleId });
   return userRole;
 };

@@ -99,7 +99,7 @@ const seedDatabase = async () => {
       password: hashedPassword,
       fullName: "Manager User",
       phone: "0123456788",
-      role: "canteen_owner",
+      role: "manager",
       status: "active",
       emailVerified: true,
     });
@@ -743,6 +743,7 @@ const seedDatabase = async () => {
     console.log("🔐 Creating roles and permissions...");
     const roles = await Role.insertMany([
       { roleName: "admin", description: "Quản trị viên hệ thống" },
+      { roleName: "manager", description: "Quản lý căng tin" },
       { roleName: "staff", description: "Nhân viên căng tin" },
       { roleName: "customer", description: "Khách hàng" },
     ]);
@@ -775,6 +776,7 @@ const seedDatabase = async () => {
 
     // Assign all permissions to admin role
     const adminRole = roles.find((r) => r.roleName === "admin");
+    const managerRole = roles.find((r) => r.roleName === "manager");
     const staffRole = roles.find((r) => r.roleName === "staff");
     const customerRole = roles.find((r) => r.roleName === "customer");
 
@@ -784,6 +786,49 @@ const seedDatabase = async () => {
         roleId: adminRole._id,
         permissionId: p._id,
       })),
+      // Manager gets product/order/report/shift permissions
+      {
+        roleId: managerRole._id,
+        permissionId: permissions.find((p) => p.code === "PRODUCT_READ")._id,
+      },
+      {
+        roleId: managerRole._id,
+        permissionId: permissions.find((p) => p.code === "PRODUCT_UPDATE")._id,
+      },
+      {
+        roleId: managerRole._id,
+        permissionId: permissions.find(
+          (p) => p.code === "PRODUCT_CATEGORY_READ",
+        )._id,
+      },
+      {
+        roleId: managerRole._id,
+        permissionId: permissions.find(
+          (p) => p.code === "PRODUCT_CATEGORY_CREATE",
+        )._id,
+      },
+      {
+        roleId: managerRole._id,
+        permissionId: permissions.find(
+          (p) => p.code === "PRODUCT_CATEGORY_UPDATE",
+        )._id,
+      },
+      {
+        roleId: managerRole._id,
+        permissionId: permissions.find((p) => p.code === "ORDER_READ")._id,
+      },
+      {
+        roleId: managerRole._id,
+        permissionId: permissions.find((p) => p.code === "ORDER_UPDATE")._id,
+      },
+      {
+        roleId: managerRole._id,
+        permissionId: permissions.find((p) => p.code === "REPORT_READ")._id,
+      },
+      {
+        roleId: managerRole._id,
+        permissionId: permissions.find((p) => p.code === "SHIFT_MANAGE")._id,
+      },
       // Staff gets product, order permissions
       {
         roleId: staffRole._id,
@@ -843,7 +888,7 @@ const seedDatabase = async () => {
     // Assign roles to users
     const userRoles = await UserRole.insertMany([
       { userId: adminUser._id, roleId: adminRole._id },
-      { userId: managerUser._id, roleId: adminRole._id },
+      { userId: managerUser._id, roleId: managerRole._id },
       { userId: staffUser._id, roleId: staffRole._id },
       { userId: customers[0]._id, roleId: customerRole._id },
       { userId: customers[1]._id, roleId: customerRole._id },

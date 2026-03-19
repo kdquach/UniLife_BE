@@ -323,6 +323,7 @@ export const filterPresets = {
   feedback: {
     allowedFilters: [
       "rating",
+      "canteenId",
       "productId",
       "userId",
       // hỗ trợ lọc theo ngày tạo từ Dashboard (fromDate)

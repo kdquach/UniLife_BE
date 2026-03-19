@@ -4,6 +4,7 @@ import {
   protect,
   restrictTo,
   optionalProtect,
+  requirePermission,
 } from '../../middlewares/auth.middleware.js';
 import {
   uploadFields,
@@ -31,6 +32,7 @@ router.get(
   '/manage',
   protect,
   restrictTo('staff', 'manager'),
+  requirePermission('PRODUCT_READ'),
   productController.getAllProducts
 );
 
@@ -39,6 +41,7 @@ router.get(
   '/deleted',
   protect,
   restrictTo('staff', 'manager', 'admin'),
+  requirePermission('PRODUCT_READ'),
   productController.getDeletedProducts
 );
 
@@ -47,12 +50,14 @@ router.get(
   '/inventory/out-of-stock',
   protect,
   restrictTo('staff', 'manager'),
+  requirePermission('PRODUCT_READ'),
   productController.getOutOfStockProducts
 );
 router.get(
   '/inventory/low-stock',
   protect,
   restrictTo('staff', 'manager'),
+  requirePermission('PRODUCT_READ'),
   productController.getLowStockProducts
 );
 
@@ -64,6 +69,7 @@ router.get(
   '/:id/inventory',
   protect,
   restrictTo('staff', 'manager'),
+  requirePermission('PRODUCT_READ'),
   productController.getProductInventory
 );
 
@@ -76,6 +82,7 @@ router.use(restrictTo('staff', 'manager'));
 
 router.post(
   '/',
+  requirePermission('PRODUCT_CREATE'),
   auditLogger('CREATE', 'Product', 'Product'),
   uploadFields(
     [
@@ -89,6 +96,7 @@ router.post(
 );
 router.patch(
   '/:id',
+  requirePermission('PRODUCT_UPDATE'),
   auditLogger('UPDATE', 'Product', 'Product'),
   uploadFields(
     [
@@ -104,11 +112,13 @@ router.patch(
 // Restore và delete (cho cả staff/manager/admin)
 router.patch(
   '/:id/restore',
+  requirePermission('PRODUCT_UPDATE'),
   auditLogger('UPDATE', 'Product', 'Product'),
   productController.restoreProduct
 );
 router.delete(
   '/:id',
+  requirePermission('PRODUCT_DELETE'),
   auditLogger('DELETE', 'Product', 'Product'),
   productController.deleteProduct
 );
