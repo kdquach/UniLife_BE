@@ -422,6 +422,50 @@ const publishSchedule = async (scheduleId, currentUser = null) => {
   return published;
 };
 
+const getScheduleAssignments = async (schedule) => {
+  const populateQuery = (query) => {
+    return query
+      .populate("shiftId", "name startTime endTime")
+      .populate("staffId", "fullName email")
+      .populate("canteenId", "name location")
+      .sort({ date: 1 });
+  };
+
+  const directAssignments = await populateQuery(
+    StaffShift.find({
+      scheduleId: schedule._id,
+      isDeleted: { $ne: true },
+    }),
+  );
+
+  if (directAssignments.length) {
+    return directAssignments;
+  }
+
+  // Hỗ trợ dữ liệu legacy chỉ lưu scheduleVersion mà chưa có scheduleId.
+  const weekStart = new Date(schedule.weekStart);
+  if (Number.isNaN(weekStart.getTime())) {
+    return directAssignments;
+  }
+
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
+
+  const legacyAssignments = await populateQuery(
+    StaffShift.find({
+      scheduleVersion: schedule.version,
+      canteenId: schedule.canteenId,
+      date: {
+        $gte: weekStart,
+        $lt: weekEnd,
+      },
+      isDeleted: { $ne: true },
+    }),
+  );
+
+  return legacyAssignments;
+};
+
 const getPublishedSchedule = async (query = {}, currentUser = null) => {
   const weekStartRange = query.weekStart ? getUtcDayRange(query.weekStart) : null;
   const weekStartLocalRange = query.weekStart ? getLocalDayRange(query.weekStart) : null;
@@ -455,14 +499,7 @@ const getPublishedSchedule = async (query = {}, currentUser = null) => {
     throw new AppError("Không có lịch đã publish", 404);
   }
 
-  const assignments = await StaffShift.find({
-    scheduleId: schedule._id,
-    isDeleted: { $ne: true },
-  })
-    .populate("shiftId", "name startTime endTime")
-    .populate("staffId", "fullName email")
-    .populate("canteenId", "name location")
-    .sort({ date: 1 });
+  const assignments = await getScheduleAssignments(schedule);
 
   return {
     schedule,
@@ -506,14 +543,16 @@ const getDraftSchedule = async (query = {}, currentUser = null) => {
     };
   }
 
-  const assignments = await StaffShift.find({
-    scheduleId: schedule._id,
-    isDeleted: { $ne: true },
-  })
-    .populate("shiftId", "name startTime endTime")
-    .populate("staffId", "fullName email")
-    .populate("canteenId", "name location")
-    .sort({ date: 1 });
+  const assignments = await getScheduleAssignments(schedule);
+
+  // Nếu có draft record nhưng không có phân công, xem như chưa có nháp hợp lệ.
+  // FE sẽ fallback về published để người dùng tiếp tục chỉnh sửa.
+  if (!assignments.length) {
+    return {
+      schedule: null,
+      assignments: [],
+    };
+  }
 
   return {
     schedule,
