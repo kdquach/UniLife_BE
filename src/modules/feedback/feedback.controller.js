@@ -16,6 +16,7 @@ export const getAllFeedbacks = catchAsync(async (req, res) => {
   // thì chỉ lấy feedback của canteen đó
   const canteenIdFromHeader =
     req?.user?.canteenId;
+  console.log("🚀 ~ canteenIdFromHeader:", canteenIdFromHeader)
 
   const query = { ...req.query };
   if (canteenIdFromHeader) {

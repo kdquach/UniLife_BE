@@ -14,11 +14,6 @@ router
   .route('/')
   .get(roleController.getAllRoles)
   .post(auditLogger('CREATE', 'Role', 'Role'), roleController.createRole);
-router
-  .route('/:id')
-  .get(roleController.getRoleById)
-  .patch(auditLogger('UPDATE', 'Role', 'Role'), roleController.updateRole)
-  .delete(auditLogger('DELETE', 'Role', 'Role'), roleController.deleteRole);
 
 // Permission routes
 router
@@ -61,5 +56,11 @@ router.delete(
 );
 router.get('/user/:userId/roles', roleController.getRolesByUser);
 router.get('/:roleId/users', roleController.getUsersByRole);
+
+router
+  .route('/:id')
+  .get(roleController.getRoleById)
+  .patch(auditLogger('UPDATE', 'Role', 'Role'), roleController.updateRole)
+  .delete(auditLogger('DELETE', 'Role', 'Role'), roleController.deleteRole);
 
 export default router;
