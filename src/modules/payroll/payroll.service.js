@@ -114,13 +114,14 @@ export const generatePayroll = async (
 ) => {
   const session = await mongoose.startSession();
   session.startTransaction();
+  const defaultHourlyRate = Number(hourlyRate) || 0;
 
   try {
     console.log("Generate Payroll - Input:", {
       canteenId,
       periodStart,
       periodEnd,
-      hourlyRate,
+      hourlyRate: defaultHourlyRate,
       createdBy,
     });
 
@@ -142,7 +143,7 @@ export const generatePayroll = async (
           canteenId,
           periodStart: new Date(periodStart),
           periodEnd: new Date(periodEnd),
-          hourlyRate,
+          hourlyRate: defaultHourlyRate,
           status: "draft",
           description,
           createdBy,
@@ -186,6 +187,18 @@ export const generatePayroll = async (
       }
     });
 
+    // Nếu không truyền hourlyRate fallback thì bắt buộc tất cả nhân viên phải có SalaryRate cá nhân
+    const usersWithoutSalaryRate = staffShifts.filter(
+      (shift) => shift._id && !salaryRateMap[shift._id.toString()],
+    );
+
+    if (usersWithoutSalaryRate.length > 0 && defaultHourlyRate <= 0) {
+      throw new AppError(
+        `Có ${usersWithoutSalaryRate.length} nhân viên chưa có mức lương cá nhân. Vui lòng thiết lập SalaryRate hoặc truyền hourlyRate fallback`,
+        400,
+      );
+    }
+
     // 5. Tạo salary records cho từng nhân viên
     const salaries = [];
     let totalStaff = 0;
@@ -199,7 +212,7 @@ export const generatePayroll = async (
       const hours = shift.totalHours || 0;
 
       // Ưu tiên lấy hourlyRate từ SalaryRate, nếu không có thì dùng default
-      const userHourlyRate = salaryRateMap[userId] || hourlyRate;
+      const userHourlyRate = salaryRateMap[userId] || defaultHourlyRate;
       const baseSalary = Math.round(hours * userHourlyRate);
 
       // Tính các khoản thưởng/phạt tự động

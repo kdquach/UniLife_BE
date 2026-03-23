@@ -58,6 +58,9 @@ export const generatePayroll = catchAsync(async (req, res) => {
   const { canteenId, periodStart, periodEnd, hourlyRate, description } =
     req.body;
   const createdBy = req.user._id;
+  const hasHourlyRate =
+    hourlyRate !== undefined && hourlyRate !== null && hourlyRate !== "";
+  const normalizedHourlyRate = hasHourlyRate ? Number(hourlyRate) : 0;
 
   // Validation
   if (!canteenId) {
@@ -66,7 +69,10 @@ export const generatePayroll = catchAsync(async (req, res) => {
   if (!periodStart || !periodEnd) {
     throw new AppError("Period start and end dates are required", 400);
   }
-  if (!hourlyRate || hourlyRate <= 0) {
+  if (
+    hasHourlyRate &&
+    (Number.isNaN(normalizedHourlyRate) || normalizedHourlyRate <= 0)
+  ) {
     throw new AppError("Valid hourly rate is required", 400);
   }
 
@@ -74,7 +80,7 @@ export const generatePayroll = catchAsync(async (req, res) => {
     canteenId,
     periodStart,
     periodEnd,
-    hourlyRate,
+    normalizedHourlyRate,
     createdBy,
     description,
   );

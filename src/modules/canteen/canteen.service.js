@@ -8,7 +8,8 @@ import User from "../user/user.model.js";
 // Nếu rơi vào trường hợp này -> không cho phép update (bên dưới sẽ throw AppError)
 const isTodayOffDuringOpenTime = (canteen) => {
   // Nếu không có offDates hoặc mảng rỗng thì chắc chắn không phải trường hợp hôm nay nghỉ
-  if (!Array.isArray(canteen.offDates) || canteen.offDates.length === 0) return false;
+  if (!Array.isArray(canteen.offDates) || canteen.offDates.length === 0)
+    return false;
 
   const now = new Date();
 
@@ -75,10 +76,32 @@ export const getCanteenById = async (id) => {
   return canteen;
 };
 
-export const updateCanteen = async (id, updateData) => {
+export const updateCanteen = async (id, updateData, currentUser) => {
   const canteen = await Canteen.findById(id);
   if (!canteen) {
     throw new AppError("Canteen not found", 404);
+  }
+
+  const isAdmin = currentUser?.role === "admin";
+  const isManager = currentUser?.role === "manager";
+
+  // Manager chỉ được chỉnh sửa canteen của chính mình
+  if (isManager && String(currentUser?.canteenId || "") !== String(id)) {
+    throw new AppError("Bạn chỉ có thể cập nhật căng tin của mình", 403);
+  }
+
+  // Manager không được tự duyệt đăng ký (pending -> active)
+  if (
+    isManager &&
+    updateData?.status === "active" &&
+    canteen.status === "pending"
+  ) {
+    throw new AppError("Chỉ admin mới có quyền duyệt đăng ký căng tin", 403);
+  }
+
+  // Chỉ admin/manager mới được cập nhật canteen
+  if (!isAdmin && !isManager) {
+    throw new AppError("Bạn không có quyền cập nhật căng tin", 403);
   }
 
   Object.assign(canteen, updateData);
@@ -96,6 +119,36 @@ export const updateCanteen = async (id, updateData) => {
   return canteen;
 };
 
+// Duyệt đăng ký canteen (admin only)
+export const reviewCanteenRegistration = async (id, decision, reviewedBy) => {
+  const canteen = await Canteen.findById(id);
+
+  if (!canteen) {
+    throw new AppError("Canteen not found", 404);
+  }
+
+  if (canteen.status !== "pending") {
+    throw new AppError("Chỉ có thể duyệt căng tin ở trạng thái chờ duyệt", 400);
+  }
+
+  // Quy ước: approve -> active, reject -> inactive
+  canteen.status = decision === "approve" ? "active" : "inactive";
+  await canteen.save({ validateBeforeSave: true });
+
+  // Nếu từ chối đăng ký, cập nhật trạng thái user chủ canteen về inactive
+  if (decision === "reject") {
+    await User.updateMany(
+      { canteenId: canteen._id, role: "manager" },
+      { $set: { status: "inactive" } },
+    );
+  }
+
+  return {
+    canteen,
+    reviewedBy,
+  };
+};
+
 export const deleteCanteen = async (id) => {
   const canteen = await Canteen.findByIdAndDelete(id);
   if (!canteen) {
@@ -105,4 +158,3 @@ export const deleteCanteen = async (id) => {
   // Xoá liên kết canteenId ở các user nếu có
   await User.updateMany({ canteenId: id }, { $unset: { canteenId: 1 } });
 };
-

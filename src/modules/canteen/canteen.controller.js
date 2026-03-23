@@ -65,7 +65,11 @@ export const getCanteenById = catchAsync(async (req, res) => {
  * @access Private (Admin)
  */
 export const updateCanteen = catchAsync(async (req, res) => {
-  const canteen = await canteenService.updateCanteen(req.params.id, req.body);
+  const canteen = await canteenService.updateCanteen(
+    req.params.id,
+    req.body,
+    req.user,
+  );
 
   res.status(200).json({
     status: "success",
@@ -89,3 +93,33 @@ export const deleteCanteen = catchAsync(async (req, res) => {
   });
 });
 
+/**
+ * Review canteen registration
+ * @route PATCH /api/canteens/:id/review
+ * @access Private (Admin)
+ */
+export const reviewCanteenRegistration = catchAsync(async (req, res) => {
+  const { decision } = req.body;
+
+  if (!["approve", "reject"].includes(decision)) {
+    throw new AppError("decision phải là approve hoặc reject", 400);
+  }
+
+  const result = await canteenService.reviewCanteenRegistration(
+    req.params.id,
+    decision,
+    req.user._id,
+  );
+
+  res.status(200).json({
+    status: "success",
+    message:
+      decision === "approve"
+        ? "Duyệt đăng ký căng tin thành công"
+        : "Từ chối đăng ký căng tin thành công",
+    data: {
+      canteen: result.canteen,
+      reviewedBy: result.reviewedBy,
+    },
+  });
+});
