@@ -15,6 +15,13 @@ import * as XLSX from "xlsx";
 // =============================================
 
 export const createVoucher = catchAsync(async (req, res) => {
+  // Tự động gán canteenId của manager vào voucher nếu frontend không gửi
+  if (req.user.role === 'manager' && req.user.canteenId) {
+    if (!req.body.canteen_ids || req.body.canteen_ids.length === 0) {
+      req.body.canteen_ids = [req.user.canteenId];
+    }
+  }
+
   const voucher = await voucherService.createVoucher(req.body, req.user._id);
   res.status(201).json({ status: "success", data: { voucher } });
 });
@@ -46,6 +53,8 @@ export const getAllVouchers = catchAsync(async (req, res) => {
     populate: [
       { path: "canteen_ids", select: "name" },
       { path: "createdBy", select: "fullName email" },
+      { path: "categoryIds", select: "name" },
+      { path: "productIds", select: "name price" },
     ],
     maxLimit: 50,
   });

@@ -95,6 +95,43 @@ const userSchema = new mongoose.Schema(
       ref: "Canteen",
       default: null,
     },
+
+    // --- User Governance Fields ---
+
+    // Token versioning — thay thế Redis blacklist cho JWT revocation
+    tokenVersion: {
+      type: Number,
+      default: 0,
+      select: false, // không expose ra ngoài
+    },
+
+    // Temporary password cho system user (first login flow)
+    isTemporaryPassword: {
+      type: Boolean,
+      default: false,
+    },
+    tempPasswordExpiresAt: {
+      type: Date, // temp password expire sau 24h
+    },
+    passwordChangedAt: {
+      type: Date,
+    },
+
+    // Disable/Re-enable audit trail
+    disabledAt: { type: Date },
+    disabledBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    disabledReason: { type: String },
+    reenabledAt: { type: Date },
+    reenabledBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+
+    // Ai tạo system user này
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+
+    // IP đăng nhập cuối — sensitive, select: false
+    lastLoginIp: {
+      type: String,
+      select: false,
+    },
   },
   {
     timestamps: true,
@@ -105,6 +142,7 @@ const userSchema = new mongoose.Schema(
 userSchema.index({ fullName: "text", email: "text" });
 userSchema.index({ role: 1, status: 1 });
 userSchema.index({ canteenId: 1 });
+userSchema.index({ canteenId: 1, role: 1, status: 1 }); // compound index cho scope query
 
 // Hash password before saving
 userSchema.pre("save", async function (next) {
@@ -115,6 +153,16 @@ userSchema.pre("save", async function (next) {
   this.password = await bcrypt.hash(this.password, 12);
   next();
 });
+
+// Không bao giờ trả về các field nhạy cảm trong JSON response
+userSchema.methods.toJSON = function () {
+  const obj = this.toObject();
+  delete obj.password;
+  delete obj.tokenVersion;
+  delete obj.lastLoginIp;
+  delete obj.tempPasswordExpiresAt;
+  return obj;
+};
 
 // Compare password method
 userSchema.methods.comparePassword = async function (candidatePassword) {

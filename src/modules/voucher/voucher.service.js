@@ -8,6 +8,39 @@ import { discountCalculator } from "./discountCalculator.js";
 export const createVoucher = async (voucherData, userId) => {
   const data = { ...voucherData, createdBy: userId, updatedBy: userId };
 
+  // Normalize canteen_ids
+  if (data.canteenId || data.canteenIds || data.canteen_id) {
+    const rawCanteens = data.canteenIds || data.canteen_id || data.canteenId;
+    data.canteen_ids = Array.isArray(rawCanteens) ? rawCanteens : [rawCanteens];
+    delete data.canteenId;
+    delete data.canteenIds;
+    delete data.canteen_id;
+  } else if (data.canteen_ids && !Array.isArray(data.canteen_ids)) {
+    data.canteen_ids = [data.canteen_ids];
+  }
+
+  // Normalize categoryIds
+  if (data.categories) {
+    data.categoryIds = Array.isArray(data.categories) ? data.categories : [data.categories];
+    delete data.categories;
+  } else if (data.category_ids) {
+    data.categoryIds = Array.isArray(data.category_ids) ? data.category_ids : [data.category_ids];
+    delete data.category_ids;
+  } else if (data.categoryIds && !Array.isArray(data.categoryIds)) {
+    data.categoryIds = [data.categoryIds];
+  }
+
+  // Normalize productIds
+  if (data.products) {
+    data.productIds = Array.isArray(data.products) ? data.products : [data.products];
+    delete data.products;
+  } else if (data.product_ids) {
+    data.productIds = Array.isArray(data.product_ids) ? data.product_ids : [data.product_ids];
+    delete data.product_ids;
+  } else if (data.productIds && !Array.isArray(data.productIds)) {
+    data.productIds = [data.productIds];
+  }
+
   if (new Date(data.startDatetime) >= new Date(data.endDatetime)) {
     throw new AppError("End datetime must be after start datetime", 400);
   }
@@ -117,6 +150,39 @@ export const validateVoucherForApply = async (
 export const updateVoucher = async (id, updateData, userId) => {
   const voucher = await Voucher.findById(id);
   if (!voucher) throw new AppError("Voucher not found", 404);
+
+  // Normalize canteen_ids
+  if (updateData.canteenId || updateData.canteenIds || updateData.canteen_id) {
+    const rawCanteens = updateData.canteenIds || updateData.canteen_id || updateData.canteenId;
+    updateData.canteen_ids = Array.isArray(rawCanteens) ? rawCanteens : [rawCanteens];
+    delete updateData.canteenId;
+    delete updateData.canteenIds;
+    delete updateData.canteen_id;
+  } else if (updateData.canteen_ids && !Array.isArray(updateData.canteen_ids)) {
+    updateData.canteen_ids = [updateData.canteen_ids];
+  }
+
+  // Normalize categoryIds
+  if (updateData.categories) {
+    updateData.categoryIds = Array.isArray(updateData.categories) ? updateData.categories : [updateData.categories];
+    delete updateData.categories;
+  } else if (updateData.category_ids) {
+    updateData.categoryIds = Array.isArray(updateData.category_ids) ? updateData.category_ids : [updateData.category_ids];
+    delete updateData.category_ids;
+  } else if (updateData.categoryIds && !Array.isArray(updateData.categoryIds)) {
+    updateData.categoryIds = [updateData.categoryIds];
+  }
+
+  // Normalize productIds
+  if (updateData.products) {
+    updateData.productIds = Array.isArray(updateData.products) ? updateData.products : [updateData.products];
+    delete updateData.products;
+  } else if (updateData.product_ids) {
+    updateData.productIds = Array.isArray(updateData.product_ids) ? updateData.product_ids : [updateData.product_ids];
+    delete updateData.product_ids;
+  } else if (updateData.productIds && !Array.isArray(updateData.productIds)) {
+    updateData.productIds = [updateData.productIds];
+  }
 
   // Example subset of BR04 state-based update rule (Draft/Upcoming allows all, Active restricts fields)
   // Complete BR04 logic goes here or in a dedicated validator

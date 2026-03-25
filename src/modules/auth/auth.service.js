@@ -40,9 +40,8 @@ const ensureUserActiveForLogin = (user) => {
     throw new AppError("Tài khoản đã bị khóa", 403);
   }
 
-  if (user.status === "pending") {
-    throw new AppError("Tài khoản đang chờ kích hoạt", 403);
-  }
+  // NOTE: We no longer block "pending" status here, 
+  // because system users need to login to change their temporary password.
 };
 
 /**
@@ -135,7 +134,7 @@ export const verifyRegisterOTP = async (data) => {
   await createWelcomePromotionNotification(user._id);
 
   // Generate token
-  const token = generateToken({ id: user._id });
+  const token = generateToken({ id: user._id, tokenVersion: user.tokenVersion || 0 });
 
   // Remove password from output
   user.password = undefined;
@@ -332,7 +331,7 @@ export const register = async (userData) => {
   await createWelcomePromotionNotification(user._id);
 
   // Generate token
-  const token = generateToken({ id: user._id });
+  const token = generateToken({ id: user._id, tokenVersion: user.tokenVersion || 0 });
 
   // Remove password from output
   user.password = undefined;
@@ -353,8 +352,8 @@ export const login = async (credentials) => {
     throw new AppError("Please provide email and password", 400);
   }
 
-  // Find user and include password for comparison
-  const user = await User.findOne({ email }).select("+password");
+  // Find user and include password and tokenVersion for comparison
+  const user = await User.findOne({ email }).select("+password +tokenVersion");
 
   // Kiem tra user co ton tai khong
   if (!user) {
@@ -377,7 +376,7 @@ export const login = async (credentials) => {
   }
 
   // Generate token
-  const token = generateToken({ id: user._id });
+  const token = generateToken({ id: user._id, tokenVersion: user.tokenVersion || 0 });
 
   // Remove password from output
   user.password = undefined;
@@ -457,7 +456,7 @@ export const googleAuth = async (idToken) => {
   }
 
   // Check if user exists with this email
-  let user = await User.findOne({ email });
+  let user = await User.findOne({ email }).select("+tokenVersion");
 
   if (user) {
     ensureUserActiveForLogin(user);
@@ -495,7 +494,7 @@ export const googleAuth = async (idToken) => {
   }
 
   // Generate JWT token
-  const token = generateToken({ id: user._id });
+  const token = generateToken({ id: user._id, tokenVersion: user.tokenVersion || 0 });
 
   // Remove sensitive data
   user.password = undefined;
@@ -559,6 +558,11 @@ export const changePassword = async (userId, data) => {
   // Update password
   user.password = newPassword;
   user.forceChangePassword = false;
+  
+  if (user.status === "pending") {
+    user.status = "active";
+  }
+
   await user.save(); // This will trigger the pre-save hook to hash the password
 
   return {

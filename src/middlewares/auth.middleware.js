@@ -35,11 +35,18 @@ export const protect = catchAsync(async (req, res, next) => {
   // Verify token
   const decoded = verifyToken(token);
 
-  // Check if user still exists
-  const currentUser = await User.findById(decoded.id);
+  // Check if user still exists — query +tokenVersion cho revocation check
+  const currentUser = await User.findById(decoded.id).select('+tokenVersion');
   if (!currentUser) {
     return next(
       new AppError('The user belonging to this token no longer exists.', 401)
+    );
+  }
+
+  // Token versioning — nếu tokenVersion lệch → session đã bị revoke
+  if (decoded.tokenVersion !== undefined && decoded.tokenVersion !== currentUser.tokenVersion) {
+    return next(
+      new AppError('Session expired. Please login again.', 401)
     );
   }
 
@@ -52,7 +59,12 @@ export const protect = catchAsync(async (req, res, next) => {
   }
 
   if (currentUser.status === 'pending') {
-    return next(new AppError('Tài khoản đang chờ kích hoạt', 403));
+    const allowedPaths = ['/change-password', '/users/me', '/logout'];
+    const isAllowed = allowedPaths.some(path => req.originalUrl.includes(path));
+
+    if (!isAllowed) {
+      return next(new AppError('Tài khoản đang chờ kích hoạt. Vui lòng đổi mật khẩu để tiếp tục.', 403));
+    }
   }
 
   // Grant access to protected route
