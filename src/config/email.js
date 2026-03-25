@@ -121,4 +121,48 @@ export const sendPasswordResetOTP = async (email, otp) => {
   });
 };
 
+export const sendSystemUserPasswordEmail = async (email, fullName, tempPassword, isReissue = false) => {
+  const title = isReissue ? "Cấp lại mật khẩu tài khoản UniLife" : "Tài khoản UniLife đã tạo thành công";
+  const message = isReissue 
+    ? "Quản trị viên vừa cấp lại mật khẩu tạm thời cho tài khoản của bạn. Vui lòng sử dụng mật khẩu bên dưới để đăng nhập:"
+    : "Chào mừng bạn đến với UniLife! Tài khoản hệ thống của bạn đã được tạo thành công. Vui lòng sử dụng mật khẩu tạm thời bên dưới để đăng nhập lần đầu:";
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>${title}</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+        <h1 style="color: white; margin: 0;">UniLife</h1>
+        <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">${title}</p>
+      </div>
+      <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
+        <p>Xin chào <strong>${fullName}</strong>,</p>
+        <p>${message}</p>
+        <div style="background: #fff; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0; border: 2px dashed #4facfe;">
+          <span style="font-size: 28px; font-weight: bold; color: #4facfe; letter-spacing: 4px;">${tempPassword}</span>
+        </div>
+        <p style="color: #666; font-size: 14px;">⚠️ <strong>Lưu ý quan trọng:</strong></p>
+        <ul style="color: #666; font-size: 14px;">
+          <li>Mật khẩu này sẽ tự động <strong>hết hạn sau 24 giờ</strong>.</li>
+          <li>Hệ thống sẽ yêu cầu bạn <strong>đổi mật khẩu mới</strong> ngay trong lần đăng nhập đầu tiên.</li>
+        </ul>
+        <p style="color: #666; font-size: 14px;">Nếu có bất kỳ thắc mắc nào, vui lòng liên hệ bộ phận hỗ trợ kỹ thuật.</p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="color: #999; font-size: 12px; text-align: center;">© 2026 UniLife. All rights reserved.</p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: `[UniLife] ${title}`,
+    html,
+  });
+};
+
 export default getTransporter;
