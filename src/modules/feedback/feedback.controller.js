@@ -16,12 +16,10 @@ export const getAllFeedbacks = catchAsync(async (req, res) => {
   // thì chỉ lấy feedback của canteen đó
   const canteenIdFromHeader =
     req?.user?.canteenId;
-  console.log("🚀 ~ canteenIdFromHeader:", canteenIdFromHeader)
 
   const query = { ...req.query };
-  if (canteenIdFromHeader) {
-    query.canteenId = canteenIdFromHeader;
-  }
+  query.canteenId = canteenIdFromHeader || "__NO_MATCH__";
+
 
   // Map fromDate -> createdAt[gte] cho queryHelper (lọc theo ngày tạo)
   if (query.fromDate) {

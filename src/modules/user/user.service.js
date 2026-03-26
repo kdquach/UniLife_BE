@@ -65,7 +65,7 @@ const ensureManagerScope = async (currentUser) => {
   }
 
   if (!currentUser?.canteenId) {
-    throw new AppError("Tài khoản manager chưa được gán canteen", 400);
+    throw new AppError("Tài khoản manager chưa có canteen quản lí", 400);
   }
 
   const canteen = await Canteen.findById(currentUser.canteenId).select("_id campusId status");
