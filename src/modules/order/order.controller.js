@@ -210,12 +210,13 @@ export const updatePaymentStatus = catchAsync(async (req, res) => {
  * @access Private
  */
 export const cancelOrder = catchAsync(async (req, res) => {
-  const order = await orderService.cancelOrder(req.params.id, req.user._id);
+  const result = await orderService.cancelOrder(req.params.id, req.user._id);
 
   res.status(200).json({
     status: "success",
     data: {
-      order,
+      order: result?.order || result,
+      user: result?.user || null,
     },
   });
 });
