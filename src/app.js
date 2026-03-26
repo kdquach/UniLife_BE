@@ -45,6 +45,7 @@ import auditLogRoutes from "./modules/auditLog/auditLog.routes.js";
 import scheduleRoutes from "./modules/schedule/schedule.routes.js";
 import staffShiftRoutes from "./modules/staffShift/staffShift.routes.js";
 import shiftChangeRoutes from "./modules/shiftChange/shiftChange.routes.js";
+import dashboardRoutes from "./modules/dashboard/dashboard.routes.js";
 
 // ============ Import Error Handler ============
 import errorHandler from "./middlewares/error.middleware.js";
@@ -125,6 +126,7 @@ app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/schedules", scheduleRoutes);
 app.use("/api/staff-shifts", staffShiftRoutes);
 app.use("/api/shift-change-requests", shiftChangeRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 // ============ Error Handling ============
 
