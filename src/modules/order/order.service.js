@@ -10,12 +10,11 @@ import { checkMenuAvailability } from '../menu/menu.service.js';
 import {
   deductProductInventory,
   restoreProductInventory,
-} from '../product/inventory/product.inventory.service.js';
-import { verifyQRToken } from '../../utils/qrToken.js';
-import { createNotification } from '../notification/notification.service.js';
-import { notifyCanteen, notifyUser } from '../../websocket/notify.js';
-
-const ORDERABLE_PRODUCT_STATUSES = ['available', 'unavailable'];
+} from "../product/inventory/product.inventory.service.js";
+import { verifyQRToken } from "../../utils/qrToken.js";
+import { createNotification } from "../notification/notification.service.js";
+import { notifyCanteen, notifyUser } from "../../websocket/notify.js";
+import User from "../user/user.model.js";
 
 const ORDER_STATUS_LABELS = {
   pending: 'Chờ xác nhận',
@@ -25,6 +24,8 @@ const ORDER_STATUS_LABELS = {
   completed: 'Hoàn thành',
   cancelled: 'Đã hủy',
 };
+
+const ALLOWED_ORDER_STATUSES = Object.keys(ORDER_STATUS_LABELS);
 
 const buildOrderStatusNotificationContent = (status, orderNumber) => {
   const normalizedOrderNumber = orderNumber || '---';
@@ -663,6 +664,10 @@ export const updateOrderStatus = async (
   userRole = null,
   staffCanteenId = null
 ) => {
+  if (!status || !ALLOWED_ORDER_STATUSES.includes(status)) {
+    throw new AppError("Trạng thái đơn hàng không hợp lệ", 400);
+  }
+
   const order = await Order.findById(id);
 
   if (!order) {
@@ -772,9 +777,9 @@ export const cancelOrder = async (id, userId) => {
     throw new AppError('Order not found', 404);
   }
 
-  // Only allow cancellation for pending orders
-  if (!['pending', 'confirmed'].includes(order.status)) {
-    throw new AppError('Cannot cancel order in current status', 400);
+  // Only allow cancellation when order is waiting for confirmation
+  if (order.status !== "pending") {
+    throw new AppError("Chỉ có thể hủy đơn khi đang chờ xác nhận", 400);
   }
 
   // Check if user owns the order or is staff/admin
@@ -782,44 +787,93 @@ export const cancelOrder = async (id, userId) => {
     throw new AppError('You are not authorized to cancel this order', 403);
   }
 
+  const previousStatus = order.status;
+
   // Hoàn lại tồn kho
   await handleInventoryRestoreForOrder(order.items);
 
-  // BR10: Hoàn voucher khi cancel trước khi hoàn thành thanh toán
+  // BR10: Hoàn voucher khi hủy đơn (pending)
   if (order.voucherId) {
-    const isPaid = order.payment && order.payment.status === 'paid';
-    if (!isPaid) {
-      // Refund: giảm usedCount và cập nhật VoucherUsageHistory
-      const { Voucher } = await import('../voucher/voucher.model.js');
-      const { VoucherUsageHistory } =
-        await import('../voucher/voucherHistory.model.js');
 
-      await Voucher.findByIdAndUpdate(order.voucherId, {
-        $inc: { usedCount: -1 },
+ const { Voucher } = await import("../voucher/voucher.model.js");
+const { VoucherUsageHistory } =
+  await import("../voucher/voucherHistory.model.js");
+
+// Check payment status
+const isPaid = order.payment?.status === "completed";
+
+// Handle voucher logic
+if (order.voucherId) {
+  if (!isPaid) {
+    await Voucher.findByIdAndUpdate(order.voucherId, {
+      $inc: { usedCount: -1 },
+    });
+
+    await VoucherUsageHistory.findOneAndUpdate(
+      { orderId: order._id, voucherId: order.voucherId },
+      {
+        orderStatus: "Cancelled",
+        voucherStatus: "Refunded",
+      }
+    );
+  } else {
+    await VoucherUsageHistory.findOneAndUpdate(
+      { orderId: order._id, voucherId: order.voucherId },
+      {
+        orderStatus: "Cancelled",
+      }
+    );
+  }
+}
+
+order.status = "cancelled";
+
+// Refund tiền
+let updatedUser = null;
+const refundAmount = isPaid ? Number(order.totalAmount || 0) : 0;
+
+if (refundAmount > 0) {
+  updatedUser = await User.findByIdAndUpdate(
+    order.userId,
+    { $inc: { balance: refundAmount } },
+    { new: true }
+  );
+}
+
+// Payment update
+if (order.payment) {
+  order.payment.status = isPaid ? "refunded" : "cancelled";
+  order.payment.refundAmount = refundAmount;
+  order.payment.refundedAt = isPaid ? new Date() : null;
+}
+  await order.save();
+
+  // Emit WebSocket event for staff dashboard real-time sync
+  if (order.canteenId) {
+    try {
+      const canteenId = order.canteenId._id
+        ? order.canteenId._id.toString()
+        : order.canteenId.toString();
+      notifyCanteen(canteenId, {
+        id: `order-${order._id}-${Date.now()}`,
+        type: "order",
+        title: `Đơn #${order.orderNumber || "---"} đã bị hủy`,
+        content: `Khách hàng đã hủy đơn hàng.`,
+        isRead: false,
+        createdAt: new Date().toISOString(),
+        meta: {
+          orderId: String(order._id),
+          orderNumber: order.orderNumber,
+          status: order.status,
+          previousStatus,
+        },
       });
-
-      await VoucherUsageHistory.findOneAndUpdate(
-        { orderId: order._id, voucherId: order.voucherId },
-        {
-          orderStatus: 'Cancelled',
-          voucherStatus: 'Refunded',
-        }
-      );
-    } else {
-      // Đã thanh toán: voucher không hoàn lại, chỉ cập nhật orderStatus
-      const { VoucherUsageHistory } =
-        await import('../voucher/voucherHistory.model.js');
-      await VoucherUsageHistory.findOneAndUpdate(
-        { orderId: order._id, voucherId: order.voucherId },
-        { orderStatus: 'Cancelled' }
-      );
+    } catch (error) {
+      console.error("WebSocket notification failed:", error.message);
     }
   }
 
-  order.status = 'cancelled';
-  await order.save();
-
-  return order;
+  return { order, user: updatedUser };
 };
 
 /**

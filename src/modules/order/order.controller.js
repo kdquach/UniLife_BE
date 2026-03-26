@@ -172,6 +172,13 @@ export const getOrderByQRCode = catchAsync(async (req, res) => {
  * @access Private (Staff, Admin)
  */
 export const updateOrderStatus = catchAsync(async (req, res) => {
+  if (!req.body?.status) {
+    return res.status(400).json({
+      status: "fail",
+      message: "Thiếu trạng thái đơn hàng (status)",
+    });
+  }
+
   const order = await orderService.updateOrderStatus(
     req.params.id,
     req.body.status,
@@ -210,12 +217,15 @@ export const updatePaymentStatus = catchAsync(async (req, res) => {
  * @access Private
  */
 export const cancelOrder = catchAsync(async (req, res) => {
-  const order = await orderService.cancelOrder(req.params.id, req.user._id);
+  const result = await orderService.cancelOrder(req.params.id, req.user._id);
+  const order = result?.order || result;
+  const user = result?.user || null;
 
   res.status(200).json({
     status: "success",
     data: {
       order,
+      user,
     },
   });
 });
