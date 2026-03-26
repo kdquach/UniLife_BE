@@ -1,6 +1,8 @@
-import { Cart } from "./cart.model.js";
-import Product from "../product/product.model.js";
-import AppError from "../../utils/AppError.js";
+import { Cart } from './cart.model.js';
+import Product from '../product/product.model.js';
+import AppError from '../../utils/AppError.js';
+
+const ORDERABLE_PRODUCT_STATUSES = ['available', 'unavailable'];
 
 export const getCartByUser = async (userId, canteenId) => {
   // 1. Nếu chưa chọn canteen → trả giỏ rỗng
@@ -14,8 +16,8 @@ export const getCartByUser = async (userId, canteenId) => {
 
   // 2. Có canteenId → tìm cart theo user + canteen
   let cart = await Cart.findOne({ userId, canteenId })
-    .populate("canteenId", "name location")
-    .populate("items.productId", "name price image status");
+    .populate('canteenId', 'name location')
+    .populate('items.productId', 'name price image status');
 
   // 3. Nếu chưa có cart → tạo mới cho canteen đó
   if (!cart) {
@@ -31,9 +33,9 @@ export const getCartByUser = async (userId, canteenId) => {
 
 export const addItem = async (userId, productId, quantity = 1) => {
   const product = await Product.findById(productId);
-  if (!product) throw new AppError("Product not found", 404);
-  if (product.status !== "available")
-    throw new AppError("Product is not available", 400);
+  if (!product) throw new AppError('Product not found', 404);
+  if (!ORDERABLE_PRODUCT_STATUSES.includes(product.status))
+    throw new AppError('Product is not available', 400);
 
   const canteenId = product.canteenId;
 
@@ -46,9 +48,7 @@ export const addItem = async (userId, productId, quantity = 1) => {
       items: [{ productId, quantity }],
     });
   } else {
-    const item = cart.items.find(
-      (i) => i.productId.toString() === productId
-    );
+    const item = cart.items.find((i) => i.productId.toString() === productId);
 
     if (item) {
       item.quantity += quantity;
@@ -61,10 +61,9 @@ export const addItem = async (userId, productId, quantity = 1) => {
   await cart.save();
 
   return Cart.findById(cart._id)
-    .populate("canteenId", "name location")
-    .populate("items.productId", "name price image status");
+    .populate('canteenId', 'name location')
+    .populate('items.productId', 'name price image status');
 };
-
 
 export const updateCartById = async (
   userId,
@@ -73,18 +72,14 @@ export const updateCartById = async (
   quantity
 ) => {
   const cart = await Cart.findOne({ userId, canteenId });
-  if (!cart) throw new AppError("Cart not found", 404);
+  if (!cart) throw new AppError('Cart not found', 404);
 
-  const item = cart.items.find(
-    (i) => i.productId.toString() === productId
-  );
+  const item = cart.items.find((i) => i.productId.toString() === productId);
 
-  if (!item) throw new AppError("Item not found in cart", 404);
+  if (!item) throw new AppError('Item not found in cart', 404);
 
   if (quantity <= 0) {
-    cart.items = cart.items.filter(
-      (i) => i.productId.toString() !== productId
-    );
+    cart.items = cart.items.filter((i) => i.productId.toString() !== productId);
   } else {
     item.quantity = quantity;
   }
@@ -93,25 +88,22 @@ export const updateCartById = async (
   await cart.save();
 
   return Cart.findById(cart._id)
-    .populate("canteenId", "name location")
-    .populate("items.productId", "name price image status");
+    .populate('canteenId', 'name location')
+    .populate('items.productId', 'name price image status');
 };
 export const removeItem = async (userId, canteenId, productId) => {
   const cart = await Cart.findOne({ userId, canteenId });
-  if (!cart) throw new AppError("Cart not found", 404);
+  if (!cart) throw new AppError('Cart not found', 404);
 
-  cart.items = cart.items.filter(
-    (i) => i.productId.toString() !== productId
-  );
+  cart.items = cart.items.filter((i) => i.productId.toString() !== productId);
 
   await cart.calculateTotal();
   await cart.save();
 
   return Cart.findById(cart._id)
-    .populate("canteenId", "name location")
-    .populate("items.productId", "name price image status");
+    .populate('canteenId', 'name location')
+    .populate('items.productId', 'name price image status');
 };
-
 
 export const getCartTotal = async (userId, canteenId) => {
   // 1. Chưa chọn canteen → giỏ rỗng
@@ -130,10 +122,7 @@ export const getCartTotal = async (userId, canteenId) => {
   await cart.calculateTotal();
   await cart.save();
 
-  const itemCount = cart.items.reduce(
-    (sum, item) => sum + item.quantity,
-    0
-  );
+  const itemCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
 
   return {
     itemCount,
@@ -141,10 +130,9 @@ export const getCartTotal = async (userId, canteenId) => {
   };
 };
 
-
 export const clearCart = async (userId, canteenId) => {
   const cart = await Cart.findOne({ userId, canteenId });
-  if (!cart) throw new AppError("Cart not found", 404);
+  if (!cart) throw new AppError('Cart not found', 404);
 
   cart.items = [];
   cart.totalPrice = 0;
