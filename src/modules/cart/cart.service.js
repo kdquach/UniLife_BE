@@ -189,7 +189,14 @@ export const getCartTotal = async (userId, canteenId) => {
 
 export const clearCart = async (userId, canteenId) => {
   const cart = await Cart.findOne({ userId, canteenId });
-  if (!cart) throw new AppError('Cart not found', 404);
+  if (!cart) {
+    return {
+      userId,
+      canteenId: canteenId || null,
+      items: [],
+      totalPrice: 0,
+    };
+  }
 
   cart.items = [];
   cart.totalPrice = 0;

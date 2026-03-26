@@ -5,6 +5,7 @@ import Canteen from '../canteen/canteen.model.js';
 import AppError from '../../utils/AppError.js';
 import * as voucherService from '../voucher/voucher.service.js';
 import { Cart } from '../cart/cart.model.js';
+import User from '../user/user.model.js';
 import { filterPresets, paginatedQuery } from '../../utils/queryHelper.js';
 import { checkMenuAvailability } from '../menu/menu.service.js';
 import {
@@ -351,6 +352,16 @@ export const createOrder = async (orderData, userId) => {
       await session.commitTransaction();
       session.endSession();
 
+      // Best-effort: clear cart after order created
+      try {
+        await Cart.updateOne(
+          { userId, canteenId: canteenObjectId },
+          { $set: { items: [], totalPrice: 0 } }
+        );
+      } catch (error) {
+        console.error('Failed to clear cart after creating order:', error.message);
+      }
+
       await notifyOrderCreatedToUser({ order });
 
       return order;
@@ -376,6 +387,16 @@ export const createOrder = async (orderData, userId) => {
       payment: payment || { method: 'cash', status: 'pending' },
       note,
     });
+
+    // Best-effort: clear cart after order created
+    try {
+      await Cart.updateOne(
+        { userId, canteenId: canteenObjectId },
+        { $set: { items: [], totalPrice: 0 } }
+      );
+    } catch (error) {
+      console.error('Failed to clear cart after creating order:', error.message);
+    }
 
     await notifyOrderCreatedToUser({ order });
 
@@ -772,9 +793,9 @@ export const cancelOrder = async (id, userId) => {
     throw new AppError('Order not found', 404);
   }
 
-  // Only allow cancellation for pending orders
-  if (!['pending', 'confirmed'].includes(order.status)) {
-    throw new AppError('Cannot cancel order in current status', 400);
+  // Only allow cancellation when order is still pending ("Chờ xác nhận")
+  if (order.status !== 'pending') {
+    throw new AppError('Chỉ có thể hủy đơn khi đang chờ xác nhận', 400);
   }
 
   // Check if user owns the order or is staff/admin
@@ -785,10 +806,33 @@ export const cancelOrder = async (id, userId) => {
   // Hoàn lại tồn kho
   await handleInventoryRestoreForOrder(order.items);
 
+  const paidStatuses = ['completed', 'paid']; // 'paid' for backward compatibility
+  const wasPaid = paidStatuses.includes(order.payment?.status);
+
+  // Refund money back to user's wallet balance (only if already paid)
+  let updatedUser = null;
+  if (wasPaid && order.payment?.status !== 'refunded') {
+    updatedUser = await User.findByIdAndUpdate(
+      order.userId,
+      { $inc: { balance: Number(order.totalAmount || 0) } },
+      { new: true }
+    );
+
+    order.payment.status = 'refunded';
+    order.payment.refundAmount = Number(order.totalAmount || 0);
+    order.payment.refundedAt = new Date();
+  } else {
+    // Still mark payment as refunded on cancellation to reflect final state
+    if (order.payment) {
+      order.payment.status = 'refunded';
+      order.payment.refundedAt = order.payment.refundedAt || new Date();
+      order.payment.refundAmount = order.payment.refundAmount || 0;
+    }
+  }
+
   // BR10: Hoàn voucher khi cancel trước khi hoàn thành thanh toán
   if (order.voucherId) {
-    const isPaid = order.payment && order.payment.status === 'paid';
-    if (!isPaid) {
+    if (!wasPaid) {
       // Refund: giảm usedCount và cập nhật VoucherUsageHistory
       const { Voucher } = await import('../voucher/voucher.model.js');
       const { VoucherUsageHistory } =
@@ -819,7 +863,7 @@ export const cancelOrder = async (id, userId) => {
   order.status = 'cancelled';
   await order.save();
 
-  return order;
+  return { order, user: updatedUser };
 };
 
 /**
