@@ -14,6 +14,7 @@ import {
 } from '../product/inventory/product.inventory.service.js';
 import { verifyQRToken } from '../../utils/qrToken.js';
 import { createNotification } from '../notification/notification.service.js';
+import { Notification } from '../notification/notification.model.js';
 import { notifyCanteen, notifyUser } from '../../websocket/notify.js';
 
 const ORDERABLE_PRODUCT_STATUSES = ['available', 'unavailable'];
@@ -210,15 +211,33 @@ const handleInventoryRestoreForOrder = async (orderItems) => {
 
 // Get order history by user
 export const getMyOrders = async (userId, queryParams) => {
-  const baseFilter = { userId };
+  // Only show orders paid by cash OR MoMo orders that are already paid.
+  // This hides pending/failed MoMo orders from customer order history.
+  const baseFilter = {
+    $and: [
+      { userId },
+      {
+        $or: [
+          { 'payment.method': 'cash' },
+          {
+            'payment.method': 'momo',
+            'payment.status': { $in: ['completed', 'refunded'] },
+          },
+        ],
+      },
+    ],
+  };
 
   const options = {
     ...filterPresets.order,
     baseFilter,
     populate: [{ path: 'canteenId', select: 'name location image' }],
+    defaultSort: '-createdAt',
   };
 
-  const result = await paginatedQuery(Order, queryParams, options);
+  // Always sort newest first for order history, across all statuses.
+  const normalizedQueryParams = { ...(queryParams || {}), sort: '-createdAt' };
+  const result = await paginatedQuery(Order, normalizedQueryParams, options);
 
   if (result.data && result.data.length > 0) {
     // Bước 1: Lọc bỏ đơn lỗi Canteen
@@ -256,6 +275,12 @@ export const getMyOrders = async (userId, queryParams) => {
  */
 export const createOrder = async (orderData, userId) => {
   const { canteenId, items, payment, note, summary, voucherCode } = orderData;
+
+  const paymentMethod = payment?.method || 'cash';
+  const paymentStatus = payment?.status || 'pending';
+  const shouldClearCartAfterCreate = !(
+    paymentMethod === 'momo' && paymentStatus === 'pending'
+  );
 
   // Validate and get product prices
   const orderItems = [];
@@ -353,13 +378,15 @@ export const createOrder = async (orderData, userId) => {
       session.endSession();
 
       // Best-effort: clear cart after order created
-      try {
-        await Cart.updateOne(
-          { userId, canteenId: canteenObjectId },
-          { $set: { items: [], totalPrice: 0 } }
-        );
-      } catch (error) {
-        console.error('Failed to clear cart after creating order:', error.message);
+      if (shouldClearCartAfterCreate) {
+        try {
+          await Cart.updateOne(
+            { userId, canteenId: canteenObjectId },
+            { $set: { items: [], totalPrice: 0 } }
+          );
+        } catch (error) {
+          console.error('Failed to clear cart after creating order:', error.message);
+        }
       }
 
       await notifyOrderCreatedToUser({ order });
@@ -389,13 +416,15 @@ export const createOrder = async (orderData, userId) => {
     });
 
     // Best-effort: clear cart after order created
-    try {
-      await Cart.updateOne(
-        { userId, canteenId: canteenObjectId },
-        { $set: { items: [], totalPrice: 0 } }
-      );
-    } catch (error) {
-      console.error('Failed to clear cart after creating order:', error.message);
+    if (shouldClearCartAfterCreate) {
+      try {
+        await Cart.updateOne(
+          { userId, canteenId: canteenObjectId },
+          { $set: { items: [], totalPrice: 0 } }
+        );
+      } catch (error) {
+        console.error('Failed to clear cart after creating order:', error.message);
+      }
     }
 
     await notifyOrderCreatedToUser({ order });
@@ -864,6 +893,79 @@ export const cancelOrder = async (id, userId) => {
   await order.save();
 
   return { order, user: updatedUser };
+};
+
+/**
+ * System cancel: used for payment failures (e.g., MoMo user cancels / not paid).
+ * - Restores inventory
+ * - Rolls back voucher usage (if any)
+ * - Marks order as cancelled + payment failed
+ * NOTE: Does NOT refund wallet balance (because payment wasn't completed).
+ */
+export const cancelUnpaidOrderForPaymentFailure = async (
+  orderId,
+  { reason = 'Payment failed or cancelled' } = {},
+) => {
+  const order = await Order.findById(orderId);
+
+  if (!order) {
+    throw new AppError('Order not found', 404);
+  }
+
+  // Idempotency / safety: never delete a paid order.
+  if (order.payment?.status === 'completed') {
+    return order;
+  }
+  if (order.status === 'cancelled') {
+    return order;
+  }
+
+  // Do not delete completed orders (business safety).
+  if (order.status === 'completed') {
+    return order;
+  }
+
+  // Only auto-cancel for MoMo unpaid flows.
+  if (order.payment?.method !== 'momo') {
+    return order;
+  }
+
+  // Restore inventory since order was created with inventory deducted.
+  await handleInventoryRestoreForOrder(order.items);
+
+  // Rollback voucher usage for unpaid cancellation
+  if (order.voucherId) {
+    const { Voucher } = await import('../voucher/voucher.model.js');
+    const { VoucherUsageHistory } = await import(
+      '../voucher/voucherHistory.model.js'
+    );
+
+    await Voucher.findByIdAndUpdate(order.voucherId, {
+      $inc: { usedCount: -1 },
+    });
+
+    await VoucherUsageHistory.findOneAndUpdate(
+      { orderId: order._id, voucherId: order.voucherId },
+      {
+        orderStatus: 'Cancelled',
+        voucherStatus: 'Refunded',
+      },
+    );
+  }
+
+  // Hard delete the order after rolling back side-effects.
+  // (Keep orderId references in history/notifications as-is.)
+  try {
+    await Notification.deleteMany({ 'metadata.orderId': order._id });
+  } catch (e) {
+    console.error(
+      'Failed to cleanup notifications for deleted order:',
+      e?.message || e,
+    );
+  }
+
+  await Order.deleteOne({ _id: order._id });
+  return { deleted: true, orderId: String(order._id), reason };
 };
 
 /**
