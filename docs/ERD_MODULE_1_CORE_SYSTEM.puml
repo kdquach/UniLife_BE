@@ -1,7 +1,8 @@
 @startuml ERD_MODULE_1_CORE_SYSTEM
 ' =====================================================
 ' Module 1: Core System - Hệ thống cơ sở
-' Bao gồm: campus, canteen, user, token, otp, audit_log
+' Bao gồm: campus, canteen, user, token, otp, audit_log,
+'          role, permission, role_permission, user_role
 ' =====================================================
 
 skinparam linetype ortho
@@ -12,17 +13,16 @@ skinparam class {
     ArrowColor #A80036
 }
 
-title Module 1: Core System - Hệ thống cơ sở\n(campus, canteen, user, token, otp, audit_log)
 
 ' =====================================================
 ' BẢNG CAMPUS
 ' =====================================================
 entity "campus" as campus {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * name : VARCHAR(255) <<UNIQUE>>
-    * code : VARCHAR(10) <<UNIQUE>>
-    * address : TEXT
+    name : VARCHAR(255) <<UNIQUE>>
+    code : VARCHAR(10) <<UNIQUE>>
+    address : TEXT
     status : ENUM
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
@@ -32,11 +32,11 @@ entity "campus" as campus {
 ' BẢNG CANTEEN
 ' =====================================================
 entity "canteen" as canteen {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * campus_id : CHAR(36) <<FK>>
-    * name : VARCHAR(100)
-    * location : VARCHAR(255)
+    campus_id : CHAR(36) <<FK>>
+    name : VARCHAR(100)
+    location : VARCHAR(255)
     status : ENUM
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
@@ -46,11 +46,11 @@ entity "canteen" as canteen {
 ' BẢNG USER
 ' =====================================================
 entity "user" as user {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * email : VARCHAR(255) <<UNIQUE>>
+    email : VARCHAR(255) <<UNIQUE>>
     password : VARCHAR(255)
-    * full_name : VARCHAR(100)
+    full_name : VARCHAR(100)
     phone : VARCHAR(15)
     gender : ENUM
     avatar : VARCHAR(500)
@@ -74,12 +74,12 @@ entity "user" as user {
 ' BẢNG TOKEN
 ' =====================================================
 entity "token" as token {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * user_id : CHAR(36) <<FK>>
-    * token : VARCHAR(500) <<UNIQUE>>
-    * type : ENUM
-    * expires_at : TIMESTAMP
+    user_id : CHAR(36) <<FK>>
+    token : VARCHAR(500) <<UNIQUE>>
+    type : ENUM
+    expires_at : TIMESTAMP
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
 }
@@ -88,12 +88,12 @@ entity "token" as token {
 ' BẢNG OTP
 ' =====================================================
 entity "otp" as otp {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * email : VARCHAR(255)
-    * otp : VARCHAR(10)
-    * type : ENUM
-    * expires_at : TIMESTAMP
+    email : VARCHAR(255)
+    otp : VARCHAR(10)
+    type : ENUM
+    expires_at : TIMESTAMP
     verified : BOOLEAN
     attempts : INT
     created_at : TIMESTAMP
@@ -104,17 +104,69 @@ entity "otp" as otp {
 ' BẢNG AUDIT_LOG
 ' =====================================================
 entity "audit_log" as audit_log {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * user_id : CHAR(36) <<FK>>
-    * action : VARCHAR(100)
-    * entity_type : VARCHAR(50)
+    user_id : CHAR(36) <<FK>>
+    action : VARCHAR(100)
+    entity_type : VARCHAR(50)
     entity_id : CHAR(36)
     old_data : JSON
     new_data : JSON
     ip_address : VARCHAR(45)
     user_agent : TEXT
     created_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG ROLE
+' =====================================================
+entity "role" as role {
+    **id** : CHAR(36) <<PK>>
+    --
+    role_name : VARCHAR(50) <<UNIQUE>>
+    description : VARCHAR(500)
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG PERMISSION
+' =====================================================
+entity "permission" as permission {
+    **id** : CHAR(36) <<PK>>
+    --
+    code : VARCHAR(100) <<UNIQUE>>
+    description : VARCHAR(500)
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG ROLE_PERMISSION (Bảng trung gian N-M)
+' =====================================================
+entity "role_permission" as role_permission {
+    **id** : CHAR(36) <<PK>>
+    --
+    role_id : CHAR(36) <<FK>>
+    permission_id : CHAR(36) <<FK>>
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+    ..
+    <<UNIQUE(role_id, permission_id)>>
+}
+
+' =====================================================
+' BẢNG USER_ROLE (Bảng trung gian N-M)
+' =====================================================
+entity "user_role" as user_role {
+    **id** : CHAR(36) <<PK>>
+    --
+    user_id : CHAR(36) <<FK>>
+    role_id : CHAR(36) <<FK>>
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+    ..
+    <<UNIQUE(user_id, role_id)>>
 }
 
 ' =====================================================
@@ -126,5 +178,9 @@ campus ||--o{ user : "1 - N"
 canteen ||--o{ user : "1 - N"
 user ||--o{ token : "1 - N"
 user ||--o{ audit_log : "1 - N"
+role ||--o{ role_permission : "1 - N"
+permission ||--o{ role_permission : "1 - N"
+user ||--o{ user_role : "1 - N"
+role ||--o{ user_role : "1 - N"
 
 @enduml

@@ -1,0 +1,78 @@
+@startuml Review Registration Sequence Diagram
+title UC-CG02 - Review Canteen Registration
+
+actor "Admin" as User
+participant "Canteen\nGovernance Page" as Frontend
+participant ":canteenRoutes" as Routes
+participant "Audit Log\nMiddleware" as Audit
+participant ":canteenController" as Controller
+participant ":canteenService" as Service
+participant "Canteen\nModel" as CanteenModel
+participant "User\nModel" as UserModel
+database "MongoDB" as DB
+
+User -> Frontend: 1. Click "Approve" or "Reject"
+Frontend -> Routes: 2. PATCH /api/canteens/:id/review\n(Bearer Token, decision)
+
+ref over Routes
+Verify JWT Token and Admin Role
+end ref
+Routes -> Routes: 3. Check authentication/authorization result
+
+opt [Authentication or authorization failed]
+  Routes --> Frontend: 4. JSON error response (401/403)
+  Frontend --> User: 5. Show error
+end
+
+Routes -> Audit: 6. auditLogger("UPDATE", "Canteen", "Review Canteen Registration")
+Audit --> Routes: 7. Continue request pipeline
+
+Routes -> Controller: 8. reviewCanteenRegistration(req, res)
+Controller -> Controller: 9. Validate decision in {approve, reject}
+
+opt [Invalid decision]
+  Controller --> Routes: 10. throw AppError(400)
+  Routes --> Frontend: 11. JSON error response (400)
+  Frontend --> User: 12. Show validation error
+end
+
+Controller -> Service: 13. reviewCanteenRegistration(id, decision, reviewerId)
+Service -> CanteenModel: 14. findById(id)
+CanteenModel -> DB: 15. Query canteen by id
+DB --> CanteenModel: 16. Canteen or null
+CanteenModel --> Service: 17. Query result
+
+opt [Canteen not found]
+  Service --> Controller: 18. throw AppError("Canteen not found", 404)
+  Controller --> Routes: 19. JSON error
+  Routes --> Frontend: 20. JSON error response (404)
+  Frontend --> User: 21. Show error
+end
+
+Service -> Service: 22. Validate canteen status is pending
+opt [Status is not pending]
+  Service --> Controller: 23. throw AppError(400)
+  Controller --> Routes: 24. JSON error
+  Routes --> Frontend: 25. JSON error response (400)
+  Frontend --> User: 26. Show error
+end
+
+Service -> Service: 27. Map decision to status\napprove => active, reject => inactive
+Service -> CanteenModel: 28. canteen.save({ validateBeforeSave: true })
+CanteenModel -> DB: 29. Persist new canteen status
+DB --> CanteenModel: 30. Updated canteen
+
+alt [Decision = reject]
+  Service -> UserModel: 31. updateMany({ canteenId, role: "manager" }, { status: "inactive" })
+  UserModel -> DB: 32. Update linked manager accounts
+  DB --> UserModel: 33. Update result
+end
+
+Service --> Controller: 34. { canteen, reviewedBy }
+Controller --> Routes: 35. HTTP 200
+Routes --> Frontend: 36. JSON response\n{ status, message, data: { canteen, reviewedBy } }
+
+Frontend -> Frontend: 37. Reload pending/active canteen lists
+Frontend --> User: 38. Show success message
+
+@enduml

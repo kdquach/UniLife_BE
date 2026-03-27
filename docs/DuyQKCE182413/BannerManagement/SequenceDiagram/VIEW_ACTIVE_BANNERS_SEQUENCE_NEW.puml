@@ -1,0 +1,31 @@
+@startuml View Active Banners Sequence Diagram
+title UC-BN00 - View List Banners (Client/Public)
+
+actor "Customer" as User
+participant "Home/Menu Page" as Frontend
+participant ":bannerRoutes" as Routes
+participant ":bannerController" as Controller
+participant ":bannerService" as Service
+participant "Banner\nModel" as Model
+database "MongoDB" as DB
+
+User -> Frontend: 1. Truy cập Home/Menu theo canteen đã chọn
+Frontend -> Routes: 2. GET /api/banners/active?canteenId=...\n(Không cần token)
+
+Routes -> Controller: 3. getActiveBanners(req, res)
+Controller -> Service: 4. getActiveBanners(canteenId)
+
+Service -> Service: 5. Build filter\n(isActive=true + điều kiện thời gian hiệu lực)
+Service -> Model: 6. find(filter).populate("canteenId").sort({order:1})
+Model -> DB: 7. Query banners active
+DB --> Model: 8. Danh sách banners
+Model --> Service: 9. Banners array
+Service --> Controller: 10. Return banners
+
+Controller --> Routes: 11. HTTP 200
+Routes --> Frontend: 12. JSON Response\n{ status: "success", results, data: { banners } }
+
+Frontend -> Frontend: 13. Render hero/slider banner
+Frontend --> User: 14. Hiển thị banner đang hoạt động
+
+@enduml

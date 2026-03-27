@@ -1,0 +1,93 @@
+@startuml Canteen Governance Class Diagram
+title Canteen Governance Module - Class Diagram
+
+skinparam classAttributeIconSize 0
+hide circle
+
+class CanteenRoutes {
+  - router: Router
+  --
+  + GET /api/canteens
+  + PATCH /api/canteens/:id/review
+}
+
+class CanteenController {
+  --
+  + getAllCanteens(req, res): Promise<void>
+  + reviewCanteenRegistration(req, res): Promise<void>
+}
+
+class CanteenService {
+  - Canteen: Model
+  - User: Model
+  - AppError: ErrorClass
+  --
+  + getAllCanteens(query): Promise<Canteen[]>
+  + reviewCanteenRegistration(id, decision, reviewedBy): Promise<{canteen, reviewedBy}>
+}
+
+class CanteenModel {
+  - _id: ObjectId
+  - name: String
+  - location: String
+  - status: String
+  - campusId: ObjectId
+  - offDates: String[]
+  - openingTime: String
+  - closingTime: String
+  - createdAt: Date
+  - updatedAt: Date
+  --
+  + find(filter): Promise<CanteenDocument[]>
+  + findById(id): Promise<CanteenDocument|null>
+  + save(options): Promise<CanteenDocument>
+}
+
+class UserModel {
+  --
+  + updateMany(filter, update): Promise<UpdateResult>
+}
+
+class AuthMiddleware {
+  --
+  + protect(req, res, next): Promise<void>
+  + restrictTo(...roles): Function
+}
+
+class AuditLogMiddleware {
+  --
+  + auditLogger(action, module, description): Function
+}
+
+class AppError {
+  - message: String
+  - statusCode: Number
+  - isOperational: Boolean
+  --
+  + constructor(message, statusCode)
+}
+
+CanteenRoutes --> CanteenController : uses
+CanteenRoutes ..> AuthMiddleware : protects /:id/review
+CanteenRoutes ..> AuditLogMiddleware : logs review action
+
+CanteenController --> CanteenService : calls business logic
+CanteenService --> CanteenModel : query/update canteen
+CanteenService --> UserModel : update manager status on reject
+CanteenController ..> AppError : validates decision input
+CanteenService ..> AppError : throws business errors
+
+note right of CanteenRoutes
+  GET /api/canteens is public
+  PATCH /api/canteens/:id/review is admin only
+end note
+
+note right of CanteenService
+  reviewCanteenRegistration rules:
+  - canteen must exist
+  - canteen status must be pending
+  - approve => active
+  - reject => inactive and manager accounts -> inactive
+end note
+
+@enduml

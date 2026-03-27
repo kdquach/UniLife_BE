@@ -1,0 +1,44 @@
+@startuml View Banners Sequence Diagram
+title UC-BN01 - View List Banners
+
+actor "Admin" as User
+participant "Banner\nGovernance Page" as Frontend
+participant ":bannerRoutes" as Routes
+participant ":bannerController" as Controller
+participant ":bannerService" as Service
+participant "Banner\nModel" as Model
+database "MongoDB" as DB
+
+User -> Frontend: 1. Open Banner Governance page
+Frontend -> Routes: 2. GET /api/banners?page=1&limit=10&search=...\n(Bearer Token)
+
+ref over Routes
+Verify JWT Token and Admin Role
+end ref
+Routes -> Routes: 3. Check authentication/authorization result
+opt [Authentication or authorization failed]
+  Routes --> Frontend: 4. JSON error response (401/403)
+  Frontend --> User: 5. Show error or redirect to login
+end
+
+Routes -> Controller: 6. getAllBanners(req, res)
+Controller -> Service: 7. getAllBanners(query)
+
+Service -> Model: 8. find(filter).sort().skip().limit().populate()
+Model -> DB: 9. Query banners by filters
+DB --> Model: 10. Banner list
+
+Service -> Model: 11. countDocuments(filter)
+Model -> DB: 12. Count total records
+DB --> Model: 13. Total count
+
+Model --> Service: 14. { data, total }
+Service --> Controller: 15. { data, pagination }
+Controller -> Controller: 16. formatPaginatedResponse(result, message)
+Controller --> Routes: 17. HTTP 200
+Routes --> Frontend: 18. JSON response\n{ success, data, pagination }
+
+Frontend -> Frontend: 19. Render table and pagination
+Frontend --> User: 20. Display banner list
+
+@enduml

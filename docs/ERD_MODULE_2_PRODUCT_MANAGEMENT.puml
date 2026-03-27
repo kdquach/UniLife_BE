@@ -2,7 +2,7 @@
 ' =====================================================
 ' Module 2: Product Management - Quản lý sản phẩm
 ' Bao gồm: product_category, ingredient_category, ingredient,
-'          product, product_image, recipe, menu, menu_item
+'          product, product_image, recipe, menu, menu_item, menu_schedule
 ' =====================================================
 
 skinparam linetype ortho
@@ -13,15 +13,15 @@ skinparam class {
     ArrowColor #A80036
 }
 
-title Module 2: Product Management - Quản lý sản phẩm\n(product_category, ingredient_category, ingredient, product, product_image, recipe, menu, menu_item)
+title Module 2: Product Management - Quản lý sản phẩm\n(product_category, ingredient_category, ingredient, product, product_image, recipe, menu, menu_item, menu_schedule)
 
 ' =====================================================
 ' BẢNG CANTEEN (Reference)
 ' =====================================================
 entity "canteen" as canteen <<Reference>> {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * name : VARCHAR(100)
+    name : VARCHAR(100)
     ...
 }
 
@@ -29,10 +29,10 @@ entity "canteen" as canteen <<Reference>> {
 ' BẢNG PRODUCT_CATEGORY
 ' =====================================================
 entity "product_category" as product_category {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * canteen_id : CHAR(36) <<FK>>
-    * name : VARCHAR(100)
+    canteen_id : CHAR(36) <<FK>>
+    name : VARCHAR(100)
     description : VARCHAR(500)
     icon : VARCHAR(255)
     is_active : BOOLEAN
@@ -46,10 +46,10 @@ entity "product_category" as product_category {
 ' BẢNG INGREDIENT_CATEGORY
 ' =====================================================
 entity "ingredient_category" as ingredient_category {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * canteen_id : CHAR(36) <<FK>>
-    * name : VARCHAR(100)
+    canteen_id : CHAR(36) <<FK>>
+    name : VARCHAR(100)
     description : VARCHAR(500)
     icon : VARCHAR(255)
     is_active : BOOLEAN
@@ -63,13 +63,13 @@ entity "ingredient_category" as ingredient_category {
 ' BẢNG INGREDIENT
 ' =====================================================
 entity "ingredient" as ingredient {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * canteen_id : CHAR(36) <<FK>>
-    * category_id : CHAR(36) <<FK>>
-    * name : VARCHAR(100)
+    canteen_id : CHAR(36) <<FK>>
+    category_id : CHAR(36) <<FK>>
+    name : VARCHAR(100)
     stock : DECIMAL(15,2)
-    * unit : VARCHAR(50)
+    unit : VARCHAR(50)
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
 }
@@ -78,13 +78,13 @@ entity "ingredient" as ingredient {
 ' BẢNG PRODUCT
 ' =====================================================
 entity "product" as product {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * canteen_id : CHAR(36) <<FK>>
-    * category_id : CHAR(36) <<FK>>
-    * name : VARCHAR(200)
+    canteen_id : CHAR(36) <<FK>>
+    category_id : CHAR(36) <<FK>>
+    name : VARCHAR(200)
     slug : VARCHAR(250)
-    * price : DECIMAL(15,2)
+    price : DECIMAL(15,2)
     original_price : DECIMAL(15,2)
     status : ENUM
     description : TEXT
@@ -107,10 +107,10 @@ entity "product" as product {
 ' BẢNG PRODUCT_IMAGE
 ' =====================================================
 entity "product_image" as product_image {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * product_id : CHAR(36) <<FK>>
-    * image_url : VARCHAR(500)
+    product_id : CHAR(36) <<FK>>
+    image_url : VARCHAR(500)
     display_order : INT
     created_at : TIMESTAMP
 }
@@ -119,12 +119,12 @@ entity "product_image" as product_image {
 ' BẢNG RECIPE (Bảng trung gian N-M)
 ' =====================================================
 entity "recipe" as recipe {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * product_id : CHAR(36) <<FK>>
-    * ingredient_id : CHAR(36) <<FK>>
-    * quantity : DECIMAL(10,2)
-    * unit : VARCHAR(50)
+    product_id : CHAR(36) <<FK>>
+    ingredient_id : CHAR(36) <<FK>>
+    quantity : DECIMAL(10,2)
+    unit : VARCHAR(50)
     description : VARCHAR(200)
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
@@ -136,10 +136,10 @@ entity "recipe" as recipe {
 ' BẢNG MENU
 ' =====================================================
 entity "menu" as menu {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * canteen_id : CHAR(36) <<FK>>
-    * date : DATE
+    canteen_id : CHAR(36) <<FK>>
+    date : DATE
     status : ENUM
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
@@ -149,12 +149,27 @@ entity "menu" as menu {
 ' BẢNG MENU_ITEM (Bảng trung gian N-M)
 ' =====================================================
 entity "menu_item" as menu_item {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * menu_id : CHAR(36) <<FK>>
-    * product_id : CHAR(36) <<FK>>
+    menu_id : CHAR(36) <<FK>>
+    product_id : CHAR(36) <<FK>>
     display_order : INT
     created_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG MENU_SCHEDULE
+' =====================================================
+entity "menu_schedule" as menu_schedule {
+    **id** : CHAR(36) <<PK>>
+    --
+    menu_id : CHAR(36) <<FK>>
+    canteen_id : CHAR(36) <<FK>>
+    start_at : TIMESTAMP
+    end_at : TIMESTAMP
+    status : ENUM
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
 }
 
 ' =====================================================
@@ -179,5 +194,7 @@ ingredient ||--o{ recipe : "1 - N"
 ' N-M: Menu - Product qua Menu_Item
 menu ||--o{ menu_item : "1 - N"
 product ||--o{ menu_item : "1 - N"
+menu ||--o{ menu_schedule : "1 - N"
+canteen ||--o{ menu_schedule : "1 - N"
 
 @enduml

@@ -1,0 +1,116 @@
+@startuml Banner Management Class Diagram
+title Banner Management Module - Class Diagram
+
+skinparam classAttributeIconSize 0
+hide circle
+
+class BannerRoutes {
+  - router: Router
+  --
+  + GET /api/banners
+  + GET /api/banners/:id
+  + GET /api/banners/active
+  + POST /api/banners
+  + PATCH /api/banners/:id
+  + DELETE /api/banners/:id
+  + POST /api/banners/reorder
+}
+
+class BannerController {
+  --
+  + createBanner(req, res): Promise<void>
+  + getAllBanners(req, res): Promise<void>
+  + getActiveBanners(req, res): Promise<void>
+  + getBannerById(req, res): Promise<void>
+  + updateBanner(req, res): Promise<void>
+  + deleteBanner(req, res): Promise<void>
+  + reorderBanners(req, res): Promise<void>
+}
+
+class BannerService {
+  - Banner: Model
+  - Canteen: Model
+  - AppError: ErrorClass
+  --
+  + createBanner(bannerData, userId): Promise<Banner>
+  + getAllBanners(query): Promise<Banner[]>
+  + getActiveBanners(canteenId): Promise<Banner[]>
+  + getBannerById(id): Promise<Banner>
+  + updateBanner(id, updateData): Promise<Banner>
+  + deleteBanner(id): Promise<void>
+  + reorderBanners(bannerOrders): Promise<Banner[]>
+  - validateBannerPayload(payload): Promise<void>
+}
+
+class BannerModel {
+  - _id: ObjectId
+  - canteenId: ObjectId
+  - title: String
+  - imageUrl: String
+  - linkUrl: String
+  - order: Number
+  - isActive: Boolean
+  - startDate: Date
+  - endDate: Date
+  - createdBy: ObjectId
+  - createdAt: Date
+  - updatedAt: Date
+  --
+  + create(data): Promise<BannerDocument>
+  + find(filter): Promise<BannerDocument[]>
+  + findById(id): Promise<BannerDocument|null>
+  + findByIdAndUpdate(id, data, options): Promise<BannerDocument|null>
+  + findByIdAndDelete(id): Promise<BannerDocument|null>
+  + bulkWrite(ops): Promise<BulkWriteResult>
+  + countDocuments(filter): Promise<number>
+}
+
+class CanteenModel {
+  --
+  + findById(id): Promise<CanteenDocument|null>
+}
+
+class AuthMiddleware {
+  --
+  + protect(req, res, next): Promise<void>
+  + restrictTo(...roles): Function
+}
+
+class QueryHelper {
+  --
+  + paginatedQuery(Model, queryParams, options): Promise<PaginatedResult>
+  + formatPaginatedResponse(result, message): PaginatedResponse
+  + filterPresets.banner
+}
+
+class AppError {
+  - message: String
+  - statusCode: Number
+  - isOperational: Boolean
+  --
+  + constructor(message, statusCode)
+}
+
+BannerRoutes --> BannerController : uses
+BannerRoutes ..> AuthMiddleware : protects admin routes
+
+BannerController --> BannerService : calls CRUD logic
+BannerController ..> QueryHelper : paginated list response
+
+BannerService --> BannerModel : queries/writes
+BannerService --> CanteenModel : validates canteenId
+BannerService ..> AppError : throws business errors
+
+note right of BannerRoutes
+  /active là public route
+  CRUD + reorder chỉ cho admin
+end note
+
+note right of BannerService
+  validateBannerPayload kiểm tra:
+  - startDate/endDate hợp lệ
+  - startDate <= endDate
+  - canteenId tồn tại (nếu có)
+end note
+
+@enduml

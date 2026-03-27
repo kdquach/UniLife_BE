@@ -1,0 +1,52 @@
+@startuml Create Banner Sequence Diagram
+title UC-BN03 - Create Banner
+
+actor "Admin" as User
+participant "Banner\nGovernance Page" as Frontend
+participant ":bannerRoutes" as Routes
+participant ":bannerController" as Controller
+participant ":bannerService" as Service
+participant "Canteen\nModel" as CanteenModel
+participant "Banner\nModel" as BannerModel
+database "MongoDB" as DB
+
+User -> Frontend: 1. Click "Create Banner"\nEnter title, imageUrl, linkUrl, order...
+Frontend -> Frontend: 2. Validate required fields
+Frontend -> Routes: 3. POST /api/banners (Bearer Token, bannerData)
+
+ref over Routes
+Verify JWT Token and Admin Role
+end ref
+Routes -> Routes: 4. Check authentication/authorization result
+opt [Unauthorized]
+  Routes --> Frontend: 5. 401/403 error
+  Frontend --> User: 6. Show error
+end
+
+Routes -> Controller: 7. createBanner(req, res)
+Controller -> Service: 8. createBanner(data, userId)
+Service -> Service: 9. Validate payload (date, canteenId)
+
+Service -> Service: 9.1 Check validation result
+opt [Invalid payload]
+  Service --> Controller: 9.2 Throw AppError(400)
+  Controller --> Routes: 9.3 JSON error
+  Routes --> Frontend: 9.4 JSON error response
+  Frontend --> User: 9.5 Show error
+end
+
+Service -> CanteenModel: 10. findById(canteenId) (if provided)
+CanteenModel -> DB: 11. Check canteen existence
+DB --> CanteenModel: 12. Result
+
+Service -> BannerModel: 13. create({ ...data, createdBy: userId })
+BannerModel -> DB: 14. Insert banner
+DB --> BannerModel: 15. New banner
+BannerModel --> Service: 16. Banner object
+
+Service --> Controller: 17. Return banner
+Controller --> Routes: 18. HTTP 201
+Routes --> Frontend: 19. JSON response { banner }
+Frontend --> User: 20. Show "Banner created successfully"
+
+@enduml

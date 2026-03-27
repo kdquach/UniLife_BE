@@ -1,0 +1,60 @@
+@startuml Update Banner Sequence Diagram
+title UC-BN04 - Update Banner
+
+actor "Admin" as User
+participant "Banner\nGovernance Page" as Frontend
+participant ":bannerRoutes" as Routes
+participant ":bannerController" as Controller
+participant ":bannerService" as Service
+participant "Canteen\nModel" as CanteenModel
+participant "Banner\nModel" as BannerModel
+database "MongoDB" as DB
+
+User -> Frontend: 1. Click "Edit" on a banner\nUpdate required fields
+Frontend -> Frontend: 2. Validate required fields
+Frontend -> Routes: 3. PATCH /api/banners/:id (Bearer Token, updateData)
+
+ref over Routes
+Verify JWT Token and Admin Role
+end ref
+Routes -> Routes: 4. Check authentication/authorization result
+opt [Unauthorized]
+  Routes --> Frontend: 5. 401/403 error
+  Frontend --> User: 6. Show error
+end
+
+Routes -> Controller: 7. updateBanner(req, res)
+Controller -> Service: 8. updateBanner(id, updateData)
+Service -> Service: 9. Validate payload (date, canteenId)
+
+Service -> Service: 9.1 Check validation result
+opt [Invalid payload]
+  Service --> Controller: 9.2 Throw AppError(400)
+  Controller --> Routes: 9.3 JSON error
+  Routes --> Frontend: 9.4 JSON error response
+  Frontend --> User: 9.5 Show error
+end
+
+Service -> CanteenModel: 10. findById(canteenId) (if provided)
+CanteenModel -> DB: 11. Check canteen existence
+DB --> CanteenModel: 12. Result
+
+Service -> BannerModel: 13. findByIdAndUpdate(id, updateData, { new: true, runValidators: true })
+BannerModel -> DB: 14. Update banner
+DB --> BannerModel: 15. Updated document or null
+BannerModel --> Service: 16. Update result
+
+Service -> Service: 17. Check whether banner exists
+opt [Banner not found]
+  Service --> Controller: 17.1 Throw AppError(404)
+  Controller --> Routes: 17.2 JSON error
+  Routes --> Frontend: 17.3 JSON error response
+  Frontend --> User: 17.4 Show error
+end
+
+Service --> Controller: 18. Return updated banner
+Controller --> Routes: 19. HTTP 200
+Routes --> Frontend: 20. JSON response { banner }
+Frontend --> User: 21. Show "Banner updated successfully"
+
+@enduml

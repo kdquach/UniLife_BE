@@ -2,7 +2,8 @@
 ' =====================================================
 ' Module 5: Communication & Reporting - Thông báo & Báo cáo
 ' Bao gồm: feedback, feedback_reply, notification,
-'          system_notification, banner, report_snapshot
+'          system_notification, system_notification_read, banner,
+'          report_snapshot, shift_summary, pickup_log
 ' =====================================================
 
 skinparam linetype ortho
@@ -13,37 +14,44 @@ skinparam class {
     ArrowColor #A80036
 }
 
-title Module 5: Communication & Reporting - Thông báo & Báo cáo\n(feedback, feedback_reply, notification, system_notification, banner, report_snapshot)
+title Module 5: Communication & Reporting - Thông báo & Báo cáo\n(feedback, feedback_reply, notification, system_notification, system_notification_read, banner, report_snapshot, shift_summary, pickup_log)
 
 ' =====================================================
 ' REFERENCE TABLES
 ' =====================================================
 entity "user" as user <<Reference>> {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * full_name : VARCHAR(100)
+    full_name : VARCHAR(100)
     role : ENUM
     ...
 }
 
 entity "canteen" as canteen <<Reference>> {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * name : VARCHAR(100)
+    name : VARCHAR(100)
     ...
 }
 
 entity "product" as product <<Reference>> {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * name : VARCHAR(200)
+    name : VARCHAR(200)
     ...
 }
 
 entity "order" as order <<Reference>> {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * order_number : VARCHAR(50)
+    order_number : VARCHAR(50)
+    ...
+}
+
+entity "shift" as shift <<Reference>> {
+    **id** : CHAR(36) <<PK>>
+    --
+    name : VARCHAR(100)
     ...
 }
 
@@ -51,12 +59,12 @@ entity "order" as order <<Reference>> {
 ' BẢNG FEEDBACK
 ' =====================================================
 entity "feedback" as feedback {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * user_id : CHAR(36) <<FK>>
-    * product_id : CHAR(36) <<FK>>
-    * order_id : CHAR(36) <<FK>>
-    * rating : INT <<CHECK 1-5>>
+    user_id : CHAR(36) <<FK>>
+    product_id : CHAR(36) <<FK>>
+    order_id : CHAR(36) <<FK>>
+    rating : INT <<CHECK 1-5>>
     comment : TEXT
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
@@ -68,11 +76,11 @@ entity "feedback" as feedback {
 ' BẢNG FEEDBACK_REPLY
 ' =====================================================
 entity "feedback_reply" as feedback_reply {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * feedback_id : CHAR(36) <<FK>>
-    * user_id : CHAR(36) <<FK>>
-    * reply : TEXT
+    feedback_id : CHAR(36) <<FK>>
+    user_id : CHAR(36) <<FK>>
+    reply : TEXT
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
 }
@@ -81,13 +89,13 @@ entity "feedback_reply" as feedback_reply {
 ' BẢNG NOTIFICATION
 ' =====================================================
 entity "notification" as notification {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
     canteen_id : CHAR(36) <<FK>>
-    * user_id : CHAR(36) <<FK>>
-    * type : ENUM
-    * title : VARCHAR(200)
-    * content : TEXT
+    user_id : CHAR(36) <<FK>>
+    type : ENUM
+    title : VARCHAR(200)
+    content : TEXT
     is_read : BOOLEAN
     read_at : TIMESTAMP
     metadata : JSON
@@ -99,11 +107,11 @@ entity "notification" as notification {
 ' BẢNG SYSTEM_NOTIFICATION
 ' =====================================================
 entity "system_notification" as system_notification {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
     canteen_id : CHAR(36) <<FK>>
-    * title : VARCHAR(200)
-    * content : TEXT
+    title : VARCHAR(200)
+    content : TEXT
     target_role : ENUM
     active_from : TIMESTAMP
     active_to : TIMESTAMP
@@ -114,14 +122,30 @@ entity "system_notification" as system_notification {
 }
 
 ' =====================================================
+' BẢNG SYSTEM_NOTIFICATION_READ
+' =====================================================
+entity "system_notification_read" as system_notification_read {
+    **id** : CHAR(36) <<PK>>
+    --
+    user_id : CHAR(36) <<FK>>
+    system_notification_id : CHAR(36) <<FK>>
+    canteen_id : CHAR(36) <<FK>>
+    read_at : TIMESTAMP
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+    ..
+    <<UNIQUE(user_id, system_notification_id)>>
+}
+
+' =====================================================
 ' BẢNG BANNER
 ' =====================================================
 entity "banner" as banner {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
     canteen_id : CHAR(36) <<FK>>
-    * title : VARCHAR(200)
-    * image_url : VARCHAR(500)
+    title : VARCHAR(200)
+    image_url : VARCHAR(500)
     link_url : VARCHAR(500)
     display_order : INT
     is_active : BOOLEAN
@@ -136,16 +160,55 @@ entity "banner" as banner {
 ' BẢNG REPORT_SNAPSHOT
 ' =====================================================
 entity "report_snapshot" as report_snapshot {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * canteen_id : CHAR(36) <<FK>>
-    * report_type : ENUM
-    * report_name : VARCHAR(200)
-    * period_start : DATE
-    * period_end : DATE
+    canteen_id : CHAR(36) <<FK>>
+    report_type : ENUM
+    report_name : VARCHAR(200)
+    period_start : DATE
+    period_end : DATE
     data : JSON
     generated_by : CHAR(36) <<FK>>
     generated_at : TIMESTAMP
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG SHIFT_SUMMARY
+' =====================================================
+entity "shift_summary" as shift_summary {
+    **id** : CHAR(36) <<PK>>
+    --
+    canteen_id : CHAR(36) <<FK>>
+    shift_id : CHAR(36) <<FK>>
+    date : DATE
+    summary : JSON
+    notes : TEXT
+    status : ENUM
+    reviewed_by : CHAR(36) <<FK>>
+    reviewed_at : TIMESTAMP
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+    ..
+    <<UNIQUE(shift_id, date)>>
+}
+
+' =====================================================
+' BẢNG PICKUP_LOG
+' =====================================================
+entity "pickup_log" as pickup_log {
+    **id** : CHAR(36) <<PK>>
+    --
+    order_id : CHAR(36) <<FK>>
+    canteen_id : CHAR(36) <<FK>>
+    customer_id : CHAR(36) <<FK>>
+    staff_id : CHAR(36) <<FK>>
+    action : ENUM
+    qr_code : VARCHAR(100)
+    scanned_at : TIMESTAMP
+    notes : TEXT
+    metadata : JSON
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
 }
@@ -166,11 +229,22 @@ canteen ||--o{ notification : "1 - N"
 
 canteen ||--o{ system_notification : "1 - N"
 user ||--o{ system_notification : "1 - N (created_by)"
+user ||--o{ system_notification_read : "1 - N"
+system_notification ||--o{ system_notification_read : "1 - N"
+canteen ||--o{ system_notification_read : "1 - N"
 
 canteen ||--o{ banner : "1 - N"
 user ||--o{ banner : "1 - N (created_by)"
 
 canteen ||--o{ report_snapshot : "1 - N"
 user ||--o{ report_snapshot : "1 - N (generated_by)"
+canteen ||--o{ shift_summary : "1 - N"
+shift ||--o{ shift_summary : "1 - N"
+user ||--o{ shift_summary : "1 - N (reviewed_by)"
+
+order ||--o{ pickup_log : "1 - N"
+canteen ||--o{ pickup_log : "1 - N"
+user ||--o{ pickup_log : "1 - N (customer)"
+user ||--o{ pickup_log : "1 - N (staff)"
 
 @enduml

@@ -1,0 +1,141 @@
+@startuml Admin_Screen_Flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+
+' Color definitions
+skinparam rectangle {
+    BackgroundColor<<screen>> #E3F2FD
+    BorderColor<<screen>> #1976D2
+    BorderThickness<<screen>> 2
+}
+
+skinparam storage {
+    BackgroundColor<<modal>> #FFF9C4
+    BorderColor<<modal>> #F57C00
+    BorderThickness<<modal>> 2
+}
+
+  title Screen Flow Diagram - Administrator (Admin)
+
+  ' Main screens
+rectangle "Sign In\nLogin" as Login <<screen>>
+  rectangle "System Overview\nAdmin Dashboard" as AdminDashboard <<screen>> #FFECB3
+
+  ' Screen groups aligned with FE + provided admin diagram
+  rectangle "User Management\nUser Governance" as UserGovernance <<screen>>
+  rectangle "Access Control\nPermission Management" as PermissionManagement <<screen>>
+  rectangle "Canteen Management\nCanteen Governance" as CanteenGovernance <<screen>>
+  rectangle "Banner Management\nBanner Governance" as BannerGovernance <<screen>>
+  rectangle "Notification Management\nSystem Communication" as SystemCommunication <<screen>>
+
+  ' Modal/Drawer/Popup
+storage "Permission Details\nPermission Detail Modal" as PermissionDetailModal <<modal>>
+storage "Create/Update Permission\nPermission Form Modal" as PermissionFormModal <<modal>>
+storage "Delete Permission Confirmation\nDelete Permission Confirm" as DeletePermissionConfirm <<modal>>
+storage "Role Permission Assignment\nRole Permission Panel" as RolePermissionPanel <<modal>>
+storage "User Role Assignment\nUser Role Panel" as UserRolePanel <<modal>>
+
+storage "Approve Canteen Registration\nApprove Canteen Action" as ApproveCanteenAction <<modal>>
+storage "Reject Canteen Registration\nReject Canteen Action" as RejectCanteenAction <<modal>>
+
+storage "Create/Update Banner\nBanner Form Drawer" as BannerFormDrawer <<modal>>
+storage "Banner Details\nBanner Detail Drawer" as BannerDetailDrawer <<modal>>
+storage "Delete Banner Confirmation\nDelete Banner Confirm" as DeleteBannerConfirm <<modal>>
+
+storage "Create/Update Notification\nNotification Modal" as NotificationModal <<modal>>
+storage "Notification Details\nNotification Detail Modal" as NotificationDetailModal <<modal>>
+
+' ====== Main flow ======
+Login -down-> AdminDashboard : Click "Login" button\nSuccessfully authenticated
+
+' Navigation from Dashboard (aligned with FE menu)
+AdminDashboard -left-> UserGovernance : Click "User Management"\nmenu item
+AdminDashboard -right-> PermissionManagement : Click "Permissions"\nmenu item
+AdminDashboard -down-> CanteenGovernance : Click "Canteen Management"\nmenu item
+AdminDashboard -down-> BannerGovernance : Click "Banner Management"\nmenu item
+AdminDashboard -right-> SystemCommunication : Click "Notification Management"\nmenu item
+
+' ====== User Governance ======
+UserGovernance --> AdminDashboard : Back to Dashboard
+
+' ====== Permission Management ======
+PermissionManagement ..> PermissionDetailModal : Click "Detail" action
+PermissionDetailModal ..> PermissionManagement : Click "Close"
+
+PermissionManagement ..> PermissionFormModal : Click "Create new permission"\nor "Edit"
+PermissionFormModal ..> PermissionManagement : Click "Save"
+
+PermissionManagement ..> DeletePermissionConfirm : Click "Delete" action
+DeletePermissionConfirm ..> PermissionManagement : Click "Confirm"
+
+PermissionManagement ..> RolePermissionPanel : Select role\n+ adjust permissions
+RolePermissionPanel ..> PermissionManagement : Click "Save role permissions"
+
+PermissionManagement ..> UserRolePanel : Select user\n+ assign role
+UserRolePanel ..> PermissionManagement : Click "Save user role"
+
+' ====== Canteen Governance ======
+CanteenGovernance ..> ApproveCanteenAction : Click "Approve"
+ApproveCanteenAction ..> CanteenGovernance : Refresh list
+
+CanteenGovernance ..> RejectCanteenAction : Click "Reject"
+RejectCanteenAction ..> CanteenGovernance : Refresh list
+
+' ====== Banner Governance ======
+BannerGovernance ..> BannerFormDrawer : Click "Create banner"\nor "Edit"
+BannerFormDrawer ..> BannerGovernance : Click "Save"
+
+BannerGovernance ..> BannerDetailDrawer : Click "Detail"
+BannerDetailDrawer ..> BannerGovernance : Click "Close"
+
+BannerGovernance ..> DeleteBannerConfirm : Click "Delete"
+DeleteBannerConfirm ..> BannerGovernance : Click "Confirm"
+
+' ====== System Communication ======
+SystemCommunication ..> NotificationModal : Click "Create notification"\nor "Change status"
+NotificationModal ..> SystemCommunication : Click "Save"
+
+SystemCommunication ..> NotificationDetailModal : Click a notification row
+NotificationDetailModal ..> SystemCommunication : Click "Close"
+
+' ====== Legend ======
+legend right
+  |= Symbol |= Description |
+  | <size:14><&arrow-thick-right></size> | Navigation between screens |
+  | <size:14>- - - ></size> | Open Modal/Drawer/Popup |
+  | <back:#E3F2FD>    </back> | Screen |
+  | <back:#FFF9C4>    </back> | Modal/Drawer/Popup |
+  | <back:#FFECB3>    </back> | Main screen after login |
+endlegend
+
+note right of AdminDashboard
+  **Default screen after admin login**
+  - Entry point for admin modules
+  - Navigate via sidebar menu
+  - Quick operational overview
+end note
+
+note right of PermissionManagement
+  **Permission management**
+  - Manage permissions (create/edit/delete)
+  - Assign permissions to roles
+  - Assign roles to users
+end note
+
+note bottom of CanteenGovernance
+  **Canteen governance**
+  - Active canteens tab
+  - Pending canteens tab
+  - Approve or reject canteen registrations
+end note
+
+note bottom of SystemCommunication
+  **System communication**
+  - Create notifications by target role
+  - Support global or canteen scope
+  - Enable/disable notifications and view details
+end note
+
+@enduml

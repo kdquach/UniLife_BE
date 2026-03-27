@@ -1,0 +1,36 @@
+@startuml View List Canteens Sequence Diagram
+title UC-CG01 - View List Canteens
+
+actor "Admin" as User
+participant "Canteen\nGovernance Page" as Frontend
+participant ":canteenRoutes" as Routes
+participant ":canteenController" as Controller
+participant ":canteenService" as Service
+participant "Canteen\nModel" as Model
+database "MongoDB" as DB
+
+User -> Frontend: 1. Open Canteen Governance page
+Frontend -> Routes: 2. GET /api/canteens?status=...&campusId=...
+
+note over Routes
+This endpoint is public.
+No authentication middleware required.
+end note
+
+Routes -> Controller: 3. getAllCanteens(req, res)
+Controller -> Service: 4. getAllCanteens(query)
+
+Service -> Service: 5. Build filter from query
+Service -> Model: 6. find(filter).populate("campusId", "name code").sort({ createdAt: -1 })
+Model -> DB: 7. Query canteens by filter
+DB --> Model: 8. Canteen list
+Model --> Service: 9. Canteens
+
+Service --> Controller: 10. Canteens result
+Controller --> Routes: 11. HTTP 200
+Routes --> Frontend: 12. JSON response\n{ status, results, data: { canteens } }
+
+Frontend -> Frontend: 13. Render table/tabs for canteens
+Frontend --> User: 14. Display canteen list
+
+@enduml

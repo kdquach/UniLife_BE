@@ -1,7 +1,7 @@
 @startuml ERD_MODULE_4_STAFF_MANAGEMENT
 ' =====================================================
 ' Module 4: Staff Management - Quản lý nhân viên
-' Bao gồm: shift, staff_shift, salary
+' Bao gồm: shift, staff_shift, salary, schedule, shift_change_request, salary_rate, payroll
 ' =====================================================
 
 skinparam linetype ortho
@@ -12,24 +12,24 @@ skinparam class {
     ArrowColor #A80036
 }
 
-title Module 4: Staff Management - Quản lý nhân viên\n(shift, staff_shift, salary)
+title Module 4: Staff Management - Quản lý nhân viên\n(shift, staff_shift, salary, schedule, shift_change_request, salary_rate, payroll)
 
 ' =====================================================
 ' REFERENCE TABLES
 ' =====================================================
 entity "user" as user <<Reference>> {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * full_name : VARCHAR(100)
+    full_name : VARCHAR(100)
     role : ENUM
     canteen_id : CHAR(36) <<FK>>
     ...
 }
 
 entity "canteen" as canteen <<Reference>> {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * name : VARCHAR(100)
+    name : VARCHAR(100)
     ...
 }
 
@@ -37,12 +37,12 @@ entity "canteen" as canteen <<Reference>> {
 ' BẢNG SHIFT
 ' =====================================================
 entity "shift" as shift {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * canteen_id : CHAR(36) <<FK>>
-    * name : VARCHAR(100)
-    * start_time : TIME
-    * end_time : TIME
+    canteen_id : CHAR(36) <<FK>>
+    name : VARCHAR(100)
+    start_time : TIME
+    end_time : TIME
     day_of_week : JSON
     max_staff : INT
     status : ENUM
@@ -54,12 +54,12 @@ entity "shift" as shift {
 ' BẢNG STAFF_SHIFT
 ' =====================================================
 entity "staff_shift" as staff_shift {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * shift_id : CHAR(36) <<FK>>
-    * staff_id : CHAR(36) <<FK>>
-    * canteen_id : CHAR(36) <<FK>>
-    * date : DATE
+    shift_id : CHAR(36) <<FK>>
+    staff_id : CHAR(36) <<FK>>
+    canteen_id : CHAR(36) <<FK>>
+    date : DATE
     status : ENUM
     check_in_time : TIMESTAMP
     check_out_time : TIMESTAMP
@@ -74,14 +74,14 @@ entity "staff_shift" as staff_shift {
 ' BẢNG SALARY
 ' =====================================================
 entity "salary" as salary {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * user_id : CHAR(36) <<FK>>
-    * canteen_id : CHAR(36) <<FK>>
-    * period_start : DATE
-    * period_end : DATE
+    user_id : CHAR(36) <<FK>>
+    canteen_id : CHAR(36) <<FK>>
+    period_start : DATE
+    period_end : DATE
     total_hours : DECIMAL(10,2)
-    * base_salary : DECIMAL(15,2)
+    base_salary : DECIMAL(15,2)
     bonus : DECIMAL(15,2)
     deduction : DECIMAL(15,2)
     total_salary : DECIMAL(15,2)
@@ -91,6 +91,97 @@ entity "salary" as salary {
     note : TEXT
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG SCHEDULE
+' =====================================================
+entity "schedule" as schedule {
+    **id** : CHAR(36) <<PK>>
+    --
+    canteen_id : CHAR(36) <<FK>>
+    week_start : DATE
+    version : INT
+    status : ENUM
+    created_by : CHAR(36) <<FK>>
+    published_at : TIMESTAMP
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG SHIFT_CHANGE_REQUEST
+' =====================================================
+entity "shift_change_request" as shift_change_request {
+    **id** : CHAR(36) <<PK>>
+    --
+    staff_shift_id : CHAR(36) <<FK>>
+    staff_id : CHAR(36) <<FK>>
+    canteen_id : CHAR(36) <<FK>>
+    type : ENUM
+    target_staff_id : CHAR(36) <<FK>>
+    requested_shift_id : CHAR(36) <<FK>>
+    reason : VARCHAR(500)
+    status : ENUM
+    reviewed_by : CHAR(36) <<FK>>
+    reviewed_at : TIMESTAMP
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG SALARY_RATE
+' =====================================================
+entity "salary_rate" as salary_rate {
+    **id** : CHAR(36) <<PK>>
+    --
+    user_id : CHAR(36) <<FK, UNIQUE>>
+    canteen_id : CHAR(36) <<FK>>
+    hourly_rate : DECIMAL(15,2)
+    effective_from : DATE
+    attendance_bonus_100 : DECIMAL(15,2)
+    attendance_bonus_95 : DECIMAL(15,2)
+    attendance_bonus_90 : DECIMAL(15,2)
+    overtime_multiplier : DECIMAL(4,2)
+    late_deduction : DECIMAL(15,2)
+    early_leave_deduction : DECIMAL(15,2)
+    absent_deduction : DECIMAL(15,2)
+    max_late_allowed : INT
+    note : VARCHAR(500)
+    updated_by : CHAR(36) <<FK>>
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
+' BẢNG PAYROLL
+' =====================================================
+entity "payroll" as payroll {
+    **id** : CHAR(36) <<PK>>
+    --
+    canteen_id : CHAR(36) <<FK>>
+    period_start : DATE
+    period_end : DATE
+    description : VARCHAR(200)
+    total_staff : INT
+    total_hours : DECIMAL(10,2)
+    total_amount : DECIMAL(15,2)
+    total_bonus : DECIMAL(15,2)
+    total_deduction : DECIMAL(15,2)
+    status : ENUM
+    hourly_rate : DECIMAL(15,2)
+    is_locked : BOOLEAN
+    version : INT
+    created_by : CHAR(36) <<FK>>
+    approved_by : CHAR(36) <<FK>>
+    approved_at : TIMESTAMP
+    paid_by : CHAR(36) <<FK>>
+    paid_at : TIMESTAMP
+    note : TEXT
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+    ..
+    <<UNIQUE(canteen_id, period_start, period_end)>>
 }
 
 ' =====================================================
@@ -106,5 +197,23 @@ shift ||--o{ staff_shift : "1 - N"
 user ||--o{ staff_shift : "1 - N (staff)"
 user ||--o{ staff_shift : "1 - N (assigned_by)"
 user ||--o{ salary : "1 - N"
+canteen ||--o{ schedule : "1 - N"
+user ||--o{ schedule : "1 - N (created_by)"
+
+staff_shift ||--o{ shift_change_request : "1 - N"
+shift ||--o{ shift_change_request : "1 - N (requested_shift)"
+user ||--o{ shift_change_request : "1 - N (staff)"
+user ||--o{ shift_change_request : "1 - N (target_staff)"
+user ||--o{ shift_change_request : "1 - N (reviewed_by)"
+canteen ||--o{ shift_change_request : "1 - N"
+
+user ||--o| salary_rate : "1 - 1"
+canteen ||--o{ salary_rate : "1 - N"
+user ||--o{ salary_rate : "1 - N (updated_by)"
+
+canteen ||--o{ payroll : "1 - N"
+user ||--o{ payroll : "1 - N (created_by)"
+user ||--o{ payroll : "1 - N (approved_by)"
+user ||--o{ payroll : "1 - N (paid_by)"
 
 @enduml

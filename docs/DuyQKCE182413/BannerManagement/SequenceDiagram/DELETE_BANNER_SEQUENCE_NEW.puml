@@ -1,0 +1,53 @@
+@startuml Delete Banner Sequence Diagram
+title UC-BN05 - Delete Banner
+
+actor "Admin" as User
+participant "Banner\nGovernance Page" as Frontend
+participant ":bannerRoutes" as Routes
+participant ":bannerController" as Controller
+participant ":bannerService" as Service
+participant "Banner\nModel" as Model
+database "MongoDB" as DB
+
+User -> Frontend: 1. Click "Delete" on a banner
+Frontend -> Frontend: 2. Show delete confirmation dialog
+
+alt [User cancels]
+  Frontend --> User: 2.1 Close confirmation dialog
+else [User confirms]
+  Frontend -> Routes: 3. DELETE /api/banners/:id\n(Bearer Token)
+
+  ref over Routes
+  Verify JWT Token and Admin Role
+  end ref
+  Routes -> Routes: 4. Check authentication/authorization result
+  opt [Authentication or authorization failed]
+    Routes --> Frontend: 5. JSON error response (401/403)
+    Frontend --> User: 6. Show error
+  end
+
+  Routes -> Controller: 7. deleteBanner(req, res)
+  Controller -> Service: 8. deleteBanner(id)
+  Service -> Model: 9. findByIdAndDelete(id)
+  Model -> DB: 10. Delete banner by id
+  DB --> Model: 11. Deleted document or null
+  Model --> Service: 12. Delete result
+
+  Service -> Service: 12.1 Check whether banner existed
+  opt [Banner not found]
+    Service -> Service: 12.2 throw AppError("Banner not found", 404)
+    Service --> Controller: 12.3 HTTP 404
+    Controller --> Routes: 12.4 JSON error
+    Routes --> Frontend: 12.5 JSON error response
+    Frontend --> User: 12.6 Show error
+  end
+
+  Service --> Controller: 13. Delete success
+  Controller --> Routes: 14. HTTP 204 No Content
+  Routes --> Frontend: 15. JSON response\n{ status: "success", data: null }
+
+  Frontend -> Frontend: 16. Reload banner list
+  Frontend --> User: 17. Show "Banner deleted successfully"
+end
+
+@enduml

@@ -1,0 +1,47 @@
+@startuml View Banner Detail Sequence Diagram
+title UC-BN02 - View Banner Detail
+
+actor "Admin" as User
+participant "Banner\nGovernance Page" as Frontend
+participant ":bannerRoutes" as Routes
+participant ":bannerController" as Controller
+participant ":bannerService" as Service
+participant "Banner\nModel" as Model
+database "MongoDB" as DB
+
+User -> Frontend: 1. Click "View Detail" on a banner
+Frontend -> Routes: 2. GET /api/banners/:id\n(Bearer Token)
+
+ref over Routes
+Verify JWT Token and Admin Role
+end ref
+Routes -> Routes: 3. Check authentication/authorization result
+opt [Authentication or authorization failed]
+  Routes --> Frontend: 4. JSON error response (401/403)
+  Frontend --> User: 5. Show error
+end
+
+Routes -> Controller: 6. getBannerById(req, res)
+Controller -> Service: 7. getBannerById(id)
+Service -> Model: 8. findById(id).populate("canteenId")
+Model -> DB: 9. Query banner by id
+DB --> Model: 10. Banner document or null
+Model --> Service: 11. Query result
+
+Service -> Service: 12. Check whether banner exists
+opt [Banner not found]
+  Service -> Service: 12.1 throw AppError("Banner not found", 404)
+  Service --> Controller: 12.2 HTTP 404
+  Controller --> Routes: 12.3 JSON error
+  Routes --> Frontend: 12.4 JSON error response
+  Frontend --> User: 12.5 Show error
+end
+
+Service --> Controller: 13. Return banner
+Controller --> Routes: 14. HTTP 200
+Routes --> Frontend: 15. JSON response\n{ status: "success", data: { banner } }
+
+Frontend -> Frontend: 16. Open detail drawer/modal
+Frontend --> User: 17. Display banner detail
+
+@enduml

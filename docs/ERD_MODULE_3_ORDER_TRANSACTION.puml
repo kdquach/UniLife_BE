@@ -2,7 +2,7 @@
 ' =====================================================
 ' Module 3: Order & Transaction - Đơn hàng & Giao dịch
 ' Bao gồm: cart, cart_item, wishlist, wishlist_item,
-'          order, order_item, voucher, voucher_product
+'          order, order_item, voucher, voucher_product, voucher_usage_history
 ' =====================================================
 
 skinparam linetype ortho
@@ -13,37 +13,37 @@ skinparam class {
     ArrowColor #A80036
 }
 
-title Module 3: Order & Transaction - Đơn hàng & Giao dịch\n(cart, cart_item, wishlist, wishlist_item, order, order_item, voucher, voucher_product)
+title Module 3: Order & Transaction - Đơn hàng & Giao dịch\n(cart, cart_item, wishlist, wishlist_item, order, order_item, voucher, voucher_product, voucher_usage_history)
 
 ' =====================================================
 ' REFERENCE TABLES
 ' =====================================================
 entity "user" as user <<Reference>> {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * full_name : VARCHAR(100)
+    full_name : VARCHAR(100)
     ...
 }
 
 entity "canteen" as canteen <<Reference>> {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * name : VARCHAR(100)
+    name : VARCHAR(100)
     ...
 }
 
 entity "campus" as campus <<Reference>> {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * name : VARCHAR(255)
+    name : VARCHAR(255)
     ...
 }
 
 entity "product" as product <<Reference>> {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * name : VARCHAR(200)
-    * price : DECIMAL(15,2)
+    name : VARCHAR(200)
+    price : DECIMAL(15,2)
     ...
 }
 
@@ -51,9 +51,9 @@ entity "product" as product <<Reference>> {
 ' BẢNG CART
 ' =====================================================
 entity "cart" as cart {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * user_id : CHAR(36) <<FK>>
+    user_id : CHAR(36) <<FK>>
     canteen_id : CHAR(36) <<FK>>
     total_price : DECIMAL(15,2)
     created_at : TIMESTAMP
@@ -66,11 +66,11 @@ entity "cart" as cart {
 ' BẢNG CART_ITEM
 ' =====================================================
 entity "cart_item" as cart_item {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * cart_id : CHAR(36) <<FK>>
-    * product_id : CHAR(36) <<FK>>
-    * quantity : INT
+    cart_id : CHAR(36) <<FK>>
+    product_id : CHAR(36) <<FK>>
+    quantity : INT
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
     ..
@@ -81,9 +81,9 @@ entity "cart_item" as cart_item {
 ' BẢNG WISHLIST
 ' =====================================================
 entity "wishlist" as wishlist {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * user_id : CHAR(36) <<FK, UNIQUE>>
+    user_id : CHAR(36) <<FK, UNIQUE>>
     created_at : TIMESTAMP
     updated_at : TIMESTAMP
 }
@@ -92,10 +92,10 @@ entity "wishlist" as wishlist {
 ' BẢNG WISHLIST_ITEM
 ' =====================================================
 entity "wishlist_item" as wishlist_item {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * wishlist_id : CHAR(36) <<FK>>
-    * product_id : CHAR(36) <<FK>>
+    wishlist_id : CHAR(36) <<FK>>
+    product_id : CHAR(36) <<FK>>
     created_at : TIMESTAMP
     ..
     <<UNIQUE(wishlist_id, product_id)>>
@@ -105,17 +105,17 @@ entity "wishlist_item" as wishlist_item {
 ' BẢNG VOUCHER
 ' =====================================================
 entity "voucher" as voucher {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * code : VARCHAR(20) <<UNIQUE>>
-    * discount_type : ENUM
-    * value : DECIMAL(15,2)
+    code : VARCHAR(20) <<UNIQUE>>
+    discount_type : ENUM
+    value : DECIMAL(15,2)
     min_order_amount : DECIMAL(15,2)
     max_discount : DECIMAL(15,2)
     max_usage : INT
     used_count : INT
-    * start_date : DATETIME
-    * end_date : DATETIME
+    start_date : DATETIME
+    end_date : DATETIME
     is_active : BOOLEAN
     campus_id : CHAR(36) <<FK>>
     user_usage_limit : INT
@@ -129,29 +129,48 @@ entity "voucher" as voucher {
 ' BẢNG VOUCHER_PRODUCT (Bảng trung gian N-M)
 ' =====================================================
 entity "voucher_product" as voucher_product {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * voucher_id : CHAR(36) <<FK>>
-    * product_id : CHAR(36) <<FK>>
+    voucher_id : CHAR(36) <<FK>>
+    product_id : CHAR(36) <<FK>>
     created_at : TIMESTAMP
     ..
     <<UNIQUE(voucher_id, product_id)>>
 }
 
 ' =====================================================
+' BẢNG VOUCHER_USAGE_HISTORY
+' =====================================================
+entity "voucher_usage_history" as voucher_usage_history {
+    **id** : CHAR(36) <<PK>>
+    --
+    voucher_id : CHAR(36) <<FK>>
+    order_id : CHAR(36) <<FK>>
+    user_id : CHAR(36) <<FK>>
+    canteen_id : CHAR(36) <<FK>>
+    original_amount : DECIMAL(15,2)
+    discount_amount : DECIMAL(15,2)
+    final_amount : DECIMAL(15,2)
+    order_status : ENUM
+    voucher_status : ENUM
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+' =====================================================
 ' BẢNG ORDER
 ' =====================================================
 entity "order" as order {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * order_number : VARCHAR(50) <<UNIQUE>>
-    * user_id : CHAR(36) <<FK>>
-    * canteen_id : CHAR(36) <<FK>>
+    order_number : VARCHAR(50) <<UNIQUE>>
+    user_id : CHAR(36) <<FK>>
+    canteen_id : CHAR(36) <<FK>>
     staff_id : CHAR(36) <<FK>>
     status : ENUM
-    * sub_total : DECIMAL(15,2)
+    sub_total : DECIMAL(15,2)
     discount : DECIMAL(15,2)
-    * total_amount : DECIMAL(15,2)
+    total_amount : DECIMAL(15,2)
     voucher_id : CHAR(36) <<FK>>
     voucher_code : VARCHAR(20)
     payment_method : ENUM
@@ -179,13 +198,13 @@ entity "order" as order {
 ' BẢNG ORDER_ITEM
 ' =====================================================
 entity "order_item" as order_item {
-    * **id** : CHAR(36) <<PK>>
+    **id** : CHAR(36) <<PK>>
     --
-    * order_id : CHAR(36) <<FK>>
-    * product_id : CHAR(36) <<FK>>
-    * product_name : VARCHAR(200)
-    * quantity : INT
-    * price : DECIMAL(15,2)
+    order_id : CHAR(36) <<FK>>
+    product_id : CHAR(36) <<FK>>
+    product_name : VARCHAR(200)
+    quantity : INT
+    price : DECIMAL(15,2)
     note : VARCHAR(200)
     created_at : TIMESTAMP
 }
@@ -214,6 +233,10 @@ voucher ||--o{ voucher_product : "1 - N"
 product ||--o{ voucher_product : "1 - N"
 
 voucher ||--o{ order : "1 - N"
+voucher ||--o{ voucher_usage_history : "1 - N"
+order ||--o{ voucher_usage_history : "1 - N"
+user ||--o{ voucher_usage_history : "1 - N"
+canteen ||--o{ voucher_usage_history : "1 - N"
 
 order ||--o{ order_item : "1 - N"
 product ||--o{ order_item : "1 - N"
