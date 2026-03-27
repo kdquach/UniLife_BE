@@ -171,6 +171,24 @@ const resolveManagerAndAdminUserIds = async (canteenId = null) => {
   ]));
 };
 
+const assertReviewScope = ({ currentUser, request, assignment }) => {
+  const actorRole = String(currentUser?.role || "").toLowerCase();
+  if (actorRole === "admin") return;
+
+  if (actorRole !== "manager") {
+    throw new AppError("Bạn không có quyền xử lý yêu cầu đổi ca", 403);
+  }
+
+  const actorCanteenId = String(currentUser?.canteenId || "");
+  const requestCanteenId = String(
+    request?.canteenId || assignment?.canteenId || "",
+  );
+
+  if (!actorCanteenId || !requestCanteenId || actorCanteenId !== requestCanteenId) {
+    throw new AppError("Bạn không có quyền xử lý yêu cầu của canteen khác", 403);
+  }
+};
+
 export const expirePendingShiftChangeRequests = async () => {
   const now = new Date();
 
@@ -374,6 +392,12 @@ const approveRequest = async (requestId, currentUser = null) => {
     throw new AppError("Không tìm thấy phân công của yêu cầu", 404);
   }
 
+  assertReviewScope({
+    currentUser,
+    request,
+    assignment,
+  });
+
   const shiftStartAt = buildShiftStartDateTime(assignment.date, assignment?.shiftId?.startTime);
   if (!shiftStartAt || shiftStartAt <= new Date()) {
     throw new AppError("Không thể xử lý yêu cầu cho ca đã bắt đầu", 400);
@@ -436,6 +460,16 @@ const rejectRequest = async (requestId, currentUser = null) => {
   if (request.status !== "pending") {
     throw new AppError("Yêu cầu đã được xử lý", 400);
   }
+
+  const assignment = await StaffShift.findById(
+    request.staffShiftId?._id || request.staffShiftId,
+  ).select("canteenId");
+
+  assertReviewScope({
+    currentUser,
+    request,
+    assignment,
+  });
 
   request.status = "rejected";
   request.reviewedBy = currentUser?._id || null;

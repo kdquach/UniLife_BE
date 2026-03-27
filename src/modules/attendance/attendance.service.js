@@ -55,6 +55,19 @@ const parseShiftTime = (timeStr, refDate) => {
 };
 
 /**
+ * Tính mốc trễ check-in tối đa dựa trên giờ bắt đầu ca và grace period sau giờ vào ca
+ * @param {Date} shiftStart
+ * @param {number} graceAfterMinutes
+ * @returns {Date}
+ */
+const getLatestCheckinTime = (shiftStart, graceAfterMinutes) => {
+  const graceAfter = Number.isFinite(Number(graceAfterMinutes))
+    ? Number(graceAfterMinutes)
+    : 30;
+  return new Date(shiftStart.getTime() + graceAfter * 60 * 1000);
+};
+
+/**
  * Get client IP from request (safe access)
  * @param {Object} req - Express request
  * @returns {string}
@@ -136,12 +149,15 @@ export const getMyShifts = async (staffId, date) => {
     return aTime.localeCompare(bTime);
   });
 
+  const overdueAssignmentIds = [];
+
   const shifts = assignments.map((assignment) => {
     const shift = assignment.shiftId;
     if (!shift) return null;
 
     const shiftStart = parseShiftTime(shift.startTime, assignment.date);
     const graceBefore = shift.gracePeriodBefore || 15;
+    const latestCheckin = getLatestCheckinTime(shiftStart, shift.gracePeriodAfter);
 
     // Determine can_checkin and can_checkout based on current state
     const isAssigned = ["assigned", "scheduled"].includes(assignment.status);
@@ -152,7 +168,15 @@ export const getMyShifts = async (staffId, date) => {
     const earliestCheckin = new Date(
       shiftStart.getTime() - graceBefore * 60 * 1000,
     );
-    const canCheckin = isAssigned && now >= earliestCheckin;
+    const isCheckinExpired = isAssigned && now > latestCheckin;
+
+    // Quá hạn check-in thì đánh dấu absent để đồng bộ trạng thái nghiệp vụ.
+    if (isCheckinExpired) {
+      overdueAssignmentIds.push(assignment._id);
+      return null;
+    }
+
+    const canCheckin = isAssigned && now >= earliestCheckin && now <= latestCheckin;
 
     // can_checkout: checked_in and not yet checked_out
     const canCheckout = isCheckedIn;
@@ -207,6 +231,21 @@ export const getMyShifts = async (staffId, date) => {
           : null,
     };
   });
+
+  if (overdueAssignmentIds.length > 0) {
+    await StaffShift.updateMany(
+      {
+        _id: { $in: overdueAssignmentIds },
+        status: { $in: ["assigned", "scheduled"] },
+      },
+      {
+        $set: {
+          status: "absent",
+          managerNote: "Hệ thống tự động đánh dấu vắng vì quá giờ check-in",
+        },
+      },
+    );
+  }
 
   const yyyy = startOfDay.getFullYear();
   const mm = String(startOfDay.getMonth() + 1).padStart(2, "0");
@@ -279,6 +318,7 @@ export const checkIn = async (staffId, shiftId, req) => {
   const earliestCheckin = new Date(
     shiftStartTime.getTime() - graceBefore * 60 * 1000,
   );
+  const latestCheckin = getLatestCheckinTime(shiftStartTime, shift.gracePeriodAfter);
 
   if (now < earliestCheckin) {
     const availableTime = earliestCheckin.toLocaleTimeString("vi-VN", {
@@ -289,6 +329,23 @@ export const checkIn = async (staffId, shiftId, req) => {
       `Quá sớm để check-in. Có thể check-in từ ${availableTime}`,
       400,
     );
+  }
+
+  if (now > latestCheckin) {
+    await StaffShift.findOneAndUpdate(
+      {
+        _id: assignment._id,
+        status: { $in: ["assigned", "scheduled"] },
+      },
+      {
+        $set: {
+          status: "absent",
+          managerNote: "Hệ thống tự động đánh dấu vắng vì quá giờ check-in",
+        },
+      },
+    );
+
+    throw new AppError("Đã quá giờ check-in. Ca làm đã được ghi nhận là vắng mặt", 400);
   }
 
   // 5. Check for missing checkout on previous shifts today (limit query)
