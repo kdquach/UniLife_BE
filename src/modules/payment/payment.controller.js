@@ -2,7 +2,7 @@ import catchAsync from "../../utils/catchAsync.js";
 import AppError from "../../utils/AppError.js";
 import * as momoService from "./payment.service.js";
 import crypto from "crypto";
-import { cancelUnpaidOrderForPaymentFailure } from "../order/order.service.js";
+import { cancelUnpaidOrderForPaymentFailure, notifyOrderCreatedToUser } from "../order/order.service.js";
 
 
 
@@ -91,6 +91,11 @@ export const getMomoPaymentResult = async (req, res, next) => {
     if (paymentStatusForRedirect === 'completed') {
         order.payment.status = 'completed';
         await order.save();
+        try {
+            await notifyOrderCreatedToUser({ order });
+        } catch (err) {
+            console.error('Failed to send order created notification after MoMo success:', err?.message || err);
+        }
     } else {
         // Payment failed/cancelled -> mark failed and auto-cancel (hard-delete) the unpaid order
         order.payment.status = 'failed';

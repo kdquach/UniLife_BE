@@ -15,7 +15,7 @@ import {
 import { verifyQRToken } from '../../utils/qrToken.js';
 import { createNotification } from '../notification/notification.service.js';
 import { Notification } from '../notification/notification.model.js';
-import { notifyCanteen, notifyUser } from '../../websocket/notify.js';
+import { notifyCanteen, notifyUser, notifyRemoveNotifications } from '../../websocket/notify.js';
 
 const ORDERABLE_PRODUCT_STATUSES = ['available', 'unavailable'];
 
@@ -111,7 +111,7 @@ const notifyOrderStatusChangedToUser = async ({
   }
 };
 
-const notifyOrderCreatedToUser = async ({ order }) => {
+export const notifyOrderCreatedToUser = async ({ order }) => {
   if (!order?.userId || !order?._id) return;
 
   try {
@@ -281,6 +281,7 @@ export const createOrder = async (orderData, userId) => {
   const shouldClearCartAfterCreate = !(
     paymentMethod === 'momo' && paymentStatus === 'pending'
   );
+  const shouldNotifyOrderCreated = !(paymentMethod === 'momo' && paymentStatus === 'pending');
 
   // Validate and get product prices
   const orderItems = [];
@@ -389,7 +390,9 @@ export const createOrder = async (orderData, userId) => {
         }
       }
 
-      await notifyOrderCreatedToUser({ order });
+      if (shouldNotifyOrderCreated) {
+        await notifyOrderCreatedToUser({ order });
+      }
 
       return order;
     } catch (error) {
@@ -427,7 +430,9 @@ export const createOrder = async (orderData, userId) => {
       }
     }
 
-    await notifyOrderCreatedToUser({ order });
+    if (shouldNotifyOrderCreated) {
+      await notifyOrderCreatedToUser({ order });
+    }
 
     return order;
   } catch (error) {
@@ -956,6 +961,22 @@ export const cancelUnpaidOrderForPaymentFailure = async (
   // Hard delete the order after rolling back side-effects.
   // (Keep orderId references in history/notifications as-is.)
   try {
+    // Find notifications related to this order so we can notify client(s) to remove them
+    try {
+      const toRemove = await Notification.find({ 'metadata.orderId': order._id }).select('_id userId').lean();
+      const ids = (toRemove || []).map((n) => String(n._id));
+      // Emit realtime event to user to remove the notification(s) from client UI
+      try {
+        if (ids.length > 0 && order.userId) {
+          notifyRemoveNotifications(String(order.userId), { ids, orderId: String(order._id) });
+        }
+      } catch (err) {
+        console.error('Failed to emit notification remove event:', err?.message || err);
+      }
+    } catch (err) {
+      console.error('Failed to lookup notifications for cleanup:', err?.message || err);
+    }
+
     await Notification.deleteMany({ 'metadata.orderId': order._id });
   } catch (e) {
     console.error(

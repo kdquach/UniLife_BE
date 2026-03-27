@@ -53,6 +53,20 @@ export const notifyUsersInCanteen = (userIds = [], canteenId, notification) => {
   });
 };
 
+// Notify client(s) to remove specific notifications (e.g. cleanup after order auto-cancel)
+export const notifyRemoveNotifications = (userId, payload = {}) => {
+  if (!userId) return;
+  const io = getIO();
+
+  const event = {
+    ids: Array.isArray(payload.ids) ? payload.ids.map(String) : [],
+    orderId: payload.orderId ? String(payload.orderId) : null,
+    meta: payload.meta || {},
+  };
+
+  io.to(`user:${userId}`).emit('notification:remove', event);
+};
+
 export const notifyGlobal = (notification) => {
   const io = getIO();
   const event = buildNotificationPayload({ ...notification, scope: "global" });
