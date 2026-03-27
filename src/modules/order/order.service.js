@@ -23,9 +23,9 @@ const ORDER_STATUS_LABELS = {
   pending: 'Chờ xác nhận',
   confirmed: 'Đã xác nhận',
   preparing: 'Đang chuẩn bị',
-  ready: 'Sẵn sàng nhận món',
-  completed: 'Hoàn thành',
-  received: 'Đã nhận',
+  ready: 'Đã chế biến xong', // Staff clicks this when food is done
+  completed: 'Sẵn sàng nhận món', // Staff clicks this to enable QR scan
+  received: 'Đã nhận hàng', // Result of QR scan
   cancelled: 'Đã hủy',
 };
 
@@ -237,7 +237,11 @@ export const getMyOrders = async (userId, queryParams) => {
   const options = {
     ...filterPresets.order,
     baseFilter,
-    populate: [{ path: 'canteenId', select: 'name location image' }],
+    populate: [
+      { path: 'canteenId', select: 'name location image' },
+      { path: 'staffId', select: 'fullName' },
+      { path: 'pickupQRCode.scannedBy', select: 'fullName' },
+    ],
     defaultSort: '-createdAt',
   };
 
@@ -631,9 +635,10 @@ export const getAllOrders = async (query = {}) => {
   }
 
   const orders = await Order.find(filter)
-    .populate('userId', 'name email')
+    .populate('userId', 'fullName email phone')
     .populate('canteenId', 'name location')
-    .populate('staffId', 'name')
+    .populate('staffId', 'fullName')
+    .populate('pickupQRCode.scannedBy', 'fullName')
     .populate({
       path: 'items.productId',
       select: 'name image',
@@ -651,9 +656,10 @@ export const getAllOrders = async (query = {}) => {
  */
 export const getOrderById = async (id) => {
   const order = await Order.findById(id)
-    .populate('userId', 'name email')
+    .populate('userId', 'fullName email phone')
     .populate('canteenId', 'name location')
-    .populate('staffId', 'name')
+    .populate('staffId', 'fullName')
+    .populate('pickupQRCode.scannedBy', 'fullName')
     .populate({
       path: 'items.productId',
       select: 'name image price',
@@ -674,6 +680,8 @@ export const getOrderById = async (id) => {
 export const getOrdersByUser = async (userId) => {
   const orders = await Order.find({ userId })
     .populate('canteenId', 'name location')
+    .populate('staffId', 'fullName')
+    .populate('pickupQRCode.scannedBy', 'fullName')
     .populate({
       path: 'items.productId',
       select: 'name image',
@@ -687,8 +695,10 @@ export const getOrdersByUser = async (userId) => {
 export const getOrderByQRCode = async (code) => {
   const trimmedCode = (code || '').trim();
   const order = await Order.findOne({ "pickupQRCode.code": trimmedCode })
-    .populate('userId', 'name email')
+    .populate('userId', 'fullName email phone')
     .populate('canteenId', 'name location')
+    .populate('staffId', 'fullName')
+    .populate('pickupQRCode.scannedBy', 'fullName')
     .populate({
       path: 'items.productId',
       select: 'name image',
@@ -760,20 +770,53 @@ export const updateOrderStatus = async (
   userRole = null,
   staffCanteenId = null
 ) => {
-  const order = await Order.findById(id);
+  const order = await Order.findById(id).populate('staffId', 'fullName');
 
   if (!order) {
     throw new AppError('Không tìm thấy đơn hàng', 404);
   }
 
-  // Cross-Canteen isolation check
-  if (userRole === 'staff') {
+  // Linear status transition validation
+  const VALID_TRANSITIONS = {
+    pending: ['confirmed', 'cancelled'],
+    confirmed: ['preparing', 'cancelled'],
+    preparing: ['ready', 'cancelled'],
+    ready: ['completed', 'cancelled'],
+    completed: ['received'],
+    received: [],
+    cancelled: [],
+  };
+
+  const currentStatus = order.status;
+  
+  // Rule: Cannot skip status or backtrack
+  if (!VALID_TRANSITIONS[currentStatus].includes(status)) {
+    throw new AppError(
+      `Không thể chuyển trạng thái từ ${ORDER_STATUS_LABELS[currentStatus]} sang ${ORDER_STATUS_LABELS[status]}`,
+      400
+    );
+  }
+
+  // Rule: Ownership/Locking
+  // Only the staff who first confirms/duyệt the order can handle subsequent steps
+  if (userRole === 'staff' || userRole === 'manager') {
+    // 1. Cross-Canteen isolation check
     const orderCanteen = order.canteenId._id
       ? order.canteenId._id.toString()
       : order.canteenId.toString();
     if (orderCanteen !== staffCanteenId?.toString()) {
       throw new AppError(
         'Bạn không có quyền cập nhật đơn hàng của Canteen khác',
+        403
+      );
+    }
+
+    // 2. Staff ownership check
+    // If order already has a staff fixed and a DIFFERENT staff tries to update
+    if (order.staffId && String(order.staffId._id) !== String(staffId)) {
+      const ownerName = order.staffId.fullName || 'Nhân viên khác';
+      throw new AppError(
+        `${ownerName} đã duyệt đơn hàng này rồi, bạn không có quyền duyệt`,
         403
       );
     }
@@ -795,11 +838,13 @@ export const updateOrderStatus = async (
     order.payment.paidAt = new Date();
   }
 
-  if (staffId) {
+  // Set staffId if not already set (Assign the first person who processes it)
+  if (staffId && !order.staffId) {
     order.staffId = staffId;
   }
 
   await order.save();
+  await order.populate('staffId', 'fullName');
 
   await notifyOrderStatusChangedToUser({
     order,
@@ -1055,20 +1100,31 @@ export const completeOrder = async (
   userRole = null,
   staffCanteenId = null
 ) => {
-  const order = await Order.findById(id);
+  const order = await Order.findById(id).populate('staffId', 'fullName');
 
   if (!order) {
     throw new AppError('Không tìm thấy đơn hàng', 404);
   }
 
   // Cross-Canteen isolation check
-  if (userRole === 'staff') {
+  if (userRole === 'staff' || userRole === 'manager') {
+    // 1. Canteen check
     const orderCanteen = order.canteenId._id
       ? order.canteenId._id.toString()
       : order.canteenId.toString();
     if (orderCanteen !== staffCanteenId?.toString()) {
       throw new AppError(
         'Bạn không có quyền xử lý đơn hàng của Canteen khác',
+        403
+      );
+    }
+
+    // 2. Staff ownership check
+    // If order already has a staff fixed and a DIFFERENT staff tries to complete
+    if (order.staffId && String(order.staffId._id) !== String(staffId)) {
+      const ownerName = order.staffId.fullName || 'Nhân viên khác';
+      throw new AppError(
+        `${ownerName} đã duyệt đơn hàng này rồi, bạn không có quyền duyệt`,
         403
       );
     }
@@ -1100,6 +1156,11 @@ export const completeOrder = async (
 
   try {
     await order.save();
+    // Re-populate to ensure name is available in response
+    await order.populate([
+      { path: 'staffId', select: 'fullName' },
+      { path: 'pickupQRCode.scannedBy', select: 'fullName' }
+    ]);
   } catch (error) {
     // Optimistic locking: VersionError means another staff already completed
     if (error.name === 'VersionError') {
