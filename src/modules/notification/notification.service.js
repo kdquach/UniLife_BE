@@ -3,7 +3,8 @@ import { Notification, SystemNotification } from "./notification.model.js";
 import { SystemNotificationRead } from "./systemNotificationRead.model.js";
 import AppError from "../../utils/AppError.js";
 import { paginatedQuery } from "../../utils/queryHelper.js";
-import { notifyCanteen, notifyGlobal } from "../../websocket/notify.js";
+import { notifyCanteen, notifyGlobal, notifyRemoveNotifications } from "../../websocket/notify.js";
+import Order from "../order/order.model.js";
 import { dispatchSystemNotification } from "./notification.dispatcher.js";
 
 const NOTIFICATION_TYPES = {
@@ -334,11 +335,52 @@ export const getMyNotifications = async (
 
   const filter = withPersonalScope(baseFilter, canteenId, role);
 
-  const rows = await Notification.find(filter)
+  let rows = await Notification.find(filter)
     .select("_id canteenId userId type title content isRead metadata createdAt")
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
+
+  // Filter out notifications that reference orders which no longer exist (stale)
+  try {
+    const referencedOrderIds = Array.from(
+      new Set(
+        rows
+          .map((r) => r?.metadata?.orderId)
+          .filter((id) => id !== undefined && id !== null && id !== ""),
+      ),
+    );
+
+    if (referencedOrderIds.length > 0) {
+      const existingOrders = await Order.find({ _id: { $in: referencedOrderIds } }).select('_id').lean();
+      const existingSet = new Set(existingOrders.map((o) => String(o._id)));
+
+      const stale = rows.filter(
+        (r) => r?.metadata?.orderId && !existingSet.has(String(r.metadata.orderId)),
+      );
+
+      if (stale.length > 0) {
+        const staleIds = stale.map((s) => String(s._id));
+        try {
+          await Notification.deleteMany({ _id: { $in: staleIds } });
+        } catch (err) {
+          console.error('Failed to delete stale notifications:', err?.message || err);
+        }
+
+        try {
+          // Tell client(s) to remove these notifications from UI
+          notifyRemoveNotifications(String(userId), { ids: staleIds });
+        } catch (err) {
+          console.error('Failed to emit remove event for stale notifications:', err?.message || err);
+        }
+
+        // Remove from rows returned
+        rows = rows.filter((r) => !staleIds.includes(String(r._id)));
+      }
+    }
+  } catch (err) {
+    console.error('Error while cleaning stale notifications:', err?.message || err);
+  }
 
   return rows;
 };
@@ -365,6 +407,31 @@ export const getNotificationById = async (
     .lean();
 
   if (personal) {
+    // If this personal notification references an order that no longer exists,
+    // treat it as not found: cleanup and return 404 so client won't show stale data.
+    try {
+      const refOrderId = personal?.metadata?.orderId;
+      if (refOrderId) {
+        const exists = await Order.exists({ _id: refOrderId });
+        if (!exists) {
+          try {
+            await Notification.deleteOne({ _id: personal._id });
+          } catch (err) {
+            console.error('Failed deleting stale personal notification:', err?.message || err);
+          }
+          try {
+            notifyRemoveNotifications(String(userId), { ids: [String(personal._id)], orderId: String(refOrderId) });
+          } catch (err) {
+            console.error('Failed to emit remove event for stale personal notification:', err?.message || err);
+          }
+          throw new AppError('Notification not found', 404);
+        }
+      }
+    } catch (err) {
+      // If check fails for any reason, log and continue to return personal
+      console.error('Error while validating personal notification order ref:', err?.message || err);
+    }
+
     return personal;
   }
 
@@ -680,17 +747,17 @@ export const getNotificationFeed = async (context = {}, query = {}) => {
   const normalizedSystemBase = systemRows
     .filter((item) => !dispatchedSystemIds.has(toObjectIdString(item._id)))
     .map((item) => ({
-    _id: item._id,
-    source: "system",
-    canteenId: item.canteenId || null,
-    type: "system",
-    title: item.title,
-    content: item.content,
-    isRead: readSet.has(toObjectIdString(item._id)),
-    metadata: null,
-    createdAt: item.createdAt,
-    createdAtMs: item.createdAt ? new Date(item.createdAt).getTime() : 0,
-    sortKey: toObjectIdString(item._id) || "",
+      _id: item._id,
+      source: "system",
+      canteenId: item.canteenId || null,
+      type: "system",
+      title: item.title,
+      content: item.content,
+      isRead: readSet.has(toObjectIdString(item._id)),
+      metadata: null,
+      createdAt: item.createdAt,
+      createdAtMs: item.createdAt ? new Date(item.createdAt).getTime() : 0,
+      sortKey: toObjectIdString(item._id) || "",
     }));
 
   const normalizedSystem = parsedIsRead === undefined
