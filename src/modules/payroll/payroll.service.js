@@ -164,7 +164,8 @@ export const generatePayroll = async (
       },
       {
         $group: {
-          _id: "$userId",
+          // Ưu tiên staffId theo schema hiện tại, fallback userId cho dữ liệu cũ
+          _id: { $ifNull: ["$staffId", "$userId"] },
           totalHours: { $sum: "$actualWorkHours" },
           shiftCount: { $sum: 1 },
         },

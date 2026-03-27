@@ -222,6 +222,45 @@ export const cancelOrder = catchAsync(async (req, res) => {
 });
 
 /**
+ * Cleanup unpaid order after payment failure/cancel (customer-triggered fallback)
+ * @route POST /api/orders/:id/payment-failure-cleanup
+ * @access Private (Customer, Admin)
+ */
+export const cleanupFailedPaymentOrder = catchAsync(async (req, res) => {
+  const { id } = req.params;
+
+  const order = await Order.findById(id).select('userId');
+  if (!order) {
+    return res.status(404).json({
+      status: 'fail',
+      message: 'Order not found',
+    });
+  }
+
+  const isOwner = String(order.userId) === String(req.user._id);
+  const isAdmin = req.user.role === 'admin';
+  if (!isOwner && !isAdmin) {
+    return res.status(403).json({
+      status: 'fail',
+      message: 'You do not have permission to cleanup this order',
+    });
+  }
+
+  const result = await orderService.cancelUnpaidOrderForPaymentFailure(id, {
+    reason: 'Client-triggered cleanup after payment failure/cancel',
+  });
+
+  const normalized = result?.deleted
+    ? result
+    : { deleted: false, orderId: String(id) };
+
+  return res.status(200).json({
+    status: 'success',
+    data: normalized,
+  });
+});
+
+/**
  * Complete order (mark as picked up)
  * @route PATCH /api/orders/:id/complete
  * @access Private (Staff)

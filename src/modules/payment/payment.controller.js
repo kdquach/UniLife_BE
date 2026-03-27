@@ -2,6 +2,7 @@ import catchAsync from "../../utils/catchAsync.js";
 import AppError from "../../utils/AppError.js";
 import * as momoService from "./payment.service.js";
 import crypto from "crypto";
+import { cancelUnpaidOrderForPaymentFailure } from "../order/order.service.js";
 
 
 
@@ -29,22 +30,25 @@ export const createMomoPayment = catchAsync(async (req, res, next) => {
     });
 });
 export const getMomoPaymentResult = async (req, res, next) => {
+    const query = req.query || {};
     const {
-        partnerCode,
+        partnerCode = '',
         orderId,
-        requestId,
-        amount,
-        orderInfo,
-        orderType,
-        transId,
-        resultCode,
-        message,
-        payType,
-        responseTime,
+        requestId = '',
+        amount: rawAmount = '',
+        orderInfo = '',
+        orderType = '',
+        transId = '',
+        resultCode: rawResultCode = '',
+        message = '',
+        payType = '',
+        responseTime = '',
         extraData = '',
         signature,
-    } = req.query;
-    console.log("🚀 ~ getMomoPaymentResult ~ resultCode:", resultCode)
+    } = query;
+
+    const amount = String(rawAmount ?? '');
+    const resultCode = String(rawResultCode ?? '');
 
     if (!orderId || !signature) {
         return res.status(400).json({ message: 'Missing params' });
@@ -81,17 +85,27 @@ export const getMomoPaymentResult = async (req, res, next) => {
         return res.status(400).json({ message: 'Invalid signature' });
     }
 
-    // 3️ Nếu thanh toán thành công
-    if (Number(resultCode) === 0) {
+    // 3️ Update order state based on payment result
+    const paymentStatusForRedirect = Number(resultCode) === 0 ? 'completed' : 'failed';
+
+    if (paymentStatusForRedirect === 'completed') {
         order.payment.status = 'completed';
         await order.save();
     } else {
+        // Payment failed/cancelled -> mark failed and auto-cancel (hard-delete) the unpaid order
         order.payment.status = 'failed';
         await order.save();
+        try {
+            await cancelUnpaidOrderForPaymentFailure(orderId, {
+                reason: `MoMo payment failed/cancelled (resultCode=${resultCode})`,
+            });
+        } catch (e) {
+            console.error('Auto-cancel unpaid MoMo order failed:', e?.message || e);
+        }
     }
     return res.redirect(
         `http://localhost:5173/menu` +
-        `?orderId=${orderId}&status=${order.payment.status}&amount=${amount}`
+        `?orderId=${orderId}&status=${paymentStatusForRedirect}&amount=${amount}`
     );
 };
 
