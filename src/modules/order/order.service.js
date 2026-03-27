@@ -886,6 +886,8 @@ export const cancelOrder = async (id, userId) => {
     throw new AppError('You are not authorized to cancel this order', 403);
   }
 
+  const previousStatus = order.status;
+
   // Hoàn lại tồn kho
   await handleInventoryRestoreForOrder(order.items);
 
@@ -945,6 +947,13 @@ export const cancelOrder = async (id, userId) => {
 
   order.status = 'cancelled';
   await order.save();
+
+  // Notify user about cancellation
+  try {
+    await notifyOrderStatusChangedToUser({ order, previousStatus });
+  } catch (err) {
+    console.error('Failed to notify user about order cancellation:', err?.message || err);
+  }
 
   return { order, user: updatedUser };
 };
