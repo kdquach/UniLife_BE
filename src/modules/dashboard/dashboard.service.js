@@ -56,7 +56,7 @@ export const getOrderMetrics = async (canteenId, query) => {
                 $sum: {
                   $cond: [{
                     $and: [
-                      { $eq: ['$status', 'completed'] },
+                      { $in: ['$status', ['completed', 'received']] },
                       { $eq: ['$payment.status', 'completed'] },
                     ],
                   }, 1, 0],
@@ -65,7 +65,7 @@ export const getOrderMetrics = async (canteenId, query) => {
               cancelledOrders: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
               pendingOrders: {
                 $sum: {
-                  $cond: [{ $in: ['$status', ['pending', 'confirmed', 'preparing', 'ready']] }, 1, 0],
+                  $cond: [{ $in: ['$status', ['pending', 'confirmed', 'preparing', 'ready', 'completed']] }, 1, 0],
                 },
               },
             },
@@ -83,7 +83,7 @@ export const getOrderMetrics = async (canteenId, query) => {
                 $sum: {
                   $cond: [{
                     $and: [
-                      { $eq: ['$status', 'completed'] },
+                      { $in: ['$status', ['completed', 'received']] },
                       { $eq: ['$payment.status', 'completed'] },
                     ],
                   }, 1, 0],
@@ -117,7 +117,7 @@ export const getOrderMetrics = async (canteenId, query) => {
                 $sum: {
                   $cond: [{
                     $and: [
-                      { $eq: ['$status', 'completed'] },
+                      { $in: ['$status', ['completed', 'received']] },
                       { $eq: ['$payment.status', 'completed'] },
                     ],
                   }, 1, 0],
@@ -134,7 +134,7 @@ export const getOrderMetrics = async (canteenId, query) => {
           {
             $match: {
               createdAt: { $gte: from, $lte: to },
-              status:    { $in: ['ready', 'completed'] },
+              status:    { $in: ['completed', 'received'] },
             },
           },
           {
@@ -226,7 +226,7 @@ export const getGrowthSummary = async (canteenId, query) => {
               revenue: {
                 $sum: {
                   $cond: [
-                    { $and: [{ $eq: ['$status', 'completed'] }, { $eq: ['$payment.status', 'completed'] }] },
+                    { $and: [{ $in: ['$status', ['completed', 'received']] }, { $eq: ['$payment.status', 'completed'] }] },
                     '$payment.amount',
                     0,
                   ],
@@ -296,7 +296,7 @@ export const getGrowthSummary = async (canteenId, query) => {
               revenue: {
                 $sum: {
                   $cond: [
-                    { $and: [{ $eq: ['$status', 'completed'] }, { $eq: ['$payment.status', 'completed'] }] },
+                    { $and: [{ $in: ['$status', ['completed', 'received']] }, { $eq: ['$payment.status', 'completed'] }] },
                     '$payment.amount', 0,
                   ],
                 },
@@ -380,7 +380,7 @@ export const getRevenueAggregation = async (canteenId, query) => {
       $match: {
         canteenId:        canteenObjId,
         createdAt:        { $gte: comparison.from, $lte: to },
-        status:           'completed',
+        status:           { $in: ['completed', 'received'] },
         'payment.status': { $in: ['completed', 'refunded'] },
       },
     },

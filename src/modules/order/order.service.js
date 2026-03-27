@@ -12,7 +12,7 @@ import {
   deductProductInventory,
   restoreProductInventory,
 } from '../product/inventory/product.inventory.service.js';
-import { verifyQRToken } from '../../utils/qrToken.js';
+import { generateQRToken } from '../../utils/qrToken.js';
 import { createNotification } from '../notification/notification.service.js';
 import { Notification } from '../notification/notification.model.js';
 import { notifyCanteen, notifyUser, notifyRemoveNotifications } from '../../websocket/notify.js';
@@ -25,6 +25,7 @@ const ORDER_STATUS_LABELS = {
   preparing: 'Đang chuẩn bị',
   ready: 'Sẵn sàng nhận món',
   completed: 'Hoàn thành',
+  received: 'Đã nhận',
   cancelled: 'Đã hủy',
 };
 
@@ -50,7 +51,12 @@ const buildOrderStatusNotificationContent = (status, orderNumber) => {
     case 'completed':
       return {
         title: 'Đơn hàng đã hoàn thành',
-        content: `Đơn #${normalizedOrderNumber} đã được hoàn tất. Chúc bạn ngon miệng!`,
+        content: `Đơn #${normalizedOrderNumber} đã được hoàn tất. Vui lòng đưa mã QR cho nhân viên để nhận hàng.`,
+      };
+    case 'received':
+      return {
+        title: 'Đơn hàng đã được nhận',
+        content: `Đơn #${normalizedOrderNumber} đã được nhận thành công. Chúc bạn ngon miệng!`,
       };
     case 'cancelled':
       return {
@@ -245,8 +251,8 @@ export const getMyOrders = async (userId, queryParams) => {
       (order) => order.canteenId && order.canteenId._id
     );
 
-    // Các trạng thái ĐƯỢC PHÉP xem mã QR
-    const ALLOWED_QR_STATUSES = ['pending', 'confirmed', 'preparing', 'ready'];
+    // Chỉ hiển thị mã QR khi đơn đã hoàn thành (chờ nhận hàng)
+    const ALLOWED_QR_STATUSES = ['completed'];
 
     validOrders = validOrders.map((order) => {
       // Convert Mongoose Document sang Plain Object để có thể sửa đổi field
@@ -356,7 +362,9 @@ export const createOrder = async (orderData, userId) => {
             totalAmount,
             voucherId,
             voucherCode: voucherCodeApplied,
-            payment: payment || { method: 'cash', status: 'pending' },
+            payment: payment
+              ? { ...payment, amount: payment.amount ?? totalAmount }
+              : { method: 'cash', status: 'pending', amount: totalAmount },
             note,
           },
         ],
@@ -414,7 +422,9 @@ export const createOrder = async (orderData, userId) => {
       subTotal: finalSubTotal,
       discount: 0,
       totalAmount,
-      payment: payment || { method: 'cash', status: 'pending' },
+      payment: payment
+        ? { ...payment, amount: payment.amount ?? totalAmount }
+        : { method: 'cash', status: 'pending', amount: totalAmount },
       note,
     });
 
@@ -674,21 +684,9 @@ export const getOrdersByUser = async (userId) => {
   return orders;
 };
 
-/**
- * Get order by QR code (JWT token)
- * @param {string} code - QR code (JWT token)
- * @returns {Promise<Object>} Order object
- */
 export const getOrderByQRCode = async (code) => {
-  // Decode JWT token
-  let decoded;
-  try {
-    decoded = verifyQRToken(code);
-  } catch (error) {
-    throw new AppError(error.message, 400);
-  }
-
-  const order = await Order.findById(decoded.orderId)
+  const trimmedCode = (code || '').trim();
+  const order = await Order.findOne({ "pickupQRCode.code": trimmedCode })
     .populate('userId', 'name email')
     .populate('canteenId', 'name location')
     .populate({
@@ -698,10 +696,54 @@ export const getOrderByQRCode = async (code) => {
     });
 
   if (!order) {
-    throw new AppError('Không tìm thấy đơn hàng', 404);
+    console.error(`[QR_SCAN_ERROR] Code not found in DB: ${trimmedCode}`);
+    throw new AppError('Mã QR không hợp lệ', 400);
+  }
+
+  // Check expiration manually
+  if (order.pickupQRCode && order.pickupQRCode.expireAt < new Date()) {
+    throw new AppError('Mã QR đã hết hạn sử dụng', 400);
   }
 
   return order;
+};
+
+/**
+ * Refresh Order QR Code
+ * @param {string} orderId - Order ID
+ * @param {string} userId - User ID (must be the owner)
+ * @returns {Promise<Object>} Updated pickupQRCode
+ */
+export const refreshOrderQRCode = async (orderId, userId) => {
+  const order = await Order.findById(orderId);
+
+  if (!order) {
+    throw new AppError('Không tìm thấy đơn hàng', 404);
+  }
+
+  // Ownership check
+  if (order.userId.toString() !== userId.toString()) {
+    throw new AppError('Bạn không có quyền cập nhật đơn hàng này', 403);
+  }
+
+  // Status check: only allowed when order is completed (waiting for pickup)
+  const ALLOWED_QR_STATUSES = ['completed'];
+  if (!ALLOWED_QR_STATUSES.includes(order.status)) {
+    throw new AppError('Đơn hàng chưa hoàn thành, không thể tạo mã QR mới', 400);
+  }
+
+  // Generate new token and set short-lived expiration (75 seconds)
+  const newCode = generateQRToken(order._id.toString(), order.orderNumber);
+  const expireAt = new Date(Date.now() + 75 * 1000); // 75 seconds for 60s cycle buffer
+
+  order.pickupQRCode = {
+    code: newCode,
+    expireAt,
+  };
+
+  await order.save();
+
+  return order.pickupQRCode;
 };
 
 /**
@@ -745,6 +787,13 @@ export const updateOrderStatus = async (
   }
 
   order.status = status;
+  
+  // [Bugfix] Automatically complete payment when order is marked as completed or received
+  // This ensures revenue appears on the dashboard (which filters for payment.status = 'completed')
+  if (['completed', 'received'].includes(status) && order.payment && order.payment.status === 'pending') {
+    order.payment.status = 'completed';
+    order.payment.paidAt = new Date();
+  }
 
   if (staffId) {
     order.staffId = staffId;
@@ -990,13 +1039,15 @@ export const cancelUnpaidOrderForPaymentFailure = async (
 };
 
 /**
- * Complete order (mark as picked up)
- * Idempotent: if already completed, returns existing order
+ * Receive order via QR scan (mark as picked up)
+ * Only allowed when order status is 'completed'
+ * Transitions: completed → received
+ * Idempotent: if already received, returns existing order
  * Records audit: scannedBy + scannedAt
  * Optimistic locking via __v prevents concurrent duplicate completion
  * @param {string} id - Order ID
  * @param {string} staffId - Staff ID
- * @returns {Promise<Object>} Completed order
+ * @returns {Promise<Object>} Received order
  */
 export const completeOrder = async (
   id,
@@ -1023,25 +1074,21 @@ export const completeOrder = async (
     }
   }
 
-  // Idempotency: if already completed, return as-is (200 OK)
-  if (order.status === 'completed') {
+  // Idempotency: if already received, return as-is (200 OK)
+  if (order.status === 'received') {
     return order;
   }
 
-  if (order.status !== 'ready') {
-    if (['pending', 'confirmed', 'preparing'].includes(order.status)) {
-      throw new AppError('Món chưa sẵn sàng để trả', 400);
-    }
-    if (order.status === 'cancelled') {
-      throw new AppError('Đơn hàng đã bị hủy', 400);
-    }
+  // Only allow QR scan when order is completed
+  if (order.status !== 'completed') {
     throw new AppError(
-      'Không thể hoàn thành đơn hàng ở trạng thái hiện tại',
+      'Đơn hàng chưa hoàn thành, không thể quét QR nhận hàng',
       400
     );
   }
 
-  order.status = 'completed';
+  const previousStatus = order.status;
+  order.status = 'received';
   order.staffId = staffId;
 
   // Audit: Record who scanned and when
@@ -1063,7 +1110,7 @@ export const completeOrder = async (
 
   await notifyOrderStatusChangedToUser({
     order,
-    previousStatus: 'ready',
+    previousStatus,
   });
 
   // Emit WebSocket event for real-time sync
@@ -1075,15 +1122,15 @@ export const completeOrder = async (
       notifyCanteen(canteenId, {
         id: `order-${order._id}-${Date.now()}`,
         type: 'order',
-        title: `Đơn #${order.orderNumber || '---'} đã hoàn thành`,
-        content: 'Đơn hàng đã được nhân viên xác nhận trả món.',
+        title: `Đơn #${order.orderNumber || '---'} đã được nhận`,
+        content: 'Khách hàng đã nhận hàng thành công.',
         isRead: false,
         createdAt: new Date().toISOString(),
         meta: {
           orderId: String(order._id),
           orderNumber: order.orderNumber,
-          status: 'completed',
-          previousStatus: 'ready',
+          status: 'received',
+          previousStatus,
           scannedBy: staffId,
         },
       });
@@ -1125,30 +1172,28 @@ export const getOrderStats = async (canteenId, startDate, endDate) => {
   return stats;
 };
 
-/**
- * Scan QR and complete order (combined endpoint)
- * Decodes JWT QR token → validates order → marks as completed
- * @param {string} qrToken - JWT token from QR code
- * @param {string} staffId - Staff ID performing the scan
- * @returns {Promise<Object>} Completed order
- */
 export const scanAndCompleteOrder = async (
   qrToken,
   staffId,
   userRole = null,
   staffCanteenId = null
 ) => {
-  // Step 1: Decode QR token
-  let decoded;
-  try {
-    decoded = verifyQRToken(qrToken);
-  } catch (error) {
-    throw new AppError(error.message, 400);
+  const trimmedToken = (qrToken || '').trim();
+  const order = await Order.findOne({ "pickupQRCode.code": trimmedToken });
+  
+  if (!order) {
+    console.error(`[QR_SCAN_ERROR] Token not found in DB: ${trimmedToken}`);
+    throw new AppError('Mã QR không hợp lệ', 400);
+  }
+
+  // Check expiration manually
+  if (order.pickupQRCode && order.pickupQRCode.expireAt < new Date()) {
+    throw new AppError('Mã QR đã hết hạn sử dụng', 400);
   }
 
   // Step 2: Complete the order
   return await completeOrder(
-    decoded.orderId,
+    order._id.toString(),
     staffId,
     userRole,
     staffCanteenId
@@ -1206,10 +1251,10 @@ export const autoCancelExpiredOrders = async () => {
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
     if (currentMinutes >= closingPlus15) {
-      // Find all ready orders for this canteen TODAY
+      // Find all ready or completed orders for this canteen TODAY
       const readyOrders = await Order.find({
         canteenId: canteen._id,
-        status: 'ready',
+        status: { $in: ['ready', 'completed'] },
       });
 
       for (const order of readyOrders) {

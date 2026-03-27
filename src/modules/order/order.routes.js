@@ -35,6 +35,7 @@ router.post(
   auditLogger('CREATE', 'Order', 'Order'),
   orderController.reOrder
 );
+router.post('/:id/refresh-qr', orderController.refreshQRCode);
 
 // Staff routes
 router.get(
