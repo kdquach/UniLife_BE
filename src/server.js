@@ -47,11 +47,14 @@ const server = app.listen(PORT, () => {
 
 // Handle unhandled promise rejections
 process.on("unhandledRejection", (err) => {
-  console.error("UNHANDLED REJECTION! 💥 Shutting down...");
-  console.error(err.name, err.message);
-  server.close(() => {
-    process.exit(1);
-  });
+  console.error("UNHANDLED REJECTION! 💥");
+  console.error("name:", err?.name || "UnknownError");
+  console.error("message:", err?.message || err);
+  if (err?.stack) {
+    console.error("stack:", err.stack);
+  }
+  // Keep server alive to avoid dropping active connections for transient async errors.
+  // PM2/container can still restart the process if a fatal crash happens.
 });
 
 // Handle SIGTERM
