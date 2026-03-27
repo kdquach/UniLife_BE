@@ -182,3 +182,22 @@ export const getPayrollStats = catchAsync(async (req, res) => {
     },
   });
 });
+
+/**
+ * Xuất file Excel bảng lương
+ * @route GET /api/payrolls/:id/export-excel
+ * @access Private (Admin/Manager)
+ */
+export const exportPayrollExcel = catchAsync(async (req, res) => {
+  const { buffer, fileName } = await payrollService.exportPayrollExcel(
+    req.params.id,
+  );
+
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  );
+  res.setHeader("Content-Disposition", `attachment; filename=${fileName}`);
+
+  return res.send(buffer);
+});

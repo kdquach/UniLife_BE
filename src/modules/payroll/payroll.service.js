@@ -5,6 +5,7 @@ import { StaffShift } from "../staffShift/staffShift.model.js";
 import AppError from "../../utils/AppError.js";
 import mongoose from "mongoose";
 import { calculateAdjustments } from "./payroll.calculator.js";
+import * as XLSX from "xlsx";
 
 /**
  * Tạo kỳ lương mới (draft)
@@ -467,4 +468,95 @@ export const getPayrollStats = async (query = {}) => {
   ]);
 
   return stats;
+};
+
+/**
+ * Xuất Excel bảng lương theo kỳ
+ * @param {string} id - Payroll ID
+ * @returns {Promise<{buffer: Buffer, fileName: string}>}
+ */
+export const exportPayrollExcel = async (id) => {
+  const { payroll, salaries } = await getPayrollById(id);
+
+  const formatDate = (value) => {
+    if (!value) return "-";
+    return new Date(value).toLocaleDateString("vi-VN");
+  };
+
+  const periodLabel = `${formatDate(payroll.periodStart)}-${formatDate(payroll.periodEnd)}`;
+  const canteenName = payroll.canteenId?.name || "Canteen";
+
+  const summaryRows = [
+    {
+      Canteen: canteenName,
+      "Kỳ lương": periodLabel,
+      "Trạng thái": payroll.status,
+      "Số nhân viên": payroll.totalStaff || 0,
+      "Tổng giờ": Number(payroll.totalHours || 0).toFixed(1),
+      "Tổng thưởng": payroll.totalBonus || 0,
+      "Tổng khấu trừ": payroll.totalDeduction || 0,
+      "Tổng lương": payroll.totalAmount || 0,
+      "Ngày tạo": payroll.createdAt
+        ? new Date(payroll.createdAt).toLocaleString("vi-VN")
+        : "-",
+      "Người tạo": payroll.createdBy?.fullName || "-",
+    },
+  ];
+
+  const detailRows = salaries.map((salary, index) => ({
+    STT: index + 1,
+    "Nhân viên": salary.userId?.fullName || "-",
+    Email: salary.userId?.email || "-",
+    "Số giờ": Number(salary.totalHours || 0).toFixed(1),
+    "Lương cơ bản": salary.baseSalary || 0,
+    Thưởng: salary.bonus || 0,
+    "Khấu trừ": salary.deduction || 0,
+    "Tổng lương": salary.totalSalary || 0,
+    "Ghi chú": salary.adjustmentReason || "",
+  }));
+
+  const workbook = XLSX.utils.book_new();
+  const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
+  const detailSheet = XLSX.utils.json_to_sheet(detailRows);
+
+  summarySheet["!cols"] = [
+    { wch: 30 },
+    { wch: 24 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 16 },
+    { wch: 22 },
+    { wch: 20 },
+  ];
+
+  detailSheet["!cols"] = [
+    { wch: 8 },
+    { wch: 24 },
+    { wch: 30 },
+    { wch: 12 },
+    { wch: 16 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 16 },
+    { wch: 42 },
+  ];
+
+  XLSX.utils.book_append_sheet(workbook, summarySheet, "TongQuan");
+  XLSX.utils.book_append_sheet(workbook, detailSheet, "ChiTietLuong");
+
+  const buffer = XLSX.write(workbook, {
+    type: "buffer",
+    bookType: "xlsx",
+  });
+
+  const safePeriod = `${new Date(payroll.periodStart).toISOString().slice(0, 10)}_${new Date(payroll.periodEnd).toISOString().slice(0, 10)}`;
+  const fileName = `payroll_${safePeriod}.xlsx`;
+
+  return {
+    buffer: Buffer.from(buffer),
+    fileName,
+  };
 };
