@@ -184,6 +184,12 @@ orderSchema.index({ createdAt: -1 });
 orderSchema.index({ "pickupQRCode.code": 1 });
 orderSchema.index({ orderNumber: 1 });
 
+// Dashboard aggregation indexes
+orderSchema.index({ canteenId: 1, createdAt: -1 });
+orderSchema.index({ canteenId: 1, status: 1, createdAt: -1 });
+orderSchema.index({ canteenId: 1, 'payment.status': 1, createdAt: -1 });
+orderSchema.index({ canteenId: 1, userId: 1, createdAt: -1 });
+
 // Generate order number and pickup QR code before saving
 orderSchema.pre("save", async function (next) {
   // Generate order number
