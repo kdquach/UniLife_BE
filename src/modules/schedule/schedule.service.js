@@ -3,6 +3,7 @@ import AppError from "../../utils/AppError.js";
 import { Shift } from "../shift/shift.model.js";
 import { StaffShift } from "../staffShift/staffShift.model.js";
 import { Schedule } from "./schedule.model.js";
+import Canteen from "../canteen/canteen.model.js";
 import { createNotification } from "../notification/notification.service.js";
 import { notifyUser } from "../../websocket/notify.js";
 
@@ -118,6 +119,111 @@ const getEndOfDay = (value = new Date()) => {
   return date;
 };
 
+const toDateKey = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const getEditableStartDate = (baseDate = new Date()) => {
+  const start = getStartOfDay(baseDate);
+  start.setDate(start.getDate() + 2);
+  return start;
+};
+
+const buildAssignmentSignature = ({ date, shiftId, staffId }) => {
+  const dateKey = toDateKey(date);
+  if (!dateKey || !shiftId || !staffId) return null;
+  return `${dateKey}|${String(shiftId)}|${String(staffId)}`;
+};
+
+const areSignatureSetsEqual = (leftSet = new Set(), rightSet = new Set()) => {
+  if (leftSet.size !== rightSet.size) return false;
+  for (const item of leftSet) {
+    if (!rightSet.has(item)) return false;
+  }
+  return true;
+};
+
+const findPublishedScheduleByWeek = async (canteenId, weekStart, session = null) => {
+  const weekStartRange = getUtcDayRange(weekStart);
+  const weekStartLocalRange = getLocalDayRange(weekStart);
+
+  let query = Schedule.findOne({
+    canteenId,
+    status: "published",
+    $or: [
+      {
+        weekStart: {
+          $gte: weekStartRange.start,
+          $lte: weekStartRange.end,
+        },
+      },
+      {
+        weekStart: {
+          $gte: weekStartLocalRange.start,
+          $lte: weekStartLocalRange.end,
+        },
+      },
+    ],
+  }).sort({ updatedAt: -1, version: -1, weekStart: -1 });
+
+  if (session) {
+    query = query.session(session);
+  }
+
+  return query;
+};
+
+const assertLockedRangeUnchanged = async ({
+  canteenId,
+  weekStart,
+  incomingAssignments,
+  editableStartDate,
+}) => {
+  const published = await findPublishedScheduleByWeek(canteenId, weekStart);
+  if (!published) return;
+
+  const publishedAssignments = await StaffShift.find({
+    scheduleId: published._id,
+    isDeleted: { $ne: true },
+    status: { $ne: "cancelled" },
+  })
+    .select("date shiftId staffId")
+    .lean();
+
+  const lockedPublishedSignatures = new Set(
+    publishedAssignments
+      .filter((item) => {
+        const date = normalizeDateOnly(item.date);
+        return date < editableStartDate;
+      })
+      .map((item) => buildAssignmentSignature(item))
+      .filter(Boolean),
+  );
+
+  const lockedIncomingSignatures = new Set(
+    incomingAssignments
+      .filter((item) => {
+        const date = normalizeDateOnly(item.date);
+        return date < editableStartDate;
+      })
+      .map((item) => buildAssignmentSignature(item))
+      .filter(Boolean),
+  );
+
+  if (!areSignatureSetsEqual(lockedPublishedSignatures, lockedIncomingSignatures)) {
+    const editableFrom = toDateKey(editableStartDate);
+    throw new AppError(
+      `Chỉ được chỉnh lịch từ ngày ${editableFrom} trở đi. Các ngày gần hơn phải giữ nguyên`,
+      400,
+    );
+  }
+};
+
 const timeToMinutes = (value) => {
   const [hours, minutes] = String(value || "").split(":").map(Number);
   if (Number.isNaN(hours) || Number.isNaN(minutes)) {
@@ -156,6 +262,18 @@ const resolveCanteenId = (currentUser, requestedCanteenId = null) => {
   }
 
   return normalizeObjectIdLike(currentUser.canteenId);
+};
+
+const assertCanteenIsActive = async (canteenId) => {
+  const canteen = await Canteen.findById(canteenId).select("_id status").lean();
+
+  if (!canteen) {
+    throw new AppError("Không tìm thấy canteen", 404);
+  }
+
+  if (canteen.status !== "active") {
+    throw new AppError("Canteen chưa hoạt động nên không thể tạo lịch làm", 400);
+  }
 };
 
 const validateAssignmentsPayload = (assignments = []) => {
@@ -266,8 +384,18 @@ const createScheduleDraft = async (payload = {}, currentUser = null) => {
   const weekStart = normalizeWeekStartOnly(payload.weekStart);
   const canteenId = resolveCanteenId(currentUser, payload.canteenId);
   const assignments = payload.assignments || [];
+  const editableStartDate = getEditableStartDate();
+
+  await assertCanteenIsActive(canteenId);
 
   validateAssignmentsPayload(assignments);
+
+  await assertLockedRangeUnchanged({
+    canteenId,
+    weekStart,
+    incomingAssignments: assignments,
+    editableStartDate,
+  });
 
   const shiftIds = [...new Set(assignments.map((item) => String(item.shiftId)))];
   const shifts = await Shift.find({
@@ -360,6 +488,7 @@ const publishSchedule = async (scheduleId, currentUser = null) => {
 
   const session = await mongoose.startSession();
   let published = null;
+  let shouldNotifyStaff = true;
 
   await session.withTransaction(async () => {
     // Đảm bảo lịch draft có phân công trước khi publish.
@@ -371,6 +500,42 @@ const publishSchedule = async (scheduleId, currentUser = null) => {
 
     if (!assignmentCount) {
       throw new AppError("Không thể publish lịch rỗng", 400);
+    }
+
+    const currentPublished = await findPublishedScheduleByWeek(
+      schedule.canteenId,
+      schedule.weekStart,
+      session,
+    );
+
+    if (currentPublished) {
+      const [draftAssignments, publishedAssignments] = await Promise.all([
+        StaffShift.find({
+          scheduleId: schedule._id,
+          isDeleted: { $ne: true },
+          status: { $ne: "cancelled" },
+        })
+          .select("date shiftId staffId")
+          .session(session)
+          .lean(),
+        StaffShift.find({
+          scheduleId: currentPublished._id,
+          isDeleted: { $ne: true },
+          status: { $ne: "cancelled" },
+        })
+          .select("date shiftId staffId")
+          .session(session)
+          .lean(),
+      ]);
+
+      const draftSignatures = new Set(
+        draftAssignments.map((item) => buildAssignmentSignature(item)).filter(Boolean),
+      );
+      const publishedSignatures = new Set(
+        publishedAssignments.map((item) => buildAssignmentSignature(item)).filter(Boolean),
+      );
+
+      shouldNotifyStaff = !areSignatureSetsEqual(draftSignatures, publishedSignatures);
     }
 
     await Schedule.updateMany(
@@ -412,12 +577,14 @@ const publishSchedule = async (scheduleId, currentUser = null) => {
 
   session.endSession();
 
-  // Gửi thông báo sau khi transaction thành công để staff nhận lịch mới.
-  await notifyPublishedSchedule({
-    scheduleId: published._id,
-    canteenId: published.canteenId,
-    weekStart: published.weekStart,
-  });
+  // Chỉ gửi thông báo khi lịch publish thực sự có thay đổi phân công.
+  if (shouldNotifyStaff) {
+    await notifyPublishedSchedule({
+      scheduleId: published._id,
+      canteenId: published.canteenId,
+      weekStart: published.weekStart,
+    });
+  }
 
   return published;
 };

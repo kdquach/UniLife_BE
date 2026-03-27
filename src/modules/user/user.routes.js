@@ -11,6 +11,12 @@ import {
   assignRoleRules,
   removeRoleRules,
 } from './systemUser.validator.js';
+import {
+  getManagerStaffListRules,
+  getManagerStaffDetailRules,
+  createManagerStaffRules,
+  updateManagerStaffRules,
+} from './staff.validator.js';
 
 const router = express.Router();
 
@@ -112,21 +118,29 @@ router.delete(
 // ═══════════════════════════════════════════════════════════
 
 // Manager routes - Quản lý nhân viên trong canteen của mình
-router.get('/staff', restrictTo('manager'), userController.getManagerStaffList);
+router.get(
+  '/staff',
+  restrictTo('manager'),
+  getManagerStaffListRules,
+  userController.getManagerStaffList
+);
 router.get(
   '/staff/:id',
   restrictTo('manager'),
+  getManagerStaffDetailRules,
   userController.getManagerStaffDetail
 );
 router.post(
   '/staff',
   restrictTo('manager'),
+  createManagerStaffRules,
   auditLogger('CREATE', 'User', 'User'),
   userController.createManagerStaff
 );
 router.patch(
   '/staff/:id',
   restrictTo('manager'),
+  updateManagerStaffRules,
   auditLogger('UPDATE', 'User', 'User'),
   userController.updateManagerStaff
 );
