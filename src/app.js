@@ -88,7 +88,7 @@ app.use(auditLogMiddleware);
 app.get("/api/health", (req, res) => {
   res.status(200).json({
     status: "success",
-    message: "UniLife API is running",
+    message: "UniLife API is runningg",
     timestamp: new Date().toISOString(),
   });
 });
