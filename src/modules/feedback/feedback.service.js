@@ -1,4 +1,6 @@
 import { Feedback } from './feedback.model.js';
+import Product from '../product/product.model.js';
+
 import AppError from '../../utils/AppError.js';
 import { paginatedQuery, filterPresets } from '../../utils/queryHelper.js';
 import mongoose from 'mongoose';
@@ -49,6 +51,22 @@ export const createFeedback = async (userId, feedbackData) => {
 };
 
 export const getAllFeedbacks = async (query) => {
+  let productIds = [];
+
+  if (query?.canteenId && query.canteenId !== "__NO_MATCH__") {
+    const products = await Product.find({
+      canteenId: query.canteenId,
+    }).select('_id');
+
+    productIds = products.map(p => p._id);
+
+    // ❗ XÓA canteenId khỏi query
+    delete query.canteenId;
+
+    // ❗ GÁN lại đúng field của Feedback
+    query.productId = { $in: productIds };
+  }
+
   return await paginatedQuery(Feedback, query, {
     ...filterPresets.feedback,
     populate: [

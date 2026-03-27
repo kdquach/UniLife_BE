@@ -5,7 +5,6 @@ import { protect, restrictTo } from '../../middlewares/auth.middleware.js';
 const router = express.Router();
 
 // Public routes
-router.get('/', feedbackController.getAllFeedbacks);
 router.get('/product/:productId', feedbackController.getFeedbacksByProduct);
 router.get(
   '/product/:productId/stats',
@@ -14,6 +13,7 @@ router.get(
 
 // Protected routes
 router.use(protect);
+router.get('/', feedbackController.getAllFeedbacks);
 
 // Lấy feedbacks của user hiện tại (phải đặt trước /:id)
 router.get('/my-feedbacks', feedbackController.getMyFeedbacks);
