@@ -22,6 +22,14 @@ router.patch(
   auditLogger('UPDATE', 'Order', 'Order'),
   orderController.cancelOrder
 );
+
+// Fallback cleanup for MoMo failure/cancel (customer-triggered)
+router.post(
+  '/:id/payment-failure-cleanup',
+  restrictTo('customer', 'admin'),
+  auditLogger('DELETE', 'Order', 'Order'),
+  orderController.cleanupFailedPaymentOrder
+);
 router.post(
   '/:id/re-order',
   auditLogger('CREATE', 'Order', 'Order'),
