@@ -322,7 +322,7 @@ export const scanAndComplete = catchAsync(async (req, res) => {
 
   res.status(200).json({
     status: "success",
-    message: "Xác nhận trả hàng thành công",
+    message: "Xác nhận nhận hàng thành công",
     data: {
       order,
     },
@@ -353,9 +353,25 @@ export const manualComplete = catchAsync(async (req, res) => {
 
   res.status(200).json({
     status: "success",
-    message: "Xác nhận trả hàng thành công",
+    message: "Xác nhận nhận hàng thành công",
     data: {
       order,
+    },
+  });
+});
+
+/**
+ * Refresh Order QR Code
+ * @route POST /api/orders/:id/refresh-qr
+ * @access Private (Owner)
+ */
+export const refreshQRCode = catchAsync(async (req, res) => {
+  const qrCode = await orderService.refreshOrderQRCode(req.params.id, req.user._id);
+
+  res.status(200).json({
+    status: "success",
+    data: {
+      pickupQRCode: qrCode,
     },
   });
 });

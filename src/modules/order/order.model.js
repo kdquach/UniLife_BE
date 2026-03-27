@@ -113,6 +113,7 @@ const orderSchema = new mongoose.Schema(
         "preparing",
         "ready",
         "completed",
+        "received",
         "cancelled",
       ],
       default: "pending",
@@ -161,6 +162,9 @@ const orderSchema = new mongoose.Schema(
     completedAt: {
       type: Date,
     },
+    receivedAt: {
+      type: Date,
+    },
     cancelledAt: {
       type: Date,
     },
@@ -206,13 +210,13 @@ orderSchema.pre("save", async function (next) {
     (this.isModified("status") && this.status === "confirmed")
   ) {
     if (!this.pickupQRCode || !this.pickupQRCode.code) {
-      // End of day expiration: 23:59:59 today
-      const endOfDay = new Date();
-      endOfDay.setHours(23, 59, 59, 999);
+      // Short-lived initial QR (5 minutes) for security
+      // User's FE will refresh it to 75s when they open the QR view
+      const expireAt = new Date(Date.now() + 5 * 60 * 1000); 
 
       this.pickupQRCode = {
         code: generateQRToken(this._id.toString(), this.orderNumber),
-        expireAt: endOfDay,
+        expireAt: expireAt,
       };
     }
   }
@@ -223,6 +227,8 @@ orderSchema.pre("save", async function (next) {
       this.preparedAt = new Date();
     } else if (this.status === "completed") {
       this.completedAt = new Date();
+    } else if (this.status === "received") {
+      this.receivedAt = new Date();
     } else if (this.status === "cancelled") {
       this.cancelledAt = new Date();
     }
