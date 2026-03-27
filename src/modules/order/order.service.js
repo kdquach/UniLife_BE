@@ -337,8 +337,8 @@ export const createOrder = async (orderData, userId) => {
     voucherCodeApplied = voucherResult.voucher.code;
   }
 
-  // Calculate final total
-  const totalAmount = summary?.total || finalSubTotal - discount;
+  // Calculate final total (Always trust backend calculation for vouchers)
+  const totalAmount = finalSubTotal - discount;
 
   // Handle inventory deduction BEFORE creating order
   let inventoryResults = null;
@@ -367,7 +367,7 @@ export const createOrder = async (orderData, userId) => {
             voucherId,
             voucherCode: voucherCodeApplied,
             payment: payment
-              ? { ...payment, amount: payment.amount ?? totalAmount }
+              ? { ...payment, amount: totalAmount }
               : { method: 'cash', status: 'pending', amount: totalAmount },
             note,
           },
@@ -427,7 +427,7 @@ export const createOrder = async (orderData, userId) => {
       discount: 0,
       totalAmount,
       payment: payment
-        ? { ...payment, amount: payment.amount ?? totalAmount }
+        ? { ...payment, amount: totalAmount }
         : { method: 'cash', status: 'pending', amount: totalAmount },
       note,
     });
