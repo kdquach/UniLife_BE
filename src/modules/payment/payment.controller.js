@@ -109,7 +109,7 @@ export const getMomoPaymentResult = async (req, res, next) => {
         }
     }
     return res.redirect(
-        `http://localhost:5173/menu` +
+        `${process.env.CLIENT_DOMAIN}` +
         `?orderId=${orderId}&status=${paymentStatusForRedirect}&amount=${amount}`
     );
 };
