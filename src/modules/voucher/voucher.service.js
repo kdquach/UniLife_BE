@@ -41,8 +41,15 @@ export const createVoucher = async (voucherData, userId) => {
     data.productIds = [data.productIds];
   }
 
-  if (new Date(data.startDatetime) >= new Date(data.endDatetime)) {
-    throw new AppError("End datetime must be after start datetime", 400);
+  const now = new Date();
+  const start = new Date(data.startDatetime);
+  const end = new Date(data.endDatetime);
+
+  if (start >= end) {
+    throw new AppError("Ngày kết thúc phải sau ngày bắt đầu", 400);
+  }
+  if (end <= now) {
+    throw new AppError("Ngày kết thúc phải ở tương lai", 400);
   }
 
   const voucher = await Voucher.create(data);
@@ -61,6 +68,11 @@ export const getAllVouchers = async (query = {}) => {
 
 export const getActiveVouchers = async () => {
   const now = new Date();
+  
+  // Update state for vouchers that should be Expired/OutOfQuota before returning
+  // (Optional: for performance, just use filter, but auto-syncing during GET is better for accuracy)
+  await autoTransitionVoucherStates();
+
   const vouchers = await Voucher.find({
     state: "Active",
     startDatetime: { $lte: now },
@@ -73,12 +85,37 @@ export const getActiveVouchers = async () => {
   return vouchers;
 };
 
+/**
+ * Helper to sync state for a single voucher document
+ */
+const syncVoucherData = async (voucher) => {
+  if (!voucher) return voucher;
+  const now = new Date();
+  let changed = false;
+
+  if (["Active", "Upcoming", "Inactive"].includes(voucher.state) && now > voucher.endDatetime) {
+    voucher.state = "Expired";
+    changed = true;
+  } else if (voucher.state === "Active" && voucher.totalLimit !== null && voucher.usedCount >= voucher.totalLimit) {
+    voucher.state = "OutOfQuota";
+    changed = true;
+  } else if (voucher.state === "Upcoming" && now >= voucher.startDatetime && now <= voucher.endDatetime) {
+    voucher.state = "Active";
+    changed = true;
+  }
+
+  if (changed) {
+    await voucher.save();
+  }
+  return voucher;
+};
+
 export const getVoucherById = async (id) => {
-  const voucher = await Voucher.findById(id);
+  let voucher = await Voucher.findById(id);
   if (!voucher) {
     throw new AppError("Voucher not found", 404);
   }
-  return voucher;
+  return syncVoucherData(voucher);
 };
 
 export const getVoucherByCode = async (code) => {
@@ -184,40 +221,162 @@ export const updateVoucher = async (id, updateData, userId) => {
     updateData.productIds = [updateData.productIds];
   }
 
-  // Example subset of BR04 state-based update rule (Draft/Upcoming allows all, Active restricts fields)
-  // Complete BR04 logic goes here or in a dedicated validator
+  const FIELD_LABELS = {
+    code: "Mã Voucher",
+    name: "Tên chương trình",
+    discountType: "Loại giảm giá",
+    discountValue: "Giá trị giảm",
+    maxDiscountCap: "Giảm tối đa",
+    minOrderValue: "Đơn tối thiểu",
+    minItemQuantity: "Số lượng món tối thiểu",
+    canteen_ids: "Cửa hàng áp dụng",
+    productIds: "Sản phẩm áp dụng",
+    categoryIds: "Danh mục áp dụng",
+    startDatetime: "Ngày bắt đầu",
+    endDatetime: "Ngày kết thúc",
+    totalLimit: "Tổng lượt sử dụng",
+    internalDescription: "Ghi chú nội bộ",
+    displayDescription: "Mô tả hiển thị",
+    timeRestriction: "Khung giờ áp dụng",
+    "timeRestriction.fromTime": "Giờ bắt đầu áp dụng",
+    "timeRestriction.toTime": "Giờ kết thúc áp dụng",
+    state: "Trạng thái",
+    allowStackWithCombo: "Cho phép dùng chung với Combo",
+    usagePerUser: "Lượt dùng mỗi khách",
+  };
 
-  if (voucher.state === "Active") {
-    // Only certain fields can be updated
+  const STATE_LABELS = {
+    Draft: "Bản nháp",
+    Upcoming: "Sắp diễn ra",
+    Active: "Đang hoạt động",
+    Inactive: "Đang tạm ngưng",
+    Expired: "Đã hết hạn",
+    OutOfQuota: "Đã hết lượt dùng",
+    Archived: "Đã lưu trữ",
+  };
+
+  // Filter out fields that are the same as current values to avoid triggering "cannot update" errors for unchanged fields
+  const finalUpdateData = {};
+  for (const key of Object.keys(updateData)) {
+    let val1 = voucher[key];
+    let val2 = updateData[key];
+
+    // Case 1: Both are essentially "empty" (null, undefined, empty string, empty object)
+    const isEmpty1 = !val1 && val1 !== 0 && val1 !== false;
+    const isEmpty2 = !val2 && val2 !== 0 && val2 !== false;
+
+    // Specially handle the 'timeRestriction' sub-object sent by FE
+    if (key === "timeRestriction") {
+      const v1 = val1 || {};
+      const v2 = val2 || {};
+      if (String(v1.fromTime || "") === String(v2.fromTime || "") &&
+          String(v1.toTime || "") === String(v2.toTime || "")) {
+        continue;
+      }
+    }
+    
+    // Check if it's an "empty-ish" object from FE (e.g. { fromTime: null, toTime: null })
+    const isObjectEmpty2 = typeof val2 === 'object' && val2 !== null && Object.values(val2).every(v => !v);
+    
+    if (isEmpty1 && (isEmpty2 || isObjectEmpty2)) continue;
+
+    // Case 2: Date comparison (Crucial for startDatetime/endDatetime)
+    if (val1 instanceof Date || (typeof val1 === "string" && !isNaN(Date.parse(val1)) && (key.includes("Datetime") || key.includes("At")))) {
+      if (val1 && val2 && new Date(val1).getTime() === new Date(val2).getTime()) {
+        continue;
+      }
+    }
+
+    // Case 3: Array comparison (canteen_ids, productIds, etc.)
+    if (Array.isArray(val1) && Array.isArray(val2)) {
+      if (val1.length === val2.length && val1.every((v, i) => String(v) === String(val2[i]))) {
+        continue;
+      }
+    }
+
+    // Case 4: Object comparison (Any other object fields)
+    if (typeof val1 === "object" && typeof val2 === "object" && val1 !== null && val2 !== null) {
+      const obj1 = val1.toObject ? val1.toObject() : val1;
+      const obj2 = val2.toObject ? val2.toObject() : val2;
+      delete obj1._id;
+      if (JSON.stringify(obj1) === JSON.stringify(obj2)) {
+        continue;
+      }
+    }
+
+    // Case 5: Primitive comparison
+    if (String(val1) !== String(val2)) {
+      finalUpdateData[key] = val2;
+    }
+  }
+
+  // If no actual changes, return early
+  if (Object.keys(finalUpdateData).length === 0 && !updateData.updatedBy) {
+    return voucher;
+  }
+
+  // State-based update restrictions (Active and Inactive)
+  if (["Active", "Inactive"].includes(voucher.state)) {
+    // Only certain fields can be updated khi Active/Inactive
     const allowedFields = [
       "totalLimit",
       "endDatetime",
       "internalDescription",
       "displayDescription",
     ];
-    for (const key of Object.keys(updateData)) {
+
+    for (const key of Object.keys(finalUpdateData)) {
       if (!allowedFields.includes(key)) {
-        throw new AppError(`Cannot update ${key} while voucher is Active`, 400);
+        const label = FIELD_LABELS[key] || key;
+        const stateLabel = STATE_LABELS[voucher.state] || voucher.state;
+        throw new AppError(
+          `Không thể cập nhật trường '${label}' khi Voucher đang ở trạng thái ${stateLabel}. Bạn chỉ có thể sửa: Hạn mức, Ngày kết thúc và Mô tả.`,
+          400,
+        );
       }
     }
-    // Also BR06 check: cannot reduce total limit below used count
-    if (updateData.totalLimit && updateData.totalLimit < voucher.usedCount) {
+
+    // BR06 check: cannot reduce total limit below used count
+    if (
+      finalUpdateData.totalLimit !== undefined &&
+      finalUpdateData.totalLimit < voucher.usedCount
+    ) {
       throw new AppError(
-        `Cannot reduce total limit below used count (${voucher.usedCount})`,
+        `Không thể giảm Hạn mức sử dụng xuống thấp hơn số lượng đã dùng (${voucher.usedCount})`,
         400,
       );
     }
   }
 
+  // Final date validation for any state (Draft, Upcoming, Active, Inactive)
+  // If either start or end date is updated, re-validate the pair
+  if (finalUpdateData.startDatetime || finalUpdateData.endDatetime) {
+    const start = new Date(finalUpdateData.startDatetime || voucher.startDatetime);
+    const end = new Date(finalUpdateData.endDatetime || voucher.endDatetime);
+    const now = new Date();
+
+    if (start >= end) {
+      throw new AppError("Ngày kết thúc phải sau ngày bắt đầu", 400);
+    }
+    
+    // Only check if end date is in future IF they are actually changing the end date
+    // or if the voucher was already valid and they are moving dates.
+    if (finalUpdateData.endDatetime && end <= now) {
+        throw new AppError("Ngày kết thúc mới phải ở tương lai", 400);
+    }
+  }
+
   const updatedVoucher = await Voucher.findByIdAndUpdate(
     id,
-    { ...updateData, updatedBy: userId },
+    { ...finalUpdateData, updatedBy: userId },
     {
       new: true,
       runValidators: true,
     },
   );
-  return updatedVoucher;
+
+  // Sync state immediately after update (e.g. if they moved end date to past)
+  return syncVoucherData(updatedVoucher);
 };
 
 export const deleteVoucher = async (id) => {
@@ -367,7 +526,7 @@ export const publishVoucher = async (id, userId) => {
 
   const now = new Date();
   if (voucher.startDatetime <= now) {
-    throw new AppError("Start datetime must be in the future to publish", 400);
+    throw new AppError("Ngày bắt đầu phải ở tương lai mới có thể phát hành (Publish)", 400);
   }
 
   voucher.state = "Upcoming";
@@ -391,7 +550,7 @@ export const deactivateVoucher = async (id, userId) => {
   const voucher = await Voucher.findById(id);
   if (!voucher) throw new AppError("Voucher not found", 404);
   if (voucher.state !== "Active") {
-    throw new AppError("Only Active vouchers can be deactivated", 400);
+    throw new AppError("Chỉ có thể tạm ngưng (Deactivate) Voucher đang hoạt động", 400);
   }
 
   const now = new Date();
@@ -423,11 +582,14 @@ export const reactivateVoucher = async (id, userId) => {
   const now = new Date();
 
   if (now >= voucher.endDatetime) {
-    throw new AppError("Cannot reactivate: voucher has already expired", 400);
+    throw new AppError(
+      `Không thể kích hoạt lại: Voucher đã hết hạn sử dụng (Ngày kết thúc: ${voucher.endDatetime.toLocaleString("vi-VN")}). Hãy gia hạn thêm thời gian kết thúc trước.`,
+      400,
+    );
   }
   if (voucher.totalLimit !== null && voucher.usedCount >= voucher.totalLimit) {
     throw new AppError(
-      "Cannot reactivate: voucher has reached its usage limit",
+      `Không thể kích hoạt lại: Voucher đã hết số lượt sử dụng (${voucher.usedCount}/${voucher.totalLimit})`,
       400,
     );
   }
@@ -455,7 +617,7 @@ export const archiveVoucher = async (id, userId) => {
 
   if (!["Expired", "OutOfQuota"].includes(voucher.state)) {
     throw new AppError(
-      "Only Expired or OutOfQuota vouchers can be archived",
+      "Chỉ có thể lưu trữ (Archive) các Voucher đã hết hạn hoặc hết lượt dùng",
       400,
     );
   }
