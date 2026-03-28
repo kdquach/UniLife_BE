@@ -23,8 +23,8 @@ export const getManagerStaffListRules = [
     .withMessage("page phải là số nguyên >= 1"),
   query("limit")
     .optional()
-    .isInt({ min: 1, max: 100 })
-    .withMessage("limit phải trong khoảng 1-100"),
+    .isInt({ min: 1, max: 200 })
+    .withMessage("limit phải trong khoảng 1-200"),
   query("status")
     .optional()
     .isIn(["active", "inactive", "pending", "banned"])
